@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  # 1. قاعدة البيانات (MongoDB)
+  mongodb:
+    image: mongo:latest
+    container_name: mazadak_mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    restart: always
+
+  # 2. الكاش والاتصال اللحظي (Redis)
+  redis:
+    image: redis:alpine
+    container_name: mazadak_redis
+    ports:
+      - "6379:6379"
+    restart: always
+
+  # 3. طوابير الرسائل (RabbitMQ) مع لوحة التحكم
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: mazadak_rabbitmq
+    ports:
+      - "5672:5672"   # البورت اللي كود NestJS بيكلم بيه السيرفر
+      - "15672:15672" # بورت لوحة التحكم اللي بتفتح من المتصفح
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    restart: always
+
+volumes:
+  mongo_data:
+  rabbitmq_data:
