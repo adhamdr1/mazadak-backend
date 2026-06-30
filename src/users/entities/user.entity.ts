@@ -1,12 +1,6 @@
-import {
-  ObjectType,
-  Field,
-  ID,
-  Float,
-  registerEnumType,
-} from '@nestjs/graphql';
+import { ObjectType, Field, ID, registerEnumType } from '@nestjs/graphql';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Types } from 'mongoose'; // 👈 1. ضفنا هنا HydratedDocument و Types
+import { HydratedDocument, Types } from 'mongoose';
 
 export enum UserRole {
   USER = 'USER',
@@ -21,6 +15,7 @@ export enum AuthProvider {
 registerEnumType(UserRole, { name: 'UserRole' });
 registerEnumType(AuthProvider, { name: 'AuthProvider' });
 
+@Schema({ _id: false })
 @ObjectType()
 export class Address {
   @Field()
@@ -30,17 +25,6 @@ export class Address {
   @Field()
   @Prop({ required: true })
   street!: string;
-}
-
-@ObjectType()
-export class Balances {
-  @Field(() => Float)
-  @Prop({ default: 0 })
-  total!: number;
-
-  @Field(() => Float)
-  @Prop({ default: 0 })
-  held!: number;
 }
 
 export type UserDocument = HydratedDocument<User>;
@@ -78,7 +62,7 @@ export class User {
 
   @Field({ nullable: true })
   @Prop({ default: null, index: true })
-  readonly googleId?: string;
+  googleId?: string;
 
   @Prop({
     select: false,
@@ -103,10 +87,6 @@ export class User {
   @Field(() => Address)
   @Prop({ type: Address, required: true })
   address!: Address;
-
-  @Field(() => Balances)
-  @Prop({ type: Balances, default: () => ({ total: 0, held: 0 }) })
-  balances!: Balances;
 
   @Field()
   @Prop({ default: false })

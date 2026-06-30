@@ -11,12 +11,10 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
-
-const trim = ({ value }: { value: unknown }) =>
-  typeof value === 'string' ? value.trim() : value;
-
-const trimLowerCase = ({ value }: { value: unknown }) =>
-  typeof value === 'string' ? value.trim().toLowerCase() : value;
+import {
+  trim,
+  trimLowerCase,
+} from '../../common/transformers/string.transformer';
 
 @InputType()
 export class AddressInput {
