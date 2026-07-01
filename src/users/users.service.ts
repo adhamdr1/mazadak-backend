@@ -14,7 +14,7 @@ export class UsersService {
   constructor(
     @Inject('IUserRepository')
     private readonly userRepository: IUserRepository,
-  ) { }
+  ) {}
 
   async create(createUserInput: CreateUserInput): Promise<User> {
     const existingUser = await this.userRepository.findByEmail(
@@ -91,5 +91,4 @@ export class UsersService {
     await this.findById(id);
     await this.userRepository.softDelete(id);
   }
-
 }

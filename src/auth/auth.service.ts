@@ -11,11 +11,14 @@ import { CreateUserInput } from '../users/dto/create-user.input';
 import { createHash } from 'crypto';
 import { StringValue } from 'ms';
 
-
 const SALT_ROUNDS = 12;
 
 function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
+}
+
+interface DecodedJwt {
+  exp: number;
 }
 
 @Injectable()
@@ -26,6 +29,7 @@ export class AuthService {
     private readonly configService: ConfigService,
     @Inject('IAuthRepository')
     private readonly authRepository: IAuthRepository,
+    // eslint-disable-next-line prettier/prettier
   ) { }
 
   async register(registerInput: RegisterInput): Promise<AuthResponse> {
@@ -38,7 +42,10 @@ export class AuthService {
     }
 
     // 2. Hash the raw password before persisting.
-    const hashedPassword = await bcrypt.hash(registerInput.password, SALT_ROUNDS);
+    const hashedPassword = await bcrypt.hash(
+      registerInput.password,
+      SALT_ROUNDS,
+    );
 
     // 3. Delegate user creation to UsersService.
     // Phone uniqueness check is handled inside UsersService.create().
@@ -90,14 +97,23 @@ export class AuthService {
   } {
     const token = this.jwtService.sign(payload, {
       secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-      expiresIn: this.configService.get<StringValue>('JWT_REFRESH_EXPIRES_IN', '7d'),
+      expiresIn: this.configService.get<StringValue>(
+        'JWT_REFRESH_EXPIRES_IN',
+        '7d',
+      ),
     });
 
     // Decode the signed token to extract the exact `exp` timestamp.
     // This avoids duplicating the expiry logic — the JWT is the single source of truth.
-    const decoded = this.jwtService.decode(token) as { exp: number };
+    const decoded = this.jwtService.decode<DecodedJwt>(token);
+
+    if (!decoded) {
+      throw new Error('Invalid token');
+    }
+
     const expiresAt = new Date(decoded.exp * 1000);
 
     return { token, expiresAt };
   }
+  // eslint-disable-next-line prettier/prettier
 }

@@ -5,7 +5,7 @@ import { AuthResponse } from './dto/auth.response';
 
 @Resolver()
 export class AuthResolver {
-  constructor(private readonly authService: AuthService) { }
+  constructor(private readonly authService: AuthService) {}
 
   @Query(() => String)
   health(): string {

@@ -9,7 +9,7 @@ export class MongoUserRepository implements IUserRepository {
   constructor(
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
-  ) { }
+  ) {}
 
   async create(user: Partial<User>): Promise<User> {
     const createdUser = new this.userModel(user);
@@ -18,42 +18,52 @@ export class MongoUserRepository implements IUserRepository {
   }
 
   async findByEmail(email: string): Promise<User | null> {
-    return await this.userModel.findOne({
-      email,
-      deletedAt: null,
-    }).exec();
+    return await this.userModel
+      .findOne({
+        email,
+        deletedAt: null,
+      })
+      .exec();
   }
 
   async findByPhoneNumber(phoneNumber: string): Promise<User | null> {
-    return await this.userModel.findOne({
-      phoneNumber,
-      deletedAt: null,
-    }).exec();
+    return await this.userModel
+      .findOne({
+        phoneNumber,
+        deletedAt: null,
+      })
+      .exec();
   }
 
   async findById(id: string): Promise<User | null> {
-    return await this.userModel.findOne({
-      _id: id,
-      deletedAt: null,
-    }).exec();
+    return await this.userModel
+      .findOne({
+        _id: id,
+        deletedAt: null,
+      })
+      .exec();
   }
 
   async findByGoogleId(googleId: string): Promise<User | null> {
-    return await this.userModel.findOne({
-      googleId,
-      deletedAt: null,
-    }).exec();
+    return await this.userModel
+      .findOne({
+        googleId,
+        deletedAt: null,
+      })
+      .exec();
   }
 
   async update(id: string, data: Partial<User>): Promise<User | null> {
-    return await this.userModel.findOneAndUpdate(
-      {
-        _id: id,
-        deletedAt: null,
-      },
-      { $set: data },
-      { new: true },
-    ).exec();
+    return await this.userModel
+      .findOneAndUpdate(
+        {
+          _id: id,
+          deletedAt: null,
+        },
+        { $set: data },
+        { new: true },
+      )
+      .exec();
   }
 
   async findAll(page: number, limit: number): Promise<User[]> {
@@ -68,14 +78,16 @@ export class MongoUserRepository implements IUserRepository {
   }
 
   async softDelete(id: string): Promise<void> {
-    await this.userModel.findOneAndUpdate(
-      {
-        _id: id,
-        deletedAt: null,
-      },
-      {
-        deletedAt: new Date(),
-      },
-    ).exec();
+    await this.userModel
+      .findOneAndUpdate(
+        {
+          _id: id,
+          deletedAt: null,
+        },
+        {
+          deletedAt: new Date(),
+        },
+      )
+      .exec();
   }
 }

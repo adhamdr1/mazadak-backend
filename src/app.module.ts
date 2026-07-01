@@ -31,4 +31,4 @@ import { join } from 'path';
     UsersModule,
   ],
 })
-export class AppModule { }
+export class AppModule {}

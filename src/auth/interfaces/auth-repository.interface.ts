@@ -2,7 +2,11 @@ import { RefreshToken } from '../entities/refresh-token.entity';
 
 export interface IAuthRepository {
   // Persist a refresh token for a given user.
-  saveRefreshToken(userId: string, hashedToken: string, expiresAt: Date): Promise<void>;
+  saveRefreshToken(
+    userId: string,
+    hashedToken: string,
+    expiresAt: Date,
+  ): Promise<void>;
 
   // Lookup a refresh token by its value — used during token rotation.
   findRefreshToken(hashedToken: string): Promise<RefreshToken | null>;

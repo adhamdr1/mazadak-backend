@@ -12,7 +12,7 @@ export class MongoAuthRepository implements IAuthRepository {
   constructor(
     @InjectModel(RefreshToken.name)
     private readonly refreshTokenModel: Model<RefreshTokenDocument>,
-  ) { }
+  ) {}
 
   async saveRefreshToken(
     userId: string,

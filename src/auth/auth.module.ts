@@ -44,4 +44,4 @@ import { StringValue } from 'ms';
     },
   ],
 })
-export class AuthModule { }
+export class AuthModule {}
