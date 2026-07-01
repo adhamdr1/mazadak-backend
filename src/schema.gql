@@ -1,0 +1,69 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+type Address {
+  city: String!
+  street: String!
+}
+
+type User {
+  _id: ID!
+  firstName: String!
+  lastName: String!
+  email: String!
+  authProvider: AuthProvider!
+  googleId: String
+  role: UserRole!
+  phoneNumber: String!
+  dateOfBirth: DateTime!
+  address: Address!
+  isEmailVerified: Boolean!
+  deletedAt: DateTime
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime
+
+type AuthResponse {
+  accessToken: String!
+  refreshToken: String!
+  user: User!
+}
+
+type Query {
+  health: String!
+}
+
+type Mutation {
+  register(registerInput: RegisterInput!): AuthResponse!
+}
+
+input RegisterInput {
+  firstName: String!
+  lastName: String!
+  email: String!
+  password: String!
+  phoneNumber: String!
+  dateOfBirth: DateTime!
+  address: AddressInput!
+}
+
+input AddressInput {
+  city: String!
+  street: String!
+}
