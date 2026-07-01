@@ -61,7 +61,7 @@ export class User {
   authProvider!: AuthProvider;
 
   @Field({ nullable: true })
-  @Prop({ default: null, index: true })
+  @Prop({ default: null, index: true, sparse: true })
   googleId?: string;
 
   @Prop({
@@ -92,9 +92,9 @@ export class User {
   @Prop({ default: false })
   isEmailVerified!: boolean;
 
-  @Field()
-  @Prop({ default: false })
-  isDeleted!: boolean;
+  @Field({ nullable: true })
+  @Prop({ default: null, index: true, sparse: true })
+  deletedAt?: Date;
 
   @Field()
   readonly createdAt!: Date;

@@ -1,8 +1,8 @@
-import { Field, InputType } from '@nestjs/graphql';
-import { GraphQLISODateTime } from '@nestjs/graphql';
+import { Field, InputType, GraphQLISODateTime } from '@nestjs/graphql';
 import { Type, Transform } from 'class-transformer';
 import {
   IsDate,
+  MaxDate,
   IsEmail,
   IsNotEmpty,
   IsString,
@@ -71,20 +71,8 @@ export class CreateUserInput {
 
   @Field()
   @IsString()
-  @MinLength(8, {
-    message: 'Password must be at least 8 characters long',
-  })
-  @MaxLength(100, {
-    message: 'Password must not exceed 100 characters',
-  })
-  @Matches(
-    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&^#()_+\-=[\]{};':"\\|,.<>/?]).{8,}$/,
-    {
-      message:
-        'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character',
-    },
-  )
-  password!: string;
+  @IsNotEmpty()
+  password!: string; // accepts hashed string
 
   @Field()
   @Transform(trim)
@@ -97,6 +85,9 @@ export class CreateUserInput {
   @Field(() => GraphQLISODateTime)
   @Type(() => Date)
   @IsDate({ message: 'Invalid date format' })
+  @MaxDate(() => new Date(Date.now() - 18 * 365 * 24 * 60 * 60 * 1000), {
+    message: 'User must be at least 18 years old',
+  })
   dateOfBirth!: Date;
 
   @Field(() => AddressInput)
