@@ -8,6 +8,7 @@ import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { FindUserInput } from './dto/find-user.input';
+import { PaginationInput } from '../common/dto/pagination.input';
 
 @Resolver(() => User)
 @UseGuards(JwtAuthGuard)
@@ -24,5 +25,12 @@ export class UsersResolver {
   @Roles(UserRole.ADMIN)
   async findUser(@Args('input') input: FindUserInput): Promise<User> {
     return this.usersService.findById(input.id);
+  }
+
+  @Query(() => [User], { name: 'users' })
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async findAll(@Args('input') input: PaginationInput): Promise<User[]> {
+    return this.usersService.findAll(input);
   }
 }

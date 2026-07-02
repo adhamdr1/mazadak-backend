@@ -49,10 +49,16 @@ type Query {
   health: String!
   me: User!
   findUser(input: FindUserInput!): User!
+  users(input: PaginationInput!): [User!]!
 }
 
 input FindUserInput {
   id: String!
+}
+
+input PaginationInput {
+  page: Int! = 1
+  limit: Int! = 10
 }
 
 type Mutation {
