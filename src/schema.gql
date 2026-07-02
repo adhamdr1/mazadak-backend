@@ -48,6 +48,11 @@ type AuthResponse {
 type Query {
   health: String!
   me: User!
+  findUser(input: FindUserInput!): User!
+}
+
+input FindUserInput {
+  id: String!
 }
 
 type Mutation {
