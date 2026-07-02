@@ -62,6 +62,11 @@ export class UsersService {
     return this.userRepository.findByEmail(email);
   }
 
+  async findByEmailWithPassword(email: string): Promise<User | null> {
+    // Returns null if not found — caller (AuthService) decides what to do.
+    return this.userRepository.findByEmailWithPassword(email);
+  }
+
   async findByGoogleId(googleId: string): Promise<User | null> {
     // Returns null if not found — caller (AuthService) decides what to do.
     return this.userRepository.findByGoogleId(googleId);

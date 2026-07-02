@@ -51,6 +51,7 @@ type Query {
 
 type Mutation {
   register(registerInput: RegisterInput!): AuthResponse!
+  login(loginInput: LoginInput!): AuthResponse!
 }
 
 input RegisterInput {
@@ -66,4 +67,9 @@ input RegisterInput {
 input AddressInput {
   city: String!
   street: String!
+}
+
+input LoginInput {
+  email: String!
+  password: String!
 }
