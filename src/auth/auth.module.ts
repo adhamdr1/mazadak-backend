@@ -11,11 +11,16 @@ import {
 } from './entities/refresh-token.entity';
 import { UsersModule } from '../users/users.module';
 import { StringValue } from 'ms';
+import { PassportModule } from '@nestjs/passport';
+import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
   imports: [
     // Gives AuthService access to UsersService (exported from UsersModule).
     UsersModule,
+
+    // Adds JWT authentication functionality.
+    PassportModule.register({ defaultStrategy: 'jwt' }),
 
     // Register the RefreshToken collection in this module's scope.
     MongooseModule.forFeature([
@@ -38,6 +43,7 @@ import { StringValue } from 'ms';
   providers: [
     AuthResolver,
     AuthService,
+    JwtStrategy,
     {
       provide: 'IAuthRepository',
       useClass: MongoAuthRepository,
