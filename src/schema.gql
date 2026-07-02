@@ -47,6 +47,7 @@ type AuthResponse {
 
 type Query {
   health: String!
+  me: User!
 }
 
 type Mutation {
