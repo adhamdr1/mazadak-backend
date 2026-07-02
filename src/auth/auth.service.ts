@@ -1,4 +1,9 @@
-import { ConflictException, Inject, Injectable } from '@nestjs/common';
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
@@ -10,6 +15,7 @@ import type { IAuthRepository } from './interfaces/auth-repository.interface';
 import { CreateUserInput } from '../users/dto/create-user.input';
 import { createHash } from 'crypto';
 import { StringValue } from 'ms';
+import { LoginInput } from './dto/login.input';
 
 const SALT_ROUNDS = 12;
 
@@ -29,8 +35,7 @@ export class AuthService {
     private readonly configService: ConfigService,
     @Inject('IAuthRepository')
     private readonly authRepository: IAuthRepository,
-    // eslint-disable-next-line prettier/prettier
-  ) { }
+  ) {}
 
   async register(registerInput: RegisterInput): Promise<AuthResponse> {
     // 1. Verify email is not taken.
@@ -82,6 +87,50 @@ export class AuthService {
     return { accessToken, refreshToken, user };
   }
 
+  async login(loginInput: LoginInput): Promise<AuthResponse> {
+    // 1. Find user — use vague error to avoid leaking info.
+    const user = await this.usersService.findByEmailWithPassword(
+      loginInput.email,
+    );
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // 2. Reject soft-deleted accounts.
+    if (user.deletedAt) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // 3. Compare password — password field has select:false, need to fetch it.
+    const isPasswordValid = await bcrypt.compare(
+      loginInput.password,
+      user.password ?? '',
+    );
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // 4. Build payload and generate tokens.
+    const payload: JwtPayload = {
+      sub: user._id.toString(),
+      email: user.email,
+      role: user.role,
+    };
+
+    const accessToken = this.generateAccessToken(payload);
+    const { token: refreshToken, expiresAt } =
+      this.generateRefreshToken(payload);
+
+    // 5. Persist hashed refresh token.
+    await this.authRepository.saveRefreshToken(
+      user._id.toString(),
+      hashToken(refreshToken),
+      expiresAt,
+    );
+
+    return { accessToken, refreshToken, user };
+  }
+
   // ─── Private helpers ─────────────────────────────────────────────────────────
 
   private generateAccessToken(payload: JwtPayload): string {
@@ -115,5 +164,4 @@ export class AuthService {
 
     return { token, expiresAt };
   }
-  // eslint-disable-next-line prettier/prettier
 }
