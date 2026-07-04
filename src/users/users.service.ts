@@ -111,10 +111,11 @@ export class UsersService {
     return updated;
   }
 
-  // async verifyEmail(id: string): Promise<void> {
-  //   // Delegates to update — which already throws NotFoundException if not found.
-  //   await this.updateProfile(id, { isEmailVerified: true });
-  // }
+  async verifyEmail(id: string): Promise<void> {
+    const user = await this.findById(id);
+    user.isEmailVerified = true;
+    await this.userRepository.update(id, user);
+  }
 
   async softDelete(currentUser: JwtPayload, targetId: string): Promise<void> {
     // Authorization: user can only delete themselves unless admin.
