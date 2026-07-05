@@ -30,4 +30,20 @@ export class AuthResolver {
   ): Promise<AuthResponse> {
     return this.authService.login(loginInput);
   }
+
+  @Public()
+  @Mutation(() => Boolean, { name: 'confirmEmail' })
+  async confirmEmail(
+    @Args('token', { type: () => String }) token: string,
+  ): Promise<boolean> {
+    return this.authService.confirmEmail(token);
+  }
+
+  @Public()
+  @Mutation(() => Boolean, { name: 'resendConfirmationEmail' })
+  async resendConfirmationEmail(
+    @Args('email', { type: () => String }) email: string,
+  ): Promise<boolean> {
+    return this.authService.resendConfirmationEmail(email);
+  }
 }

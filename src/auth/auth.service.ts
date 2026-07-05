@@ -3,6 +3,8 @@ import {
   Inject,
   Injectable,
   UnauthorizedException,
+  BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -16,6 +18,7 @@ import { CreateUserInput } from '../users/dto/create-user.input';
 import { createHash } from 'crypto';
 import { StringValue } from 'ms';
 import { LoginInput } from './dto/login.input';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const SALT_ROUNDS = 12;
 
@@ -35,6 +38,7 @@ export class AuthService {
     private readonly configService: ConfigService,
     @Inject('IAuthRepository')
     private readonly authRepository: IAuthRepository,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async register(registerInput: RegisterInput): Promise<AuthResponse> {
@@ -64,6 +68,18 @@ export class AuthService {
       address: registerInput.address,
     };
     const user = await this.usersService.create(createInput);
+
+    const verificationToken = this.generateEmailVerificationToken(
+      user._id.toString(),
+    );
+
+    // Send email verification request
+    await this.notificationsService.sendEmailVerification(
+      user.email,
+      verificationToken,
+      user.firstName,
+      user.phoneNumber,
+    );
 
     // 4. Build JWT payload — never put sensitive data (password, etc.) in the payload.
     const payload: JwtPayload = {
@@ -101,6 +117,12 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    if (!user.isEmailVerified) {
+      throw new ForbiddenException(
+        'Please verify your email before logging in',
+      );
+    }
+
     // 3. Compare password — password field has select:false, need to fetch it.
     const isPasswordValid = await bcrypt.compare(
       loginInput.password,
@@ -131,6 +153,45 @@ export class AuthService {
     return { accessToken, refreshToken, user };
   }
 
+  async confirmEmail(token: string): Promise<boolean> {
+    try {
+      // 1. فك تشفير التوكن والتأكد من صلاحيته باستخدام المفتاح المخصص للإيميل
+      const payload = this.jwtService.verify<{ sub: string }>(token, {
+        secret: this.configService.getOrThrow<string>(
+          'JWT_VERIFICATION_SECRET',
+        ),
+      });
+
+      await this.usersService.verifyEmail(payload.sub);
+
+      return true;
+    } catch {
+      throw new BadRequestException('Invalid or expired verification token');
+    }
+  }
+
+  async resendConfirmationEmail(email: string): Promise<boolean> {
+    const user = await this.usersService.findByEmail(email);
+
+    // Security: Do not reveal if the email exists or not
+    if (!user) {
+      return true;
+    }
+    if (user.isEmailVerified) {
+      throw new BadRequestException('Email is already verified');
+    }
+    const verificationToken = this.generateEmailVerificationToken(
+      user._id.toString(),
+    );
+    // Send email verification request
+    await this.notificationsService.sendEmailVerification(
+      user.email,
+      verificationToken,
+      user.firstName,
+      user.phoneNumber,
+    );
+    return true;
+  }
   // ─── Private helpers ─────────────────────────────────────────────────────────
 
   private generateAccessToken(payload: JwtPayload): string {
@@ -163,5 +224,20 @@ export class AuthService {
     const expiresAt = new Date(decoded.exp * 1000);
 
     return { token, expiresAt };
+  }
+
+  private generateEmailVerificationToken(userId: string): string {
+    return this.jwtService.sign(
+      { sub: userId },
+      {
+        secret: this.configService.getOrThrow<string>(
+          'JWT_VERIFICATION_SECRET',
+        ),
+        expiresIn: this.configService.get<StringValue>(
+          'JWT_VERIFICATION_EXPIRES_IN',
+          '1h',
+        ),
+      },
+    );
   }
 }

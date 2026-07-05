@@ -64,6 +64,8 @@ input PaginationInput {
 type Mutation {
   register(registerInput: RegisterInput!): AuthResponse!
   login(loginInput: LoginInput!): AuthResponse!
+  confirmEmail(token: String!): Boolean!
+  resendConfirmationEmail(email: String!): Boolean!
   updateProfile(input: UpdateUserInput!): User!
   deleteAccount: Boolean!
   adminUpdateUser(targetUser: FindUserInput!, input: UpdateUserInput!): User!

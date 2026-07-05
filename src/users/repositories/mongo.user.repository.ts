@@ -71,7 +71,7 @@ export class MongoUserRepository implements IUserRepository {
           deletedAt: null,
         },
         { $set: data },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .exec();
   }

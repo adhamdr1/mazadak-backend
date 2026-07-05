@@ -13,11 +13,13 @@ import { UsersModule } from '../users/users.module';
 import { StringValue } from 'ms';
 import { PassportModule } from '@nestjs/passport';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
     // Gives AuthService access to UsersService (exported from UsersModule).
     UsersModule,
+    NotificationsModule,
 
     // Adds JWT authentication functionality.
     PassportModule.register({ defaultStrategy: 'jwt' }),

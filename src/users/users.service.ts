@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { UpdateUserInput } from './dto/update-user.input';
 import { PaginationInput } from '../common/dto/pagination.input';
@@ -113,6 +114,9 @@ export class UsersService {
 
   async verifyEmail(id: string): Promise<void> {
     const user = await this.findById(id);
+    if (user.isEmailVerified) {
+      throw new BadRequestException('Email already verified');
+    }
     user.isEmailVerified = true;
     await this.userRepository.update(id, user);
   }
