@@ -9,6 +9,7 @@ import { join } from 'path';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { RolesGuard } from './common/guards/roles.guard';
 
     AuthModule,
     UsersModule,
+    NotificationsModule,
   ],
   providers: [
     // Global Authentication Guards
