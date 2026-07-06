@@ -64,6 +64,12 @@ input PaginationInput {
 type Mutation {
   register(registerInput: RegisterInput!): AuthResponse!
   login(loginInput: LoginInput!): AuthResponse!
+  googleRegister(googleRegisterInput: GoogleRegisterInput!): AuthResponse!
+  googleLogin(googleLoginInput: GoogleLoginInput!): AuthResponse!
+  confirmEmail(token: String!): Boolean!
+  resendConfirmationEmail(email: String!): Boolean!
+  logout(refreshToken: String!): Boolean!
+  logoutAll: Boolean!
   updateProfile(input: UpdateUserInput!): User!
   deleteAccount: Boolean!
   adminUpdateUser(targetUser: FindUserInput!, input: UpdateUserInput!): User!
@@ -88,6 +94,19 @@ input AddressInput {
 input LoginInput {
   email: String!
   password: String!
+}
+
+input GoogleRegisterInput {
+  token: String!
+  firstName: String!
+  lastName: String!
+  phoneNumber: String!
+  dateOfBirth: DateTime!
+  address: AddressInput!
+}
+
+input GoogleLoginInput {
+  token: String!
 }
 
 input UpdateUserInput {

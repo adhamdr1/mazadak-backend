@@ -5,6 +5,8 @@ import { ValidationPipe } from '@nestjs/common';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  app.enableCors();
+
   // السطر ده هو اللي بيفعل الـ Validation على مستوى المشروع كله
   app.useGlobalPipes(
     new ValidationPipe({

@@ -71,7 +71,7 @@ export class MongoUserRepository implements IUserRepository {
           deletedAt: null,
         },
         { $set: data },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .exec();
   }
@@ -97,6 +97,25 @@ export class MongoUserRepository implements IUserRepository {
         {
           deletedAt: new Date(),
         },
+      )
+      .exec();
+  }
+
+  async linkGoogleAccount(
+    userId: string,
+    googleId: string,
+  ): Promise<User | null> {
+    return await this.userModel
+      .findOneAndUpdate(
+        { _id: userId, deletedAt: null },
+        {
+          $set: {
+            googleId,
+            authProvider: 'GOOGLE',
+            isEmailVerified: true,
+          },
+        },
+        { returnDocument: 'after' },
       )
       .exec();
   }

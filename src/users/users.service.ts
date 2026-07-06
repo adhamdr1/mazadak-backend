@@ -4,13 +4,15 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { UpdateUserInput } from './dto/update-user.input';
 import { PaginationInput } from '../common/dto/pagination.input';
 import { CreateUserInput } from './dto/create-user.input';
-import { User, UserRole } from './entities/user.entity';
+import { User, UserRole, AuthProvider } from './entities/user.entity';
 import type { IUserRepository } from './interfaces/user.repository.interface';
 import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
+import { CreateGoogleUserDto } from './dto/create-google-user.dto';
 
 @Injectable()
 export class UsersService {
@@ -47,6 +49,34 @@ export class UsersService {
       phoneNumber: createUserInput.phoneNumber,
       dateOfBirth: createUserInput.dateOfBirth,
       address: createUserInput.address,
+    });
+  }
+
+  async createGoogleUser(dto: CreateGoogleUserDto): Promise<User> {
+    const existingUser = await this.userRepository.findByEmail(dto.email);
+    if (existingUser) {
+      throw new ConflictException('Email already exists');
+    }
+
+    const existingPhone = await this.userRepository.findByPhoneNumber(
+      dto.phoneNumber,
+    );
+    if (existingPhone) {
+      throw new ConflictException('Phone number already exists');
+    }
+
+    // TODO: Create wallet after user creation (WalletModule).
+    // This should be done inside a MongoDB transaction when WalletModule is implemented.
+    return await this.userRepository.create({
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      email: dto.email,
+      authProvider: AuthProvider.GOOGLE,
+      googleId: dto.googleId,
+      isEmailVerified: true,
+      phoneNumber: dto.phoneNumber,
+      dateOfBirth: dto.dateOfBirth,
+      address: dto.address,
     });
   }
 
@@ -113,6 +143,9 @@ export class UsersService {
 
   async verifyEmail(id: string): Promise<void> {
     const user = await this.findById(id);
+    if (user.isEmailVerified) {
+      throw new BadRequestException('Email already verified');
+    }
     user.isEmailVerified = true;
     await this.userRepository.update(id, user);
   }
@@ -125,5 +158,16 @@ export class UsersService {
     // Verify the target user exists. The repository only performs the delete operation.
     await this.findById(targetId);
     await this.userRepository.softDelete(targetId);
+  }
+
+  async linkGoogleAccount(userId: string, googleId: string): Promise<User> {
+    const updatedUser = await this.userRepository.linkGoogleAccount(
+      userId,
+      googleId,
+    );
+    if (!updatedUser) {
+      throw new NotFoundException('User not found');
+    }
+    return updatedUser;
   }
 }
