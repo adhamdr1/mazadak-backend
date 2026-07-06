@@ -128,9 +128,9 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    if (user.authProvider !== AuthProvider.LOCAL || !user.password) {
+    if (!user.password) {
       throw new UnauthorizedException(
-        'Please login using your original provider (e.g., Google)',
+        'This account is registered via Google. Please use Google Login.',
       );
     }
 
@@ -294,6 +294,17 @@ export class AuthService {
       user.firstName,
       user.phoneNumber,
     );
+    return true;
+  }
+
+  async logout(refreshToken: string): Promise<boolean> {
+    // نقوم بتشفير التوكن القادم لنطابقه مع المشفر في الداتا بيز ونحذفه
+    await this.authRepository.deleteRefreshToken(hashToken(refreshToken));
+    return true;
+  }
+  async logoutAll(userId: string): Promise<boolean> {
+    // يحذف كل التوكنز الخاصة بهذا المستخدم (خروج من كل الأجهزة)
+    await this.authRepository.deleteAllUserTokens(userId);
     return true;
   }
   // ─── Private helpers ─────────────────────────────────────────────────────────

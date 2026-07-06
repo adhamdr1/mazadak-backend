@@ -6,6 +6,8 @@ import { Public } from '../common/decorators/public.decorator';
 import { LoginInput } from './dto/login.input';
 import { GoogleLoginInput } from './dto/google-login.input';
 import { GoogleRegisterInput } from './dto/google-register.input';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { JwtPayload } from './interfaces/jwt-payload.interface';
 
 @Resolver()
 export class AuthResolver {
@@ -63,5 +65,17 @@ export class AuthResolver {
     @Args('email', { type: () => String }) email: string,
   ): Promise<boolean> {
     return this.authService.resendConfirmationEmail(email);
+  }
+
+  // ... داخل الكلاس
+  @Public()
+  @Mutation(() => Boolean, { name: 'logout' })
+  async logout(@Args('refreshToken') refreshToken: string): Promise<boolean> {
+    return this.authService.logout(refreshToken);
+  }
+  // هذه محمية (غير Public) لأننا نحتاج لمعرفة من هو المستخدم الحالي
+  @Mutation(() => Boolean, { name: 'logoutAll' })
+  async logoutAll(@CurrentUser() user: JwtPayload): Promise<boolean> {
+    return this.authService.logoutAll(user.sub);
   }
 }
