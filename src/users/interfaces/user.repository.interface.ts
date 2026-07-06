@@ -18,4 +18,6 @@ export interface IUserRepository {
   findAll(page: number, limit: number): Promise<User[]>;
 
   softDelete(id: string): Promise<void>;
+
+  linkGoogleAccount(userId: string, googleId: string): Promise<User | null>;
 }

@@ -4,6 +4,8 @@ import { RegisterInput } from './dto/register.input';
 import { AuthResponse } from './dto/auth.response';
 import { Public } from '../common/decorators/public.decorator';
 import { LoginInput } from './dto/login.input';
+import { GoogleLoginInput } from './dto/google-login.input';
+import { GoogleRegisterInput } from './dto/google-register.input';
 
 @Resolver()
 export class AuthResolver {
@@ -29,6 +31,22 @@ export class AuthResolver {
     @Args('loginInput') loginInput: LoginInput,
   ): Promise<AuthResponse> {
     return this.authService.login(loginInput);
+  }
+
+  @Public()
+  @Mutation(() => AuthResponse, { name: 'googleRegister' })
+  async googleRegister(
+    @Args('googleRegisterInput') input: GoogleRegisterInput,
+  ): Promise<AuthResponse> {
+    return this.authService.googleRegister(input);
+  }
+
+  @Public()
+  @Mutation(() => AuthResponse, { name: 'googleLogin' })
+  async googleLogin(
+    @Args('googleLoginInput') googleLoginInput: GoogleLoginInput,
+  ): Promise<AuthResponse> {
+    return this.authService.googleLogin(googleLoginInput);
   }
 
   @Public()
