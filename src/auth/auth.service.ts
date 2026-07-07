@@ -21,7 +21,7 @@ import { LoginInput } from './dto/login.input';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OAuth2Client } from 'google-auth-library';
 import { RegistrationRequiredException } from './exceptions/registration-required.exception';
-import { AuthProvider } from '../users/entities/user.entity';
+import { AuthProvider, User } from '../users/entities/user.entity';
 import { GoogleLoginInput } from './dto/google-login.input';
 import { GoogleRegisterInput } from './dto/google-register.input';
 
@@ -92,26 +92,7 @@ export class AuthService {
       user.phoneNumber,
     );
 
-    // 4. Build JWT payload — never put sensitive data (password, etc.) in the payload.
-    const payload: JwtPayload = {
-      sub: user._id.toString(),
-      email: user.email,
-      role: user.role,
-    };
-
-    // 5. Generate both tokens.
-    const accessToken = this.generateAccessToken(payload);
-    const { token: refreshToken, expiresAt } =
-      this.generateRefreshToken(payload);
-
-    // 6. Persist the refresh token so we can revoke it later.
-    await this.authRepository.saveRefreshToken(
-      user._id.toString(),
-      hashToken(refreshToken),
-      expiresAt,
-    );
-
-    return { accessToken, refreshToken, user };
+    return this.issueAuthTokens(user);
   }
 
   async login(loginInput: LoginInput): Promise<AuthResponse> {
@@ -149,25 +130,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // 4. Build payload and generate tokens.
-    const payload: JwtPayload = {
-      sub: user._id.toString(),
-      email: user.email,
-      role: user.role,
-    };
-
-    const accessToken = this.generateAccessToken(payload);
-    const { token: refreshToken, expiresAt } =
-      this.generateRefreshToken(payload);
-
-    // 5. Persist hashed refresh token.
-    await this.authRepository.saveRefreshToken(
-      user._id.toString(),
-      hashToken(refreshToken),
-      expiresAt,
-    );
-
-    return { accessToken, refreshToken, user };
+    return this.issueAuthTokens(user);
   }
 
   async googleRegister(input: GoogleRegisterInput): Promise<AuthResponse> {
@@ -198,21 +161,7 @@ export class AuthService {
       address: input.address,
     });
 
-    // 4. توليد التوكنز
-    const jwtPayload: JwtPayload = {
-      sub: user._id.toString(),
-      email: user.email,
-      role: user.role,
-    };
-    const accessToken = this.generateAccessToken(jwtPayload);
-    const { token: refreshToken, expiresAt } =
-      this.generateRefreshToken(jwtPayload);
-    await this.authRepository.saveRefreshToken(
-      user._id.toString(),
-      hashToken(refreshToken),
-      expiresAt,
-    );
-    return { accessToken, refreshToken, user };
+    return this.issueAuthTokens(user);
   }
 
   async googleLogin(googleLoginInput: GoogleLoginInput): Promise<AuthResponse> {
@@ -240,21 +189,7 @@ export class AuthService {
         googleId,
       );
     }
-    // 5. Generate Tokens
-    const jwtPayload: JwtPayload = {
-      sub: user._id.toString(),
-      email: user.email,
-      role: user.role,
-    };
-    const accessToken = this.generateAccessToken(jwtPayload);
-    const { token: refreshToken, expiresAt } =
-      this.generateRefreshToken(jwtPayload);
-    await this.authRepository.saveRefreshToken(
-      user._id.toString(),
-      hashToken(refreshToken),
-      expiresAt,
-    );
-    return { accessToken, refreshToken, user };
+    return this.issueAuthTokens(user);
   }
 
   async confirmEmail(token: string): Promise<boolean> {
@@ -302,11 +237,49 @@ export class AuthService {
     await this.authRepository.deleteRefreshToken(hashToken(refreshToken));
     return true;
   }
+
   async logoutAll(userId: string): Promise<boolean> {
     // يحذف كل التوكنز الخاصة بهذا المستخدم (خروج من كل الأجهزة)
     await this.authRepository.deleteAllUserTokens(userId);
     return true;
   }
+
+  async refreshTokens(rawRefreshToken: string): Promise<AuthResponse> {
+    // 1. Hash the incoming token to match what's stored in DB.
+    const hashedToken = hashToken(rawRefreshToken);
+
+    // 2. Look up the token in DB — if not found, it's invalid or already used.
+    const storedToken = await this.authRepository.findRefreshToken(hashedToken);
+    if (!storedToken) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    // 3. Verify the JWT signature and expiry are still valid.
+    //    Even if it's in DB, the JWT itself might be tampered with.
+    let payload: JwtPayload;
+    try {
+      payload = this.jwtService.verify<JwtPayload>(rawRefreshToken, {
+        secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
+      });
+    } catch {
+      // Token is expired or invalid — clean it up from DB.
+      await this.authRepository.deleteRefreshToken(hashedToken);
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    // 4. Token Rotation: delete the old token before issuing new ones.
+    //    This prevents replay attacks — each refresh token is single-use.
+    await this.authRepository.deleteRefreshToken(hashedToken);
+
+    // 5. Fetch fresh user data — role/email might have changed since token was issued.
+    const user = await this.usersService.findById(payload.sub);
+    if (!user || user.deletedAt) {
+      throw new UnauthorizedException('User not found or disabled');
+    }
+
+    return this.issueAuthTokens(user);
+  }
+
   // ─── Private helpers ─────────────────────────────────────────────────────────
 
   private generateAccessToken(payload: JwtPayload): string {
@@ -366,5 +339,22 @@ export class AuthService {
     } catch {
       throw new UnauthorizedException('Invalid Google token');
     }
+  }
+
+  private async issueAuthTokens(user: User): Promise<AuthResponse> {
+    const payload: JwtPayload = {
+      sub: user._id.toString(),
+      email: user.email,
+      role: user.role,
+    };
+    const accessToken = this.generateAccessToken(payload);
+    const { token: refreshToken, expiresAt } =
+      this.generateRefreshToken(payload);
+    await this.authRepository.saveRefreshToken(
+      user._id.toString(),
+      hashToken(refreshToken),
+      expiresAt,
+    );
+    return { accessToken, refreshToken, user };
   }
 }

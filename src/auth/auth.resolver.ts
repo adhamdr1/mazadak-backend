@@ -67,13 +67,20 @@ export class AuthResolver {
     return this.authService.resendConfirmationEmail(email);
   }
 
-  // ... داخل الكلاس
+  @Public()
+  @Mutation(() => AuthResponse, { name: 'refreshToken' })
+  async refreshToken(
+    @Args('refreshToken') refreshToken: string,
+  ): Promise<AuthResponse> {
+    return this.authService.refreshTokens(refreshToken);
+  }
+
   @Public()
   @Mutation(() => Boolean, { name: 'logout' })
   async logout(@Args('refreshToken') refreshToken: string): Promise<boolean> {
     return this.authService.logout(refreshToken);
   }
-  // هذه محمية (غير Public) لأننا نحتاج لمعرفة من هو المستخدم الحالي
+
   @Mutation(() => Boolean, { name: 'logoutAll' })
   async logoutAll(@CurrentUser() user: JwtPayload): Promise<boolean> {
     return this.authService.logoutAll(user.sub);
