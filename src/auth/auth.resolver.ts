@@ -8,6 +8,7 @@ import { GoogleLoginInput } from './dto/google-login.input';
 import { GoogleRegisterInput } from './dto/google-register.input';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { JwtPayload } from './interfaces/jwt-payload.interface';
+import { Throttle } from '@nestjs/throttler';
 
 @Resolver()
 export class AuthResolver {
@@ -20,6 +21,7 @@ export class AuthResolver {
   }
 
   @Public()
+  @Throttle({ strict: { ttl: 60_000, limit: 5 } })
   @Mutation(() => AuthResponse, { name: 'register' })
   async register(
     @Args('registerInput') registerInput: RegisterInput,
@@ -28,6 +30,7 @@ export class AuthResolver {
   }
 
   @Public()
+  @Throttle({ strict: { ttl: 60_000, limit: 5 } })
   @Mutation(() => AuthResponse, { name: 'login' })
   async login(
     @Args('loginInput') loginInput: LoginInput,
@@ -36,6 +39,7 @@ export class AuthResolver {
   }
 
   @Public()
+  @Throttle({ strict: { ttl: 60_000, limit: 5 } })
   @Mutation(() => AuthResponse, { name: 'googleRegister' })
   async googleRegister(
     @Args('googleRegisterInput') input: GoogleRegisterInput,
@@ -44,6 +48,7 @@ export class AuthResolver {
   }
 
   @Public()
+  @Throttle({ strict: { ttl: 60_000, limit: 5 } })
   @Mutation(() => AuthResponse, { name: 'googleLogin' })
   async googleLogin(
     @Args('googleLoginInput') googleLoginInput: GoogleLoginInput,
@@ -52,6 +57,7 @@ export class AuthResolver {
   }
 
   @Public()
+  @Throttle({ strict: { ttl: 60_000, limit: 5 } })
   @Mutation(() => Boolean, { name: 'confirmEmail' })
   async confirmEmail(
     @Args('token', { type: () => String }) token: string,
@@ -60,6 +66,7 @@ export class AuthResolver {
   }
 
   @Public()
+  @Throttle({ strict: { ttl: 60_000, limit: 5 } })
   @Mutation(() => Boolean, { name: 'resendConfirmationEmail' })
   async resendConfirmationEmail(
     @Args('email', { type: () => String }) email: string,
@@ -68,6 +75,7 @@ export class AuthResolver {
   }
 
   @Public()
+  @Throttle({ strict: { ttl: 60_000, limit: 5 } })
   @Mutation(() => AuthResponse, { name: 'refreshToken' })
   async refreshToken(
     @Args('refreshToken') refreshToken: string,
