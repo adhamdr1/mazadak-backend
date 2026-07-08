@@ -15,15 +15,20 @@ import { AuthResponse } from './dto/auth.response';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
 import type { IAuthRepository } from './interfaces/auth-repository.interface';
 import { CreateUserInput } from '../users/dto/create-user.input';
-import { createHash } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { StringValue } from 'ms';
 import { LoginInput } from './dto/login.input';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OAuth2Client } from 'google-auth-library';
 import { RegistrationRequiredException } from './exceptions/registration-required.exception';
-import { AuthProvider } from '../users/entities/user.entity';
+import { AuthProvider, User } from '../users/entities/user.entity';
 import { GoogleLoginInput } from './dto/google-login.input';
 import { GoogleRegisterInput } from './dto/google-register.input';
+import { ForgotPasswordInput } from './dto/forgot-password.input';
+import { ResetPasswordInput } from './dto/reset-password.input';
+import { UpdatePasswordInput } from './dto/update-password.input';
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import Redis from 'ioredis';
 
 const SALT_ROUNDS = 12;
 
@@ -46,6 +51,7 @@ export class AuthService {
     @Inject('IAuthRepository')
     private readonly authRepository: IAuthRepository,
     private readonly notificationsService: NotificationsService,
+    @InjectRedis() private readonly redis: Redis,
   ) {
     this.googleClient = new OAuth2Client(
       this.configService.getOrThrow<string>('GOOGLE_CLIENT_ID'),
@@ -92,26 +98,7 @@ export class AuthService {
       user.phoneNumber,
     );
 
-    // 4. Build JWT payload — never put sensitive data (password, etc.) in the payload.
-    const payload: JwtPayload = {
-      sub: user._id.toString(),
-      email: user.email,
-      role: user.role,
-    };
-
-    // 5. Generate both tokens.
-    const accessToken = this.generateAccessToken(payload);
-    const { token: refreshToken, expiresAt } =
-      this.generateRefreshToken(payload);
-
-    // 6. Persist the refresh token so we can revoke it later.
-    await this.authRepository.saveRefreshToken(
-      user._id.toString(),
-      hashToken(refreshToken),
-      expiresAt,
-    );
-
-    return { accessToken, refreshToken, user };
+    return this.issueAuthTokens(user);
   }
 
   async login(loginInput: LoginInput): Promise<AuthResponse> {
@@ -149,25 +136,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // 4. Build payload and generate tokens.
-    const payload: JwtPayload = {
-      sub: user._id.toString(),
-      email: user.email,
-      role: user.role,
-    };
-
-    const accessToken = this.generateAccessToken(payload);
-    const { token: refreshToken, expiresAt } =
-      this.generateRefreshToken(payload);
-
-    // 5. Persist hashed refresh token.
-    await this.authRepository.saveRefreshToken(
-      user._id.toString(),
-      hashToken(refreshToken),
-      expiresAt,
-    );
-
-    return { accessToken, refreshToken, user };
+    return this.issueAuthTokens(user);
   }
 
   async googleRegister(input: GoogleRegisterInput): Promise<AuthResponse> {
@@ -198,21 +167,7 @@ export class AuthService {
       address: input.address,
     });
 
-    // 4. توليد التوكنز
-    const jwtPayload: JwtPayload = {
-      sub: user._id.toString(),
-      email: user.email,
-      role: user.role,
-    };
-    const accessToken = this.generateAccessToken(jwtPayload);
-    const { token: refreshToken, expiresAt } =
-      this.generateRefreshToken(jwtPayload);
-    await this.authRepository.saveRefreshToken(
-      user._id.toString(),
-      hashToken(refreshToken),
-      expiresAt,
-    );
-    return { accessToken, refreshToken, user };
+    return this.issueAuthTokens(user);
   }
 
   async googleLogin(googleLoginInput: GoogleLoginInput): Promise<AuthResponse> {
@@ -240,21 +195,7 @@ export class AuthService {
         googleId,
       );
     }
-    // 5. Generate Tokens
-    const jwtPayload: JwtPayload = {
-      sub: user._id.toString(),
-      email: user.email,
-      role: user.role,
-    };
-    const accessToken = this.generateAccessToken(jwtPayload);
-    const { token: refreshToken, expiresAt } =
-      this.generateRefreshToken(jwtPayload);
-    await this.authRepository.saveRefreshToken(
-      user._id.toString(),
-      hashToken(refreshToken),
-      expiresAt,
-    );
-    return { accessToken, refreshToken, user };
+    return this.issueAuthTokens(user);
   }
 
   async confirmEmail(token: string): Promise<boolean> {
@@ -302,11 +243,145 @@ export class AuthService {
     await this.authRepository.deleteRefreshToken(hashToken(refreshToken));
     return true;
   }
+
   async logoutAll(userId: string): Promise<boolean> {
     // يحذف كل التوكنز الخاصة بهذا المستخدم (خروج من كل الأجهزة)
     await this.authRepository.deleteAllUserTokens(userId);
     return true;
   }
+
+  async refreshTokens(rawRefreshToken: string): Promise<AuthResponse> {
+    // 1. Hash the incoming token to match what's stored in DB.
+    const hashedToken = hashToken(rawRefreshToken);
+
+    // 2. Look up the token in DB — if not found, it's invalid or already used.
+    const storedToken = await this.authRepository.findRefreshToken(hashedToken);
+    if (!storedToken) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    // 3. Verify the JWT signature and expiry are still valid.
+    //    Even if it's in DB, the JWT itself might be tampered with.
+    let payload: JwtPayload;
+    try {
+      payload = this.jwtService.verify<JwtPayload>(rawRefreshToken, {
+        secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
+      });
+    } catch {
+      // Token is expired or invalid — clean it up from DB.
+      await this.authRepository.deleteRefreshToken(hashedToken);
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    // 4. Token Rotation: delete the old token before issuing new ones.
+    //    This prevents replay attacks — each refresh token is single-use.
+    await this.authRepository.deleteRefreshToken(hashedToken);
+
+    // 5. Fetch fresh user data — role/email might have changed since token was issued.
+    const user = await this.usersService.findById(payload.sub);
+    if (!user || user.deletedAt) {
+      throw new UnauthorizedException('User not found or disabled');
+    }
+
+    return this.issueAuthTokens(user);
+  }
+
+  async forgotPassword(
+    input: ForgotPasswordInput,
+    ip: string,
+    browser: string,
+  ): Promise<boolean> {
+    const user = await this.usersService.findByEmailWithPassword(input.email);
+    if (!user) return true;
+    // 1. التأكد إن الحساب له باسورد (لو معندوش، يبقى ده حساب Google Only عمره ما عمل باسورد)
+    if (!user.password) {
+      throw new BadRequestException(
+        'This account does not have a password set. Please login using your social account.',
+      );
+    }
+    // 2. حماية من تكرار الإرسال (Rate Limiting للإيميل لكل يوزر لمدة دقيقتين)
+    const rateLimitKey = `rate-limit:forgot-password:${user._id.toString()}`;
+    const recentlyRequested = await this.redis.get(rateLimitKey);
+    if (recentlyRequested) return true; // لو لسه طالب من دقيقتين، متعملش حاجة
+    await this.redis.set(rateLimitKey, '1', 'EX', 120);
+    // 3. توليد وتشفير الـ Token
+    const rawToken = this.generateSecureToken();
+    const hashedToken = hashToken(rawToken);
+    // 4. حفظ الـ Hashed Token في Redis بناءً على الـ userId
+    const redisKey = this.getResetPasswordRedisKey(user._id.toString());
+    const ttlSeconds = 900; // 15 Minutes
+    await this.redis.set(redisKey, hashedToken, 'EX', ttlSeconds);
+    const time = new Date().toUTCString();
+    // 5. تمرير بيانات اليوزر للـ Notifications Service
+    await this.notificationsService.sendPasswordResetEmail(
+      user.email,
+      rawToken, // بنبعت الـ rawToken في الإيميل
+      { firstName: user.firstName, lastName: user.lastName },
+      { ip, browser, time },
+    );
+    return true;
+  }
+
+  async resetPassword(input: ResetPasswordInput): Promise<boolean> {
+    const user = await this.usersService.findByEmailWithPassword(input.email);
+    if (!user) {
+      throw new BadRequestException('Invalid user account');
+    }
+    // 1. نجيب الـ Hashed Token بتاع اليوزر من Redis
+    const redisKey = this.getResetPasswordRedisKey(user._id.toString());
+    const storedHashedToken = await this.redis.get(redisKey);
+    if (!storedHashedToken) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+    // 2. نعمل Hash للي اليوزر بعته ونقارن
+    const inputHashedToken = hashToken(input.token);
+    if (storedHashedToken !== inputHashedToken) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+    // 3. تحديث الباسورد
+    const hashedPassword = await bcrypt.hash(input.password, SALT_ROUNDS);
+    await this.usersService.updatePassword(user._id.toString(), hashedPassword);
+    // 4. مسح التوكن من Redis
+    await this.redis.del(redisKey);
+    // 5. طرد اليوزر من كل الأجهزة
+    await this.logoutAll(user._id.toString());
+    return true;
+  }
+
+  async updatePassword(
+    userId: string,
+    input: UpdatePasswordInput,
+  ): Promise<boolean> {
+    const user = await this.usersService.findByUserIdWithPassword(userId);
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    if (!user.password) {
+      throw new BadRequestException(
+        'This account does not have a password set.',
+      );
+    }
+
+    const isMatch = await bcrypt.compare(input.oldPassword, user.password);
+    if (!isMatch) {
+      throw new BadRequestException('Incorrect old password');
+    }
+
+    const isSamePassword = await bcrypt.compare(input.password, user.password);
+    if (isSamePassword) {
+      throw new BadRequestException(
+        'New password must be different from current password',
+      );
+    }
+
+    const hashedPassword = await bcrypt.hash(input.password, SALT_ROUNDS);
+    await this.usersService.updatePassword(userId, hashedPassword);
+    await this.logoutAll(user._id.toString());
+    return true;
+  }
+
   // ─── Private helpers ─────────────────────────────────────────────────────────
 
   private generateAccessToken(payload: JwtPayload): string {
@@ -366,5 +441,30 @@ export class AuthService {
     } catch {
       throw new UnauthorizedException('Invalid Google token');
     }
+  }
+
+  private async issueAuthTokens(user: User): Promise<AuthResponse> {
+    const payload: JwtPayload = {
+      sub: user._id.toString(),
+      email: user.email,
+      role: user.role,
+    };
+    const accessToken = this.generateAccessToken(payload);
+    const { token: refreshToken, expiresAt } =
+      this.generateRefreshToken(payload);
+    await this.authRepository.saveRefreshToken(
+      user._id.toString(),
+      hashToken(refreshToken),
+      expiresAt,
+    );
+    return { accessToken, refreshToken, user };
+  }
+
+  private generateSecureToken(): string {
+    return randomBytes(32).toString('hex');
+  }
+
+  private getResetPasswordRedisKey(userId: string): string {
+    return `password-reset:${userId}`;
   }
 }

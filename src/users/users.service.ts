@@ -100,6 +100,11 @@ export class UsersService {
     return this.userRepository.findByEmailWithPassword(email);
   }
 
+  async findByUserIdWithPassword(userId: string): Promise<User | null> {
+    // Returns null if not found — caller (AuthService) decides what to do.
+    return this.userRepository.findByUserIdWithPassword(userId);
+  }
+
   async findByGoogleId(googleId: string): Promise<User | null> {
     // Returns null if not found — caller (AuthService) decides what to do.
     return this.userRepository.findByGoogleId(googleId);
@@ -169,5 +174,14 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
     return updatedUser;
+  }
+
+  async updatePassword(id: string, newHashedPassword: string): Promise<void> {
+    const updated = await this.userRepository.update(id, {
+      password: newHashedPassword,
+    });
+    if (!updated) {
+      throw new NotFoundException('User not found');
+    }
   }
 }

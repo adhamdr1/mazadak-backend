@@ -25,4 +25,22 @@ export class NotificationsService {
       { confirmLink, name, email, phone },
     );
   }
+
+  async sendPasswordResetEmail(
+    email: string,
+    token: string,
+    user: { firstName?: string; lastName?: string },
+    metadata: { ip: string; browser: string; time: string },
+  ): Promise<void> {
+    const resetLink = `${this.configService.getOrThrow('FRONTEND_URL')}/auth/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
+    const name =
+      [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
+
+    await this.emailService.send(
+      email,
+      EmailSubjects.RESET_PASSWORD,
+      EmailTemplates.RESET_PASSWORD,
+      { resetLink, email, name, ...metadata },
+    );
+  }
 }

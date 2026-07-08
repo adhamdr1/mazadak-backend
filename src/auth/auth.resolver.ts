@@ -1,4 +1,4 @@
-import { Resolver, Mutation, Args, Query } from '@nestjs/graphql';
+import { Resolver, Mutation, Args, Query, Context } from '@nestjs/graphql';
 import { AuthService } from './auth.service';
 import { RegisterInput } from './dto/register.input';
 import { AuthResponse } from './dto/auth.response';
@@ -8,6 +8,11 @@ import { GoogleLoginInput } from './dto/google-login.input';
 import { GoogleRegisterInput } from './dto/google-register.input';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { JwtPayload } from './interfaces/jwt-payload.interface';
+import { Throttle } from '@nestjs/throttler';
+import type { Request } from 'express';
+import { ForgotPasswordInput } from './dto/forgot-password.input';
+import { ResetPasswordInput } from './dto/reset-password.input';
+import { UpdatePasswordInput } from './dto/update-password.input';
 
 @Resolver()
 export class AuthResolver {
@@ -20,6 +25,7 @@ export class AuthResolver {
   }
 
   @Public()
+  @Throttle({ strict: { ttl: 60_000, limit: 5 } })
   @Mutation(() => AuthResponse, { name: 'register' })
   async register(
     @Args('registerInput') registerInput: RegisterInput,
@@ -28,6 +34,7 @@ export class AuthResolver {
   }
 
   @Public()
+  @Throttle({ strict: { ttl: 60_000, limit: 5 } })
   @Mutation(() => AuthResponse, { name: 'login' })
   async login(
     @Args('loginInput') loginInput: LoginInput,
@@ -36,6 +43,7 @@ export class AuthResolver {
   }
 
   @Public()
+  @Throttle({ strict: { ttl: 60_000, limit: 5 } })
   @Mutation(() => AuthResponse, { name: 'googleRegister' })
   async googleRegister(
     @Args('googleRegisterInput') input: GoogleRegisterInput,
@@ -44,6 +52,7 @@ export class AuthResolver {
   }
 
   @Public()
+  @Throttle({ strict: { ttl: 60_000, limit: 5 } })
   @Mutation(() => AuthResponse, { name: 'googleLogin' })
   async googleLogin(
     @Args('googleLoginInput') googleLoginInput: GoogleLoginInput,
@@ -52,6 +61,7 @@ export class AuthResolver {
   }
 
   @Public()
+  @Throttle({ strict: { ttl: 60_000, limit: 5 } })
   @Mutation(() => Boolean, { name: 'confirmEmail' })
   async confirmEmail(
     @Args('token', { type: () => String }) token: string,
@@ -60,6 +70,7 @@ export class AuthResolver {
   }
 
   @Public()
+  @Throttle({ strict: { ttl: 60_000, limit: 5 } })
   @Mutation(() => Boolean, { name: 'resendConfirmationEmail' })
   async resendConfirmationEmail(
     @Args('email', { type: () => String }) email: string,
@@ -67,15 +78,54 @@ export class AuthResolver {
     return this.authService.resendConfirmationEmail(email);
   }
 
-  // ... داخل الكلاس
+  @Public()
+  @Throttle({ strict: { ttl: 60_000, limit: 5 } })
+  @Mutation(() => AuthResponse, { name: 'refreshToken' })
+  async refreshToken(
+    @Args('refreshToken') refreshToken: string,
+  ): Promise<AuthResponse> {
+    return this.authService.refreshTokens(refreshToken);
+  }
+
   @Public()
   @Mutation(() => Boolean, { name: 'logout' })
   async logout(@Args('refreshToken') refreshToken: string): Promise<boolean> {
     return this.authService.logout(refreshToken);
   }
-  // هذه محمية (غير Public) لأننا نحتاج لمعرفة من هو المستخدم الحالي
+
   @Mutation(() => Boolean, { name: 'logoutAll' })
   async logoutAll(@CurrentUser() user: JwtPayload): Promise<boolean> {
     return this.authService.logoutAll(user.sub);
+  }
+
+  @Public()
+  @Throttle({ strict: { ttl: 60_000, limit: 5 } })
+  @Mutation(() => Boolean, { name: 'forgotPassword' })
+  async forgotPassword(
+    @Args('input') input: ForgotPasswordInput,
+    @Context() context: { req: Request },
+  ): Promise<boolean> {
+    const req = context.req;
+    const ip = req.ip ?? req.socket?.remoteAddress ?? 'Unknown IP';
+    const browser = req.headers['user-agent'] ?? 'Unknown Browser';
+
+    return this.authService.forgotPassword(input, ip, browser);
+  }
+
+  @Public()
+  @Throttle({ strict: { ttl: 60_000, limit: 5 } })
+  @Mutation(() => Boolean, { name: 'resetPassword' })
+  async resetPassword(
+    @Args('input') input: ResetPasswordInput,
+  ): Promise<boolean> {
+    return this.authService.resetPassword(input);
+  }
+
+  @Mutation(() => Boolean, { name: 'updatePassword' })
+  async updatePassword(
+    @CurrentUser() user: JwtPayload,
+    @Args('input') input: UpdatePasswordInput,
+  ): Promise<boolean> {
+    return this.authService.updatePassword(user.sub, input);
   }
 }
