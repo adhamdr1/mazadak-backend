@@ -15,7 +15,7 @@ import { AuthResponse } from './dto/auth.response';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
 import type { IAuthRepository } from './interfaces/auth-repository.interface';
 import { CreateUserInput } from '../users/dto/create-user.input';
-import { createHash } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { StringValue } from 'ms';
 import { LoginInput } from './dto/login.input';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -24,6 +24,11 @@ import { RegistrationRequiredException } from './exceptions/registration-require
 import { AuthProvider, User } from '../users/entities/user.entity';
 import { GoogleLoginInput } from './dto/google-login.input';
 import { GoogleRegisterInput } from './dto/google-register.input';
+import { ForgotPasswordInput } from './dto/forgot-password.input';
+import { ResetPasswordInput } from './dto/reset-password.input';
+import { UpdatePasswordInput } from './dto/update-password.input';
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import Redis from 'ioredis';
 
 const SALT_ROUNDS = 12;
 
@@ -46,6 +51,7 @@ export class AuthService {
     @Inject('IAuthRepository')
     private readonly authRepository: IAuthRepository,
     private readonly notificationsService: NotificationsService,
+    @InjectRedis() private readonly redis: Redis,
   ) {
     this.googleClient = new OAuth2Client(
       this.configService.getOrThrow<string>('GOOGLE_CLIENT_ID'),
@@ -280,6 +286,102 @@ export class AuthService {
     return this.issueAuthTokens(user);
   }
 
+  async forgotPassword(
+    input: ForgotPasswordInput,
+    ip: string,
+    browser: string,
+  ): Promise<boolean> {
+    const user = await this.usersService.findByEmailWithPassword(input.email);
+    if (!user) return true;
+    // 1. التأكد إن الحساب له باسورد (لو معندوش، يبقى ده حساب Google Only عمره ما عمل باسورد)
+    if (!user.password) {
+      throw new BadRequestException(
+        'This account does not have a password set. Please login using your social account.',
+      );
+    }
+    // 2. حماية من تكرار الإرسال (Rate Limiting للإيميل لكل يوزر لمدة دقيقتين)
+    const rateLimitKey = `rate-limit:forgot-password:${user._id.toString()}`;
+    const recentlyRequested = await this.redis.get(rateLimitKey);
+    if (recentlyRequested) return true; // لو لسه طالب من دقيقتين، متعملش حاجة
+    await this.redis.set(rateLimitKey, '1', 'EX', 120);
+    // 3. توليد وتشفير الـ Token
+    const rawToken = this.generateSecureToken();
+    const hashedToken = hashToken(rawToken);
+    // 4. حفظ الـ Hashed Token في Redis بناءً على الـ userId
+    const redisKey = this.getResetPasswordRedisKey(user._id.toString());
+    const ttlSeconds = 900; // 15 Minutes
+    await this.redis.set(redisKey, hashedToken, 'EX', ttlSeconds);
+    const time = new Date().toUTCString();
+    // 5. تمرير بيانات اليوزر للـ Notifications Service
+    await this.notificationsService.sendPasswordResetEmail(
+      user.email,
+      rawToken, // بنبعت الـ rawToken في الإيميل
+      { firstName: user.firstName, lastName: user.lastName },
+      { ip, browser, time },
+    );
+    return true;
+  }
+
+  async resetPassword(input: ResetPasswordInput): Promise<boolean> {
+    const user = await this.usersService.findByEmailWithPassword(input.email);
+    if (!user) {
+      throw new BadRequestException('Invalid user account');
+    }
+    // 1. نجيب الـ Hashed Token بتاع اليوزر من Redis
+    const redisKey = this.getResetPasswordRedisKey(user._id.toString());
+    const storedHashedToken = await this.redis.get(redisKey);
+    if (!storedHashedToken) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+    // 2. نعمل Hash للي اليوزر بعته ونقارن
+    const inputHashedToken = hashToken(input.token);
+    if (storedHashedToken !== inputHashedToken) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+    // 3. تحديث الباسورد
+    const hashedPassword = await bcrypt.hash(input.password, SALT_ROUNDS);
+    await this.usersService.updatePassword(user._id.toString(), hashedPassword);
+    // 4. مسح التوكن من Redis
+    await this.redis.del(redisKey);
+    // 5. طرد اليوزر من كل الأجهزة
+    await this.logoutAll(user._id.toString());
+    return true;
+  }
+
+  async updatePassword(
+    userId: string,
+    input: UpdatePasswordInput,
+  ): Promise<boolean> {
+    const user = await this.usersService.findByUserIdWithPassword(userId);
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    if (!user.password) {
+      throw new BadRequestException(
+        'This account does not have a password set.',
+      );
+    }
+
+    const isMatch = await bcrypt.compare(input.oldPassword, user.password);
+    if (!isMatch) {
+      throw new BadRequestException('Incorrect old password');
+    }
+
+    const isSamePassword = await bcrypt.compare(input.password, user.password);
+    if (isSamePassword) {
+      throw new BadRequestException(
+        'New password must be different from current password',
+      );
+    }
+
+    const hashedPassword = await bcrypt.hash(input.password, SALT_ROUNDS);
+    await this.usersService.updatePassword(userId, hashedPassword);
+    await this.logoutAll(user._id.toString());
+    return true;
+  }
+
   // ─── Private helpers ─────────────────────────────────────────────────────────
 
   private generateAccessToken(payload: JwtPayload): string {
@@ -356,5 +458,13 @@ export class AuthService {
       expiresAt,
     );
     return { accessToken, refreshToken, user };
+  }
+
+  private generateSecureToken(): string {
+    return randomBytes(32).toString('hex');
+  }
+
+  private getResetPasswordRedisKey(userId: string): string {
+    return `password-reset:${userId}`;
   }
 }

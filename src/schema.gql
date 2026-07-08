@@ -71,6 +71,9 @@ type Mutation {
   refreshToken(refreshToken: String!): AuthResponse!
   logout(refreshToken: String!): Boolean!
   logoutAll: Boolean!
+  forgotPassword(input: ForgotPasswordInput!): Boolean!
+  resetPassword(input: ResetPasswordInput!): Boolean!
+  updatePassword(input: UpdatePasswordInput!): Boolean!
   updateProfile(input: UpdateUserInput!): User!
   deleteAccount: Boolean!
   adminUpdateUser(targetUser: FindUserInput!, input: UpdateUserInput!): User!
@@ -108,6 +111,21 @@ input GoogleRegisterInput {
 
 input GoogleLoginInput {
   token: String!
+}
+
+input ForgotPasswordInput {
+  email: String!
+}
+
+input ResetPasswordInput {
+  email: String!
+  token: String!
+  password: String!
+}
+
+input UpdatePasswordInput {
+  oldPassword: String!
+  password: String!
 }
 
 input UpdateUserInput {

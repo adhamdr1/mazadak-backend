@@ -36,6 +36,16 @@ export class MongoUserRepository implements IUserRepository {
       .exec();
   }
 
+  async findByUserIdWithPassword(userId: string): Promise<User | null> {
+    return await this.userModel
+      .findOne({
+        _id: userId,
+        deletedAt: null,
+      })
+      .select('+password')
+      .exec();
+  }
+
   async findByPhoneNumber(phoneNumber: string): Promise<User | null> {
     return await this.userModel
       .findOne({
