@@ -6,7 +6,8 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
-import { User, UserRole } from './entities/user.entity';
+import { User } from './entities/user.entity';
+import { UserRole } from './enums/user-role.enum';
 import { CreateUserInput } from './dto/create-user.input';
 
 const mockUserRepository = {

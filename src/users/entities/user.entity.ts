@@ -1,19 +1,8 @@
-import { ObjectType, Field, ID, registerEnumType } from '@nestjs/graphql';
+import { ObjectType, Field, ID } from '@nestjs/graphql';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
-
-export enum UserRole {
-  USER = 'USER',
-  ADMIN = 'ADMIN',
-}
-
-export enum AuthProvider {
-  LOCAL = 'LOCAL',
-  GOOGLE = 'GOOGLE',
-}
-
-registerEnumType(UserRole, { name: 'UserRole' });
-registerEnumType(AuthProvider, { name: 'AuthProvider' });
+import { UserRole } from '../enums/user-role.enum';
+import { AuthProvider } from '../enums/auth-provider.enum';
 
 @Schema({ _id: false })
 @ObjectType()
