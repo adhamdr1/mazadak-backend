@@ -6,19 +6,22 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
-import { User, UserRole } from './entities/user.entity';
+import { User } from './entities/user.entity';
+import { UserRole } from './enums/user-role.enum';
 import { CreateUserInput } from './dto/create-user.input';
 
 const mockUserRepository = {
   findById: jest.fn(),
   findByEmail: jest.fn(),
   findByEmailWithPassword: jest.fn(),
+  findByUserIdWithPassword: jest.fn(),
   findByPhoneNumber: jest.fn(),
   findByGoogleId: jest.fn(),
   create: jest.fn(),
   update: jest.fn(),
   findAll: jest.fn(),
   softDelete: jest.fn(),
+  linkGoogleAccount: jest.fn(),
 };
 
 describe('UsersService', () => {
@@ -420,7 +423,6 @@ describe('UsersService', () => {
       const id = new Types.ObjectId().toString();
       const mockUser = { _id: id, isEmailVerified: false } as unknown as User;
 
-      // نراقب دالة findById ونجعلها ترجع المستخدم الوهمي
       const findByIdSpy = jest
         .spyOn(service, 'findById')
         .mockResolvedValueOnce(mockUser);
@@ -431,9 +433,11 @@ describe('UsersService', () => {
       await service.verifyEmail(id);
 
       // Assert
-      expect(findByIdSpy).toHaveBeenCalledWith(id); // تأكدنا أنه استدعى findById
-      expect(mockUser.isEmailVerified).toBe(true); // تأكدنا أنه غيّر القيمة إلى true
-      expect(mockUserRepository.update).toHaveBeenCalledWith(id, mockUser); // تأكدنا أنه استدعى الـ DB بالحالة الجديدة
+      expect(findByIdSpy).toHaveBeenCalledWith(id);
+      // بعد الـ refactor، بنبعت patch محدد بدل الـ object كله
+      expect(mockUserRepository.update).toHaveBeenCalledWith(id, {
+        isEmailVerified: true,
+      });
     });
 
     it('should throw NotFoundException if user is not found', async () => {
@@ -450,6 +454,152 @@ describe('UsersService', () => {
 
       expect(findByIdSpy).toHaveBeenCalledWith(id);
       expect(mockUserRepository.update).not.toHaveBeenCalled(); // تأكدنا أنه لم يكمل للحفظ
+    });
+  });
+
+  // دالة createGoogleUser
+  describe('createGoogleUser', () => {
+    const googleUserDto = {
+      firstName: 'Google',
+      lastName: 'User',
+      email: 'google@example.com',
+      googleId: 'google-sub-123',
+      phoneNumber: '01000000001',
+      dateOfBirth: new Date('1990-01-01'),
+      address: { city: 'Cairo', street: 'Street 1' },
+    };
+
+    it('should create a google user successfully', async () => {
+      // Arrange
+      mockUserRepository.findByEmail.mockResolvedValue(null);
+      mockUserRepository.findByPhoneNumber.mockResolvedValue(null);
+      const savedUser = {
+        _id: new Types.ObjectId(),
+        ...googleUserDto,
+        isEmailVerified: true,
+      };
+      mockUserRepository.create.mockResolvedValue(savedUser);
+
+      // Act
+      const result = await service.createGoogleUser(googleUserDto);
+
+      // Assert
+      expect(result).toEqual(savedUser);
+      expect(mockUserRepository.findByEmail).toHaveBeenCalledWith(
+        googleUserDto.email,
+      );
+      expect(mockUserRepository.findByPhoneNumber).toHaveBeenCalledWith(
+        googleUserDto.phoneNumber,
+      );
+      expect(mockUserRepository.create).toHaveBeenCalled();
+    });
+
+    it('should throw ConflictException if email already exists', async () => {
+      // Arrange
+      mockUserRepository.findByEmail.mockResolvedValue({
+        _id: new Types.ObjectId(),
+      });
+
+      // Act & Assert
+      await expect(service.createGoogleUser(googleUserDto)).rejects.toThrow(
+        ConflictException,
+      );
+      expect(mockUserRepository.findByPhoneNumber).not.toHaveBeenCalled();
+      expect(mockUserRepository.create).not.toHaveBeenCalled();
+    });
+
+    it('should throw ConflictException if phone number already exists', async () => {
+      // Arrange
+      mockUserRepository.findByEmail.mockResolvedValue(null);
+      mockUserRepository.findByPhoneNumber.mockResolvedValue({
+        _id: new Types.ObjectId(),
+      });
+
+      // Act & Assert
+      await expect(service.createGoogleUser(googleUserDto)).rejects.toThrow(
+        ConflictException,
+      );
+      expect(mockUserRepository.create).not.toHaveBeenCalled();
+    });
+  });
+
+  // دالة findByUserIdWithPassword
+  describe('findByUserIdWithPassword', () => {
+    it('should return a user with password by userId', async () => {
+      const userId = new Types.ObjectId().toString();
+      const mockUser = { _id: userId, password: 'hashed' };
+      mockUserRepository.findByUserIdWithPassword.mockResolvedValue(mockUser);
+
+      const result = await service.findByUserIdWithPassword(userId);
+
+      expect(result).toEqual(mockUser);
+      expect(mockUserRepository.findByUserIdWithPassword).toHaveBeenCalledWith(
+        userId,
+      );
+    });
+
+    it('should return null if user not found', async () => {
+      const userId = new Types.ObjectId().toString();
+      mockUserRepository.findByUserIdWithPassword.mockResolvedValue(null);
+
+      const result = await service.findByUserIdWithPassword(userId);
+
+      expect(result).toBeNull();
+      expect(mockUserRepository.findByUserIdWithPassword).toHaveBeenCalledWith(
+        userId,
+      );
+    });
+  });
+
+  // دالة linkGoogleAccount
+  describe('linkGoogleAccount', () => {
+    it('should link google account successfully', async () => {
+      const userId = new Types.ObjectId().toString();
+      const googleId = 'google-sub-456';
+      const updatedUser = { _id: userId, googleId } as unknown as User;
+      mockUserRepository.linkGoogleAccount.mockResolvedValue(updatedUser);
+
+      const result = await service.linkGoogleAccount(userId, googleId);
+
+      expect(result).toEqual(updatedUser);
+      expect(mockUserRepository.linkGoogleAccount).toHaveBeenCalledWith(
+        userId,
+        googleId,
+      );
+    });
+
+    it('should throw NotFoundException if user not found', async () => {
+      const userId = new Types.ObjectId().toString();
+      mockUserRepository.linkGoogleAccount.mockResolvedValue(null);
+
+      await expect(
+        service.linkGoogleAccount(userId, 'some-google-id'),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // دالة updatePassword
+  describe('updatePassword', () => {
+    it('should update password successfully', async () => {
+      const userId = new Types.ObjectId().toString();
+      const hashedPassword = 'new-hashed-password';
+      const updatedUser = { _id: userId } as unknown as User;
+      mockUserRepository.update.mockResolvedValue(updatedUser);
+
+      await service.updatePassword(userId, hashedPassword);
+
+      expect(mockUserRepository.update).toHaveBeenCalledWith(userId, {
+        password: hashedPassword,
+      });
+    });
+
+    it('should throw NotFoundException if user not found', async () => {
+      const userId = new Types.ObjectId().toString();
+      mockUserRepository.update.mockResolvedValue(null);
+
+      await expect(
+        service.updatePassword(userId, 'new-hashed-password'),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });

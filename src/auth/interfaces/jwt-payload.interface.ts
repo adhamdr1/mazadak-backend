@@ -1,4 +1,4 @@
-import { UserRole } from '../../users/entities/user.entity';
+import { UserRole } from '../../users/enums/user-role.enum';
 
 // Shape of the data encoded inside every JWT token.
 // `sub` is the standard JWT claim for the subject (user id).

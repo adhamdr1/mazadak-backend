@@ -9,7 +9,9 @@ import {
 import { UpdateUserInput } from './dto/update-user.input';
 import { PaginationInput } from '../common/dto/pagination.input';
 import { CreateUserInput } from './dto/create-user.input';
-import { User, UserRole, AuthProvider } from './entities/user.entity';
+import { User } from './entities/user.entity';
+import { UserRole } from './enums/user-role.enum';
+import { AuthProvider } from './enums/auth-provider.enum';
 import type { IUserRepository } from './interfaces/user.repository.interface';
 import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreateGoogleUserDto } from './dto/create-google-user.dto';
@@ -151,8 +153,7 @@ export class UsersService {
     if (user.isEmailVerified) {
       throw new BadRequestException('Email already verified');
     }
-    user.isEmailVerified = true;
-    await this.userRepository.update(id, user);
+    await this.userRepository.update(id, { isEmailVerified: true });
   }
 
   async softDelete(currentUser: JwtPayload, targetId: string): Promise<void> {

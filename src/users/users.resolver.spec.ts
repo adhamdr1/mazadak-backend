@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { UsersResolver } from './users.resolver';
 import { UsersService } from './users.service';
 import { Types } from 'mongoose';
-import { UserRole } from './entities/user.entity';
+import { UserRole } from './enums/user-role.enum';
 
 // 1. Mock لـ UsersService (يحتوي على كل الدوال التي يستدعيها الـ Resolver)
 const mockUsersService = {
