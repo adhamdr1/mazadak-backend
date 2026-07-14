@@ -6,6 +6,7 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
+import { ClientSession } from 'mongoose';
 import { UpdateUserInput } from './dto/update-user.input';
 import { PaginationInput } from '../common/dto/pagination.input';
 import { CreateUserInput } from './dto/create-user.input';
@@ -23,7 +24,10 @@ export class UsersService {
     private readonly userRepository: IUserRepository,
   ) {}
 
-  async create(createUserInput: CreateUserInput): Promise<User> {
+  async create(
+    createUserInput: CreateUserInput,
+    session?: ClientSession,
+  ): Promise<User> {
     const existingUser = await this.userRepository.findByEmail(
       createUserInput.email,
     );
@@ -40,21 +44,24 @@ export class UsersService {
       throw new ConflictException('Phone number already exists');
     }
 
-    // TODO: Create wallet after user creation (WalletModule).
-    // This should be done inside a MongoDB transaction when WalletModule is implemented.
-
-    return await this.userRepository.create({
-      firstName: createUserInput.firstName,
-      lastName: createUserInput.lastName,
-      email: createUserInput.email,
-      password: createUserInput.password, // Password is already hashed by AuthService.
-      phoneNumber: createUserInput.phoneNumber,
-      dateOfBirth: createUserInput.dateOfBirth,
-      address: createUserInput.address,
-    });
+    return await this.userRepository.create(
+      {
+        firstName: createUserInput.firstName,
+        lastName: createUserInput.lastName,
+        email: createUserInput.email,
+        password: createUserInput.password,
+        phoneNumber: createUserInput.phoneNumber,
+        dateOfBirth: createUserInput.dateOfBirth,
+        address: createUserInput.address,
+      },
+      session,
+    );
   }
 
-  async createGoogleUser(dto: CreateGoogleUserDto): Promise<User> {
+  async createGoogleUser(
+    dto: CreateGoogleUserDto,
+    session?: ClientSession,
+  ): Promise<User> {
     const existingUser = await this.userRepository.findByEmail(dto.email);
     if (existingUser) {
       throw new ConflictException('Email already exists');
@@ -67,19 +74,20 @@ export class UsersService {
       throw new ConflictException('Phone number already exists');
     }
 
-    // TODO: Create wallet after user creation (WalletModule).
-    // This should be done inside a MongoDB transaction when WalletModule is implemented.
-    return await this.userRepository.create({
-      firstName: dto.firstName,
-      lastName: dto.lastName,
-      email: dto.email,
-      authProvider: AuthProvider.GOOGLE,
-      googleId: dto.googleId,
-      isEmailVerified: true,
-      phoneNumber: dto.phoneNumber,
-      dateOfBirth: dto.dateOfBirth,
-      address: dto.address,
-    });
+    return await this.userRepository.create(
+      {
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        email: dto.email,
+        authProvider: AuthProvider.GOOGLE,
+        googleId: dto.googleId,
+        isEmailVerified: true,
+        phoneNumber: dto.phoneNumber,
+        dateOfBirth: dto.dateOfBirth,
+        address: dto.address,
+      },
+      session,
+    );
   }
 
   async findById(id: string): Promise<User> {

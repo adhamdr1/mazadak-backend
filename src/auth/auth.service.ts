@@ -30,6 +30,9 @@ import { ResetPasswordInput } from './dto/reset-password.input';
 import { UpdatePasswordInput } from './dto/update-password.input';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';
+import { InjectConnection } from '@nestjs/mongoose';
+import { ClientSession, Connection } from 'mongoose';
+import { WalletService } from '../wallet/wallet.service';
 
 const SALT_ROUNDS = 12;
 
@@ -53,6 +56,8 @@ export class AuthService {
     private readonly authRepository: IAuthRepository,
     private readonly notificationsService: NotificationsService,
     @InjectRedis() private readonly redis: Redis,
+    @InjectConnection() private readonly connection: Connection,
+    private readonly walletService: WalletService,
   ) {
     this.googleClient = new OAuth2Client(
       this.configService.getOrThrow<string>('GOOGLE_CLIENT_ID'),
@@ -85,7 +90,12 @@ export class AuthService {
       dateOfBirth: registerInput.dateOfBirth,
       address: registerInput.address,
     };
-    const user = await this.usersService.create(createInput);
+    // 3. Create user + wallet in a single atomic transaction.
+    const user = await this.withTransaction(async (session) => {
+      const u = await this.usersService.create(createInput, session);
+      await this.walletService.createWallet(u._id.toString(), session);
+      return u;
+    });
 
     const verificationToken = this.generateEmailVerificationToken(
       user._id.toString(),
@@ -149,7 +159,6 @@ export class AuthService {
     if (!email_verified) {
       throw new UnauthorizedException('Google email is not verified');
     }
-    // 1. التأكد أن الإيميل غير مسجل من قبل
     const existingUser = await this.usersService.findByEmail(email);
     if (existingUser) {
       throw new ConflictException(
@@ -157,15 +166,22 @@ export class AuthService {
       );
     }
 
-    // 3. إنشاء المستخدم عبر الـ UsersService
-    const user = await this.usersService.createGoogleUser({
-      firstName: input.firstName,
-      lastName: input.lastName,
-      email: email,
-      googleId: googleId,
-      phoneNumber: input.phoneNumber,
-      dateOfBirth: input.dateOfBirth,
-      address: input.address,
+    // Create user + wallet in a single atomic transaction.
+    const user = await this.withTransaction(async (session) => {
+      const u = await this.usersService.createGoogleUser(
+        {
+          firstName: input.firstName,
+          lastName: input.lastName,
+          email: email,
+          googleId: googleId,
+          phoneNumber: input.phoneNumber,
+          dateOfBirth: input.dateOfBirth,
+          address: input.address,
+        },
+        session,
+      );
+      await this.walletService.createWallet(u._id.toString(), session);
+      return u;
     });
 
     return this.issueAuthTokens(user);
@@ -467,5 +483,24 @@ export class AuthService {
 
   private getResetPasswordRedisKey(userId: string): string {
     return `password-reset:${userId}`;
+  }
+
+  // ─── Transaction Helper ───────────────────────────────────────────────────
+
+  private async withTransaction<T>(
+    fn: (session: ClientSession) => Promise<T>,
+  ): Promise<T> {
+    const session = await this.connection.startSession();
+    session.startTransaction();
+    try {
+      const result = await fn(session);
+      await session.commitTransaction();
+      return result;
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      await session.endSession();
+    }
   }
 }

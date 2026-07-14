@@ -45,11 +45,22 @@ type AuthResponse {
   user: User!
 }
 
+type Wallet {
+  _id: ID!
+  userId: ID!
+  balance: Float!
+  heldBalance: Float!
+  availableBalance: Float!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
 type Query {
   health: String!
   me: User!
   findUser(input: FindUserInput!): User!
   users(input: PaginationInput!): [User!]!
+  myWallet: Wallet!
 }
 
 input FindUserInput {
@@ -78,6 +89,8 @@ type Mutation {
   deleteAccount: Boolean!
   adminUpdateUser(targetUser: FindUserInput!, input: UpdateUserInput!): User!
   adminDeleteUser(targetUser: FindUserInput!): Boolean!
+  deposit(input: DepositInput!): Wallet!
+  withdraw(input: WithdrawInput!): Wallet!
 }
 
 input RegisterInput {
@@ -135,4 +148,12 @@ input UpdateUserInput {
   phoneNumber: String
   dateOfBirth: DateTime
   address: AddressInput
+}
+
+input DepositInput {
+  amount: Float!
+}
+
+input WithdrawInput {
+  amount: Float!
 }

@@ -1,7 +1,8 @@
+import { ClientSession } from 'mongoose';
 import { User } from '../entities/user.entity';
 
 export interface IUserRepository {
-  create(user: Partial<User>): Promise<User>;
+  create(user: Partial<User>, session?: ClientSession): Promise<User>;
 
   findById(id: string): Promise<User | null>;
 
