@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { ClientSession, Model, Types } from 'mongoose';
 import { IWalletRepository } from '../interfaces/wallet.repository.interface';
 import { Wallet, WalletDocument } from '../entities/wallet.entity';
 
@@ -11,9 +11,9 @@ export class MongoWalletRepository implements IWalletRepository {
     private readonly walletModel: Model<WalletDocument>,
   ) {}
 
-  async create(userId: string): Promise<Wallet> {
+  async create(userId: string, session?: ClientSession): Promise<Wallet> {
     const wallet = new this.walletModel({ userId: new Types.ObjectId(userId) });
-    return await wallet.save();
+    return await wallet.save({ session });
   }
 
   async findByUserId(userId: string): Promise<Wallet | null> {

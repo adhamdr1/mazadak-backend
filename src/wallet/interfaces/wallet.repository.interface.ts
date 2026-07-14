@@ -1,7 +1,8 @@
+import { ClientSession } from 'mongoose';
 import { Wallet } from '../entities/wallet.entity';
 
 export interface IWalletRepository {
-  create(userId: string): Promise<Wallet>;
+  create(userId: string, session?: ClientSession): Promise<Wallet>;
 
   findByUserId(userId: string): Promise<Wallet | null>;
 
