@@ -17,6 +17,7 @@ import { RedisModule } from '@nestjs-modules/ioredis';
 import { IpBlacklistMiddleware } from './common/middleware/ip-blacklist.middleware';
 import { MiddlewareConsumer, NestModule } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { WalletModule } from './wallet/wallet.module';
 
 @Module({
   imports: [
@@ -78,6 +79,7 @@ import type { Request, Response } from 'express';
     AuthModule,
     UsersModule,
     NotificationsModule,
+    WalletModule,
   ],
   providers: [
     // Global Authentication Guards
