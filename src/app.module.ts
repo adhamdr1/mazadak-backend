@@ -18,6 +18,7 @@ import { IpBlacklistMiddleware } from './common/middleware/ip-blacklist.middlewa
 import { MiddlewareConsumer, NestModule } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { WalletModule } from './wallet/wallet.module';
+import { TransactionModule } from './transaction/transaction.module';
 
 @Module({
   imports: [
@@ -80,6 +81,7 @@ import { WalletModule } from './wallet/wallet.module';
     UsersModule,
     NotificationsModule,
     WalletModule,
+    TransactionModule,
   ],
   providers: [
     // Global Authentication Guards

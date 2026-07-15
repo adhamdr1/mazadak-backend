@@ -4,10 +4,12 @@ import { WalletService } from './wallet.service';
 import { WalletResolver } from './wallet.resolver';
 import { Wallet, WalletSchema } from './entities/wallet.entity';
 import { MongoWalletRepository } from './repositories/mongo.wallet.repository';
+import { TransactionModule } from '../transaction/transaction.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: Wallet.name, schema: WalletSchema }]),
+    TransactionModule,
   ],
   providers: [
     WalletResolver,
