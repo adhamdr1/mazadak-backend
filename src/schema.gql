@@ -55,12 +55,43 @@ type Wallet {
   updatedAt: DateTime!
 }
 
+type Transaction {
+  _id: ID!
+  walletId: ID!
+  type: TransactionType!
+  amount: Float!
+  status: TransactionStatus!
+  referenceId: String
+  createdAt: DateTime!
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAW
+  HOLD
+  RELEASE
+  CAPTURE
+}
+
+enum TransactionStatus {
+  SUCCESS
+  FAILED
+}
+
+type TransactionsPage {
+  items: [Transaction!]!
+  total: Int!
+  totalPages: Int!
+  hasNextPage: Boolean!
+}
+
 type Query {
   health: String!
   me: User!
   findUser(input: FindUserInput!): User!
   users(input: PaginationInput!): [User!]!
   myWallet: Wallet!
+  myTransactions(input: MyTransactionsInput): TransactionsPage!
 }
 
 input FindUserInput {
@@ -70,6 +101,12 @@ input FindUserInput {
 input PaginationInput {
   page: Int! = 1
   limit: Int! = 10
+}
+
+input MyTransactionsInput {
+  page: Int = 1
+  limit: Int = 10
+  type: TransactionType
 }
 
 type Mutation {
