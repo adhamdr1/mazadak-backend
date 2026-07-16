@@ -4,6 +4,7 @@ import {
   NotFoundException,
   ConflictException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { User } from './entities/user.entity';
@@ -138,8 +139,11 @@ describe('UsersService', () => {
       expect(mockUserRepository.findByPhoneNumber).toHaveBeenCalledWith(
         createUserInput.phoneNumber,
       );
-      // تأكد أنه تم تمرير نفس البيانات للـ DB
-      expect(mockUserRepository.create).toHaveBeenCalledWith(createUserInput);
+      // تأكد أنه تم تمرير نفس البيانات للـ DB مع undefined كجلسة (session)
+      expect(mockUserRepository.create).toHaveBeenCalledWith(
+        createUserInput,
+        undefined,
+      );
     });
 
     it('should throw ConflictException if email already exists', async () => {
@@ -265,6 +269,27 @@ describe('UsersService', () => {
           phoneNumber: '01234567890',
         }),
       ).rejects.toThrow(ConflictException);
+    });
+
+    it('should NOT throw ConflictException if user sends their own phone number', async () => {
+      // Arrange
+      mockUserRepository.findByEmail.mockResolvedValue(null);
+      mockUserRepository.findByPhoneNumber.mockResolvedValue({
+        _id: currentUserId,
+      });
+      const updatedUser = { _id: currentUserId, phoneNumber: '01234567890' };
+      mockUserRepository.update.mockResolvedValue(updatedUser);
+
+      // Act
+      const result = await service.updateProfile(
+        normalUserPayload,
+        currentUserId,
+        { phoneNumber: '01234567890' },
+      );
+
+      // Assert
+      expect(result).toEqual(updatedUser);
+      expect(mockUserRepository.update).toHaveBeenCalled();
     });
 
     it('should allow ADMIN to update any user', async () => {
@@ -440,6 +465,23 @@ describe('UsersService', () => {
       });
     });
 
+    it('should throw BadRequestException if email is already verified', async () => {
+      // Arrange
+      const id = new Types.ObjectId().toString();
+      const mockUser = { _id: id, isEmailVerified: true } as unknown as User;
+      const findByIdSpy = jest
+        .spyOn(service, 'findById')
+        .mockResolvedValueOnce(mockUser);
+
+      // Act & Assert
+      await expect(service.verifyEmail(id)).rejects.toThrow(
+        BadRequestException,
+      );
+
+      expect(findByIdSpy).toHaveBeenCalledWith(id);
+      expect(mockUserRepository.update).not.toHaveBeenCalled();
+    });
+
     it('should throw NotFoundException if user is not found', async () => {
       // Arrange
       const id = new Types.ObjectId().toString();
@@ -491,7 +533,10 @@ describe('UsersService', () => {
       expect(mockUserRepository.findByPhoneNumber).toHaveBeenCalledWith(
         googleUserDto.phoneNumber,
       );
-      expect(mockUserRepository.create).toHaveBeenCalled();
+      expect(mockUserRepository.create).toHaveBeenCalledWith(
+        expect.any(Object),
+        undefined,
+      );
     });
 
     it('should throw ConflictException if email already exists', async () => {
