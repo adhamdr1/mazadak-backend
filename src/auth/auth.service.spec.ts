@@ -18,7 +18,8 @@ import { RegistrationRequiredException } from './exceptions/registration-require
 import * as bcrypt from 'bcrypt';
 import { createHash } from 'crypto';
 import { getRedisConnectionToken } from '@nestjs-modules/ioredis';
-
+import { getConnectionToken } from '@nestjs/mongoose';
+import { WalletService } from '../wallet/wallet.service';
 // ─── Mock google-auth-library ──────────────────────────────────────────────
 // يجب إنشاء الـ mock قبل أي import يستخدم google-auth-library.
 // ليه mockVerifyIdToken يبدأ بـ mock؟
@@ -86,6 +87,21 @@ const mockRedis = {
   del: jest.fn().mockResolvedValue(1),
 };
 
+const mockSession = {
+  startTransaction: jest.fn(),
+  commitTransaction: jest.fn(),
+  abortTransaction: jest.fn(),
+  endSession: jest.fn(),
+};
+
+const mockConnection = {
+  startSession: jest.fn().mockResolvedValue(mockSession),
+};
+
+const mockWalletService = {
+  createWallet: jest.fn(),
+};
+
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 function createMockUser(overrides: Partial<User> = {}): User {
@@ -139,6 +155,8 @@ describe('AuthService', () => {
         { provide: NotificationsService, useValue: mockNotificationsService },
         { provide: 'IAuthRepository', useValue: mockAuthRepository },
         { provide: getRedisConnectionToken(), useValue: mockRedis },
+        { provide: getConnectionToken(), useValue: mockConnection },
+        { provide: WalletService, useValue: mockWalletService },
       ],
     }).compile();
 
@@ -171,6 +189,7 @@ describe('AuthService', () => {
       mockUsersService.findByEmail.mockResolvedValue(null);
       (mockedBcrypt.hash as jest.Mock).mockResolvedValue('hashed-password');
       mockUsersService.create.mockResolvedValue(mockUser);
+      mockWalletService.createWallet.mockResolvedValue(undefined);
       mockJwtService.sign.mockReturnValueOnce('email-verification-token');
       setupIssueAuthTokensMocks();
 
@@ -190,8 +209,33 @@ describe('AuthService', () => {
         registerInput.password,
         12,
       );
-      expect(mockUsersService.create).toHaveBeenCalled();
+      expect(mockConnection.startSession).toHaveBeenCalled();
+      expect(mockSession.startTransaction).toHaveBeenCalled();
+      expect(mockUsersService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          email: registerInput.email,
+          firstName: registerInput.firstName,
+        }),
+        mockSession,
+      );
+      expect(mockWalletService.createWallet).toHaveBeenCalledWith(
+        mockUser._id.toString(),
+        mockSession,
+      );
+      expect(mockSession.commitTransaction).toHaveBeenCalled();
+      expect(mockSession.endSession).toHaveBeenCalled();
       expect(mockNotificationsService.sendEmailVerification).toHaveBeenCalled();
+    });
+
+    it('should abort transaction if user creation fails', async () => {
+      mockUsersService.findByEmail.mockResolvedValue(null);
+      (mockedBcrypt.hash as jest.Mock).mockResolvedValue('hashed-password');
+      mockUsersService.create.mockRejectedValue(new Error('DB Error'));
+
+      await expect(service.register(registerInput)).rejects.toThrow('DB Error');
+
+      expect(mockSession.abortTransaction).toHaveBeenCalled();
+      expect(mockSession.endSession).toHaveBeenCalled();
     });
 
     it('should throw ConflictException if email already exists', async () => {
@@ -306,6 +350,7 @@ describe('AuthService', () => {
       mockUsersService.findByEmail.mockResolvedValue(null);
       const mockUser = createMockUser({ authProvider: AuthProvider.GOOGLE });
       mockUsersService.createGoogleUser.mockResolvedValue(mockUser);
+      mockWalletService.createWallet.mockResolvedValue(undefined);
       setupIssueAuthTokensMocks();
 
       // Act
@@ -313,7 +358,21 @@ describe('AuthService', () => {
 
       // Assert
       expect(result.accessToken).toBe(MOCK_ACCESS_TOKEN);
-      expect(mockUsersService.createGoogleUser).toHaveBeenCalled();
+      expect(mockConnection.startSession).toHaveBeenCalled();
+      expect(mockSession.startTransaction).toHaveBeenCalled();
+      expect(mockUsersService.createGoogleUser).toHaveBeenCalledWith(
+        expect.objectContaining({
+          email: googlePayload.email,
+          googleId: googlePayload.sub,
+        }),
+        mockSession,
+      );
+      expect(mockWalletService.createWallet).toHaveBeenCalledWith(
+        mockUser._id.toString(),
+        mockSession,
+      );
+      expect(mockSession.commitTransaction).toHaveBeenCalled();
+      expect(mockSession.endSession).toHaveBeenCalled();
     });
 
     it('should throw UnauthorizedException if Google token is invalid', async () => {
