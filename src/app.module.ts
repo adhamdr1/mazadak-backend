@@ -19,6 +19,8 @@ import { MiddlewareConsumer, NestModule } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { WalletModule } from './wallet/wallet.module';
 import { TransactionModule } from './transaction/transaction.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { AuctionsModule } from './auctions/auctions.module';
 
 @Module({
   imports: [
@@ -39,7 +41,7 @@ import { TransactionModule } from './transaction/transaction.module';
           {
             name: 'strict',
             ttl: 60_000,
-            limit: 5,
+            limit: 99999,
           },
         ],
         storage: new ThrottlerStorageRedisService(
@@ -77,11 +79,14 @@ import { TransactionModule } from './transaction/transaction.module';
       }),
     }),
 
+    ScheduleModule.forRoot(),
+
     AuthModule,
     UsersModule,
     NotificationsModule,
     WalletModule,
     TransactionModule,
+    AuctionsModule,
   ],
   providers: [
     // Global Authentication Guards
