@@ -85,6 +85,57 @@ type TransactionsPage {
   hasNextPage: Boolean!
 }
 
+type Auction {
+  _id: ID!
+  sellerId: ID!
+  title: String!
+  description: String!
+  images: [String!]!
+  category: AuctionCategory!
+  startingPrice: Float!
+  minimumBidIncrement: Float!
+  currentPrice: Float!
+  status: AuctionStatus!
+  startTime: DateTime!
+  endTime: DateTime!
+  winnerId: ID
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+enum AuctionCategory {
+  ELECTRONICS
+  FASHION
+  JEWELRY
+  WATCHES
+  ANTIQUES
+  ART
+  COLLECTIBLES
+  BOOKS
+  FURNITURE
+  HOME_APPLIANCES
+  CARS
+  MOTORCYCLES
+  REAL_ESTATE
+  SPORTS
+  TOYS
+  OTHER
+}
+
+enum AuctionStatus {
+  PENDING
+  ACTIVE
+  ENDED
+  CANCELLED
+}
+
+type AuctionsPage {
+  items: [Auction!]!
+  total: Int!
+  totalPages: Int!
+  hasNextPage: Boolean!
+}
+
 type Query {
   health: String!
   me: User!
@@ -92,6 +143,10 @@ type Query {
   users(input: PaginationInput!): [User!]!
   myWallet: Wallet!
   myTransactions(input: MyTransactionsInput): TransactionsPage!
+  auctions(filter: AuctionsFilterInput): AuctionsPage!
+  auction(id: ID!): Auction!
+  myAuctions(filter: AuctionsFilterInput): AuctionsPage!
+  myWonAuctions(filter: AuctionsFilterInput): AuctionsPage!
 }
 
 input FindUserInput {
@@ -107,6 +162,14 @@ input MyTransactionsInput {
   page: Int = 1
   limit: Int = 10
   type: TransactionType
+}
+
+input AuctionsFilterInput {
+  category: AuctionCategory
+  status: AuctionStatus
+  search: String
+  page: Int! = 1
+  limit: Int! = 10
 }
 
 type Mutation {
@@ -128,6 +191,9 @@ type Mutation {
   adminDeleteUser(targetUser: FindUserInput!): Boolean!
   deposit(input: DepositInput!): Wallet!
   withdraw(input: WithdrawInput!): Wallet!
+  createAuction(input: CreateAuctionInput!): Auction!
+  updateAuction(id: ID!, input: UpdateAuctionInput!): Auction!
+  cancelAuction(id: ID!): Boolean!
 }
 
 input RegisterInput {
@@ -193,4 +259,24 @@ input DepositInput {
 
 input WithdrawInput {
   amount: Float!
+}
+
+input CreateAuctionInput {
+  title: String!
+  description: String!
+  category: AuctionCategory!
+  startingPrice: Float!
+  minimumBidIncrement: Float!
+  images: [String!]! = []
+  startTime: DateTime!
+  endTime: DateTime!
+}
+
+input UpdateAuctionInput {
+  title: String
+  description: String
+  category: AuctionCategory
+  images: [String!]
+  startTime: DateTime
+  endTime: DateTime
 }
