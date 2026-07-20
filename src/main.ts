@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
+import * as express from 'express';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -14,6 +15,10 @@ async function bootstrap() {
   );
 
   app.enableCors();
+
+  // Increase payload limit for Base64 image uploads (Default is 100kb, we set it to 50mb)
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
   // السطر ده هو اللي بيفعل الـ Validation على مستوى المشروع كله
   app.useGlobalPipes(
