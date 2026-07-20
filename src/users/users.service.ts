@@ -1,11 +1,4 @@
-import {
-  ConflictException,
-  Inject,
-  Injectable,
-  NotFoundException,
-  ForbiddenException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
 import { ClientSession } from 'mongoose';
 import { UpdateUserInput } from './dto/update-user.input';
 import { PaginationInput } from '../common/dto/pagination.input';
@@ -16,6 +9,12 @@ import { AuthProvider } from './enums/auth-provider.enum';
 import type { IUserRepository } from './interfaces/user.repository.interface';
 import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreateGoogleUserDto } from './dto/create-google-user.dto';
+import { UsersPage } from './dto/users-page.type';
+import { UserNotFoundException } from './exceptions/user-not-found.exception';
+import { EmailAlreadyExistsException } from './exceptions/email-already-exists.exception';
+import { PhoneAlreadyExistsException } from './exceptions/phone-already-exists.exception';
+import { EmailAlreadyVerifiedException } from './exceptions/email-already-verified.exception';
+import { UserForbiddenException } from './exceptions/user-forbidden.exception';
 
 @Injectable()
 export class UsersService {
@@ -24,25 +23,37 @@ export class UsersService {
     private readonly userRepository: IUserRepository,
   ) {}
 
+  // ─── Helpers ────────────────────────────────────────────────────────────────
+
+  private buildPage(
+    items: User[],
+    total: number,
+    limit: number,
+    page: number,
+  ): UsersPage {
+    return {
+      items,
+      total,
+      totalPages: Math.ceil(total / limit),
+      hasNextPage: page * limit < total,
+    };
+  }
+
+  // ─── Internal (called by AuthService) ───────────────────────────────────────
+
   async create(
     createUserInput: CreateUserInput,
     session?: ClientSession,
   ): Promise<User> {
-    const existingUser = await this.userRepository.findByEmail(
+    const existingEmail = await this.userRepository.findByEmail(
       createUserInput.email,
     );
-
-    if (existingUser) {
-      throw new ConflictException('Email already exists');
-    }
+    if (existingEmail) throw new EmailAlreadyExistsException();
 
     const existingPhone = await this.userRepository.findByPhoneNumber(
       createUserInput.phoneNumber,
     );
-
-    if (existingPhone) {
-      throw new ConflictException('Phone number already exists');
-    }
+    if (existingPhone) throw new PhoneAlreadyExistsException();
 
     return await this.userRepository.create(
       {
@@ -62,17 +73,13 @@ export class UsersService {
     dto: CreateGoogleUserDto,
     session?: ClientSession,
   ): Promise<User> {
-    const existingUser = await this.userRepository.findByEmail(dto.email);
-    if (existingUser) {
-      throw new ConflictException('Email already exists');
-    }
+    const existingEmail = await this.userRepository.findByEmail(dto.email);
+    if (existingEmail) throw new EmailAlreadyExistsException();
 
     const existingPhone = await this.userRepository.findByPhoneNumber(
       dto.phoneNumber,
     );
-    if (existingPhone) {
-      throw new ConflictException('Phone number already exists');
-    }
+    if (existingPhone) throw new PhoneAlreadyExistsException();
 
     return await this.userRepository.create(
       {
@@ -90,86 +97,80 @@ export class UsersService {
     );
   }
 
+  // ─── Queries ─────────────────────────────────────────────────────────────────
+
   async findById(id: string): Promise<User> {
     const user = await this.userRepository.findById(id);
-
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-
+    if (!user) throw new UserNotFoundException();
     return user;
   }
 
   async findByEmail(email: string): Promise<User | null> {
-    // Returns null if not found — caller (AuthService) decides what to do.
     return this.userRepository.findByEmail(email);
   }
 
   async findByEmailWithPassword(email: string): Promise<User | null> {
-    // Returns null if not found — caller (AuthService) decides what to do.
     return this.userRepository.findByEmailWithPassword(email);
   }
 
   async findByUserIdWithPassword(userId: string): Promise<User | null> {
-    // Returns null if not found — caller (AuthService) decides what to do.
     return this.userRepository.findByUserIdWithPassword(userId);
   }
 
   async findByGoogleId(googleId: string): Promise<User | null> {
-    // Returns null if not found — caller (AuthService) decides what to do.
     return this.userRepository.findByGoogleId(googleId);
   }
 
-  async findAll(pagination: PaginationInput): Promise<User[]> {
-    return this.userRepository.findAll(pagination.page, pagination.limit);
+  async findAll(pagination: PaginationInput): Promise<UsersPage> {
+    const { items, total } = await this.userRepository.findAll(
+      pagination.page,
+      pagination.limit,
+    );
+    return this.buildPage(items, total, pagination.limit, pagination.page);
   }
+
+  // ─── Mutations ────────────────────────────────────────────────────────────────
 
   async updateProfile(
     currentUser: JwtPayload,
     targetId: string,
     data: UpdateUserInput,
   ): Promise<User> {
-    // 1. Authorization: user can only update themselves unless admin.
     if (currentUser.role !== UserRole.ADMIN && currentUser.sub !== targetId) {
-      throw new ForbiddenException('You can only update your own profile');
+      throw new UserForbiddenException();
     }
-    // 2. Email uniqueness check.
+
     if (data.email) {
       const existing = await this.userRepository.findByEmail(data.email);
       if (existing && existing._id.toString() !== targetId) {
-        throw new ConflictException('Email already exists');
+        throw new EmailAlreadyExistsException();
       }
     }
-    // 3. Phone uniqueness check.
+
     if (data.phoneNumber) {
       const existing = await this.userRepository.findByPhoneNumber(
         data.phoneNumber,
       );
       if (existing && existing._id.toString() !== targetId) {
-        throw new ConflictException('Phone number already exists');
+        throw new PhoneAlreadyExistsException();
       }
     }
+
     const updated = await this.userRepository.update(targetId, data);
-    if (!updated) {
-      throw new NotFoundException('User not found');
-    }
+    if (!updated) throw new UserNotFoundException();
     return updated;
   }
 
   async verifyEmail(id: string): Promise<void> {
     const user = await this.findById(id);
-    if (user.isEmailVerified) {
-      throw new BadRequestException('Email already verified');
-    }
+    if (user.isEmailVerified) throw new EmailAlreadyVerifiedException();
     await this.userRepository.update(id, { isEmailVerified: true });
   }
 
   async softDelete(currentUser: JwtPayload, targetId: string): Promise<void> {
-    // Authorization: user can only delete themselves unless admin.
     if (currentUser.role !== UserRole.ADMIN && currentUser.sub !== targetId) {
-      throw new ForbiddenException('You can only delete your own account');
+      throw new UserForbiddenException();
     }
-    // Verify the target user exists. The repository only performs the delete operation.
     await this.findById(targetId);
     await this.userRepository.softDelete(targetId);
   }
@@ -179,9 +180,7 @@ export class UsersService {
       userId,
       googleId,
     );
-    if (!updatedUser) {
-      throw new NotFoundException('User not found');
-    }
+    if (!updatedUser) throw new UserNotFoundException();
     return updatedUser;
   }
 
@@ -189,8 +188,6 @@ export class UsersService {
     const updated = await this.userRepository.update(id, {
       password: newHashedPassword,
     });
-    if (!updated) {
-      throw new NotFoundException('User not found');
-    }
+    if (!updated) throw new UserNotFoundException();
   }
 }
