@@ -6,6 +6,7 @@ import {
   MinLength,
   MaxLength,
   IsArray,
+  ArrayMinSize,
   ArrayMaxSize,
   IsUrl,
   IsEnum,
@@ -40,6 +41,7 @@ export class UpdateAuctionInput {
   @Field(() => [String], { nullable: true })
   @IsOptional()
   @IsArray({ message: 'Images must be an array' })
+  @ArrayMinSize(1, { message: 'At least one image is required' })
   @ArrayMaxSize(10, { message: 'Maximum 10 images allowed' })
   @IsUrl({}, { each: true, message: 'Each image must be a valid URL' })
   images?: string[];

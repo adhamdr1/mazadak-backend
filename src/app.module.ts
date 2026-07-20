@@ -21,6 +21,7 @@ import { WalletModule } from './wallet/wallet.module';
 import { TransactionModule } from './transaction/transaction.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AuctionsModule } from './auctions/auctions.module';
+import { UploadModule } from './upload/upload.module';
 
 @Module({
   imports: [
@@ -87,6 +88,7 @@ import { AuctionsModule } from './auctions/auctions.module';
     WalletModule,
     TransactionModule,
     AuctionsModule,
+    UploadModule,
   ],
   providers: [
     // Global Authentication Guards

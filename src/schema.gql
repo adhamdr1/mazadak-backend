@@ -39,6 +39,13 @@ A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date
 """
 scalar DateTime
 
+type UsersPage {
+  items: [User!]!
+  total: Int!
+  totalPages: Int!
+  hasNextPage: Boolean!
+}
+
 type AuthResponse {
   accessToken: String!
   refreshToken: String!
@@ -136,11 +143,16 @@ type AuctionsPage {
   hasNextPage: Boolean!
 }
 
+type UploadImageResponse {
+  """Public URL of the uploaded image"""
+  url: String!
+}
+
 type Query {
   health: String!
   me: User!
   findUser(input: FindUserInput!): User!
-  users(input: PaginationInput!): [User!]!
+  users(input: PaginationInput!): UsersPage!
   myWallet: Wallet!
   myTransactions(input: MyTransactionsInput): TransactionsPage!
   auctions(filter: AuctionsFilterInput): AuctionsPage!
@@ -194,6 +206,8 @@ type Mutation {
   createAuction(input: CreateAuctionInput!): Auction!
   updateAuction(id: ID!, input: UpdateAuctionInput!): Auction!
   cancelAuction(id: ID!): Boolean!
+  uploadImage(input: UploadImageInput!): UploadImageResponse!
+  deleteImage(url: String!): Boolean!
 }
 
 input RegisterInput {
@@ -267,7 +281,7 @@ input CreateAuctionInput {
   category: AuctionCategory!
   startingPrice: Float!
   minimumBidIncrement: Float!
-  images: [String!]! = []
+  images: [String!]!
   startTime: DateTime!
   endTime: DateTime!
 }
@@ -279,4 +293,12 @@ input UpdateAuctionInput {
   images: [String!]
   startTime: DateTime
   endTime: DateTime
+}
+
+input UploadImageInput {
+  """Base64 encoded image string"""
+  base64Data: String!
+
+  """Optional folder name to store the image in"""
+  folder: String
 }

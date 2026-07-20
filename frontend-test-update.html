@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mazadak - Update Auction Flow</title>
+    <style>
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background: #f5f7fa;
+        color: #333;
+      }
+      .card {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        margin-bottom: 20px;
+      }
+      h2 {
+        border-bottom: 2px solid #3498db;
+        padding-bottom: 10px;
+        margin-top: 0;
+        color: #2c3e50;
+      }
+      .form-group {
+        margin-bottom: 15px;
+      }
+      label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+      }
+      input[type='text'],
+      input[type='email'],
+      input[type='password'],
+      input[type='number'],
+      input[type='datetime-local'],
+      select {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        box-sizing: border-box;
+      }
+      button {
+        background: #3498db;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: bold;
+      }
+      button:hover {
+        background: #2980b9;
+      }
+      button.danger {
+        background: #e74c3c;
+        padding: 5px 10px;
+        font-size: 12px;
+        margin-top: 5px;
+      }
+      button.danger:hover {
+        background: #c0392b;
+      }
+      button:disabled {
+        background: #95a5a6;
+        cursor: not-allowed;
+      }
+      .hidden {
+        display: none;
+      }
+      pre {
+        background: #2c3e50;
+        color: #ecf0f1;
+        padding: 15px;
+        border-radius: 4px;
+        overflow-x: auto;
+        white-space: pre-wrap;
+      }
+      .log-entry {
+        margin-bottom: 5px;
+        border-bottom: 1px solid #444;
+        padding-bottom: 5px;
+      }
+      .image-container {
+        display: inline-block;
+        text-align: center;
+        margin-right: 15px;
+        margin-bottom: 15px;
+        background: #eee;
+        padding: 10px;
+        border-radius: 5px;
+      }
+      .image-container img {
+        height: 80px;
+        display: block;
+        margin: 0 auto;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card" id="loginSection">
+      <h2>1. Login</h2>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="email" value="adhamdr32@gmail.com" />
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="password" value="password123" />
+      </div>
+      <button id="loginBtn">Login</button>
+      <div id="loginStatus" style="margin-top: 10px; font-weight: bold"></div>
+    </div>
+
+    <div class="card hidden" id="fetchSection">
+      <h2>2. Fetch Latest Auction</h2>
+      <p>
+        This will fetch the most recent auction you created so you can update
+        it.
+      </p>
+      <button id="fetchBtn">Fetch My Latest Auction</button>
+    </div>
+
+    <div class="card hidden" id="auctionSection">
+      <h2>3. Update Auction</h2>
+
+      <input type="hidden" id="auctionId" />
+
+      <div style="display: flex; gap: 15px">
+        <div class="form-group" style="flex: 1">
+          <label>Title</label>
+          <input type="text" id="title" />
+        </div>
+        <div class="form-group" style="flex: 1">
+          <label>Category</label>
+          <select id="category">
+            <option value="ELECTRONICS">Electronics</option>
+            <option value="VEHICLES">Vehicles</option>
+            <option value="REAL_ESTATE">Real Estate</option>
+            <option value="ART">Art</option>
+            <option value="FASHION">Fashion</option>
+            <option value="OTHER">Other</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Description</label>
+        <input type="text" id="description" />
+      </div>
+
+      <div style="display: flex; gap: 15px">
+        <div class="form-group" style="flex: 1">
+          <label>Start Time</label>
+          <input type="datetime-local" id="startTime" />
+          <small style="color: gray"
+            >Leave as is to not update it. If you update, it must be 15 mins
+            from now.</small
+          >
+        </div>
+        <div class="form-group" style="flex: 1">
+          <label>End Time</label>
+          <input type="datetime-local" id="endTime" />
+        </div>
+      </div>
+
+      <div
+        class="form-group"
+        style="
+          border: 2px dashed #bdc3c7;
+          padding: 15px;
+          border-radius: 4px;
+          background: #fafafa;
+        "
+      >
+        <label>Current Images (Saved in DB)</label>
+        <div id="existingImagesPreview">No images found.</div>
+        <hr style="margin: 15px 0" />
+        <label>Add New Images</label>
+        <input type="file" id="images" accept="image/*" multiple />
+        <div id="newImagesPreview" style="margin-top: 10px"></div>
+      </div>
+
+      <button id="updateAuctionBtn">💾 Save Updates</button>
+    </div>
+
+    <div class="card">
+      <h2>System Logs</h2>
+      <pre id="logs">Waiting for actions...</pre>
+    </div>
+
+    <script>
+      const GRAPHQL_URL = 'http://localhost:3000/graphql';
+      let accessToken = '';
+      let currentAuctionImages = []; // Array of URLs currently in the DB
+      let newBase64Files = []; // Array of Base64 strings for newly selected images
+
+      function log(message) {
+        const logs = document.getElementById('logs');
+        if (logs.innerHTML === 'Waiting for actions...') logs.innerHTML = '';
+        logs.innerHTML =
+          `<div class="log-entry">[${new Date().toLocaleTimeString()}] ${message}</div>` +
+          logs.innerHTML;
+      }
+
+      async function fetchGraphQL(query, variables = {}) {
+        const headers = { 'Content-Type': 'application/json' };
+        if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+
+        const response = await fetch(GRAPHQL_URL, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ query, variables }),
+        });
+
+        const result = await response.json();
+        if (result.errors) {
+          throw new Error(result.errors[0].message || 'GraphQL Error');
+        }
+        return result.data;
+      }
+
+      // 1. Login Logic
+      document
+        .getElementById('loginBtn')
+        .addEventListener('click', async () => {
+          const email = document.getElementById('email').value;
+          const password = document.getElementById('password').value;
+
+          log(`Attempting login for ${email}...`);
+          const query = `
+                mutation Login($input: LoginInput!) {
+                    login(loginInput: $input) { accessToken }
+                }
+            `;
+
+          try {
+            const data = await fetchGraphQL(query, {
+              input: { email, password },
+            });
+            accessToken = data.login.accessToken;
+
+            document.getElementById('loginStatus').innerHTML =
+              '✅ Logged in successfully!';
+            document.getElementById('loginStatus').style.color = 'green';
+            document.getElementById('loginSection').style.display = 'none';
+            document.getElementById('fetchSection').classList.remove('hidden');
+            log('Login successful. Token saved.');
+          } catch (err) {
+            log(`❌ Login failed: ${err.message}`);
+          }
+        });
+
+      // Helper to format ISO to datetime-local
+      function formatForInput(isoString) {
+        const date = new Date(isoString);
+        date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+        return date.toISOString().slice(0, 16);
+      }
+
+      // 2. Fetch Latest Auction
+      document
+        .getElementById('fetchBtn')
+        .addEventListener('click', async () => {
+          log(`Fetching your latest auction from database...`);
+          const query = `
+                query MyAuctions {
+                    myAuctions(filter: { page: 1, limit: 1 }) {
+                        items {
+                            _id
+                            title
+                            description
+                            category
+                            images
+                            startTime
+                            endTime
+                        }
+                    }
+                }
+            `;
+
+          try {
+            const data = await fetchGraphQL(query);
+            if (
+              !data.myAuctions.items ||
+              data.myAuctions.items.length === 0
+            ) {
+              log('❌ You do not have any auctions yet. Go create one first!');
+              return;
+            }
+
+            const auction = data.myAuctions.items[0];
+            log(`✅ Fetched auction: ${auction.title} (ID: ${auction._id})`);
+
+            // Populate Form
+            document.getElementById('auctionId').value = auction._id;
+            document.getElementById('title').value = auction.title;
+            document.getElementById('description').value = auction.description;
+            document.getElementById('category').value = auction.category;
+            document.getElementById('startTime').value = formatForInput(
+              auction.startTime,
+            );
+            document.getElementById('endTime').value = formatForInput(
+              auction.endTime,
+            );
+
+            // Store existing images
+            currentAuctionImages = [...auction.images];
+            renderExistingImages();
+
+            document.getElementById('fetchSection').style.display = 'none';
+            document
+              .getElementById('auctionSection')
+              .classList.remove('hidden');
+          } catch (err) {
+            log(`❌ Fetch failed: ${err.message}`);
+          }
+        });
+
+      // Render existing images with delete buttons
+      function renderExistingImages() {
+        const container = document.getElementById('existingImagesPreview');
+        container.innerHTML = '';
+
+        if (currentAuctionImages.length === 0) {
+          container.innerHTML = 'No images currently saved.';
+          return;
+        }
+
+        currentAuctionImages.forEach((url, index) => {
+          const div = document.createElement('div');
+          div.className = 'image-container';
+
+          const img = document.createElement('img');
+          img.src = url;
+
+          const btn = document.createElement('button');
+          btn.className = 'danger';
+          btn.innerText = 'Delete';
+          btn.onclick = () => deleteImage(url, index);
+
+          div.appendChild(img);
+          div.appendChild(btn);
+          container.appendChild(div);
+        });
+      }
+
+      // 3. Delete Image (Frontend Only - Backend handles Cloudinary now)
+      async function deleteImage(url, index) {
+        if (!confirm('Are you sure you want to remove this image from the auction?')) return;
+        
+        log(`Removing image from local list... (Will be deleted from Cloudinary upon Save)`);
+        // Remove from our local array and re-render
+        currentAuctionImages.splice(index, 1);
+        renderExistingImages();
+      }
+
+      // New Image Selection Logic (Accumulate)
+      document.getElementById('images').addEventListener('change', (e) => {
+        const preview = document.getElementById('newImagesPreview');
+        const files = Array.from(e.target.files);
+
+        if (
+          currentAuctionImages.length + newBase64Files.length + files.length >
+          10
+        ) {
+          alert('You can only have a maximum of 10 images total (Old + New)');
+          e.target.value = '';
+          return;
+        }
+
+        files.forEach((file) => {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            newBase64Files.push(event.target.result);
+            const img = document.createElement('img');
+            img.src = event.target.result;
+            img.style.height = '80px';
+            img.style.marginRight = '10px';
+            img.style.borderRadius = '4px';
+            preview.appendChild(img);
+          };
+          reader.readAsDataURL(file);
+        });
+        e.target.value = ''; // Reset input
+      });
+
+      // 4. Update Auction Flow
+      document
+        .getElementById('updateAuctionBtn')
+        .addEventListener('click', async () => {
+          const btn = document.getElementById('updateAuctionBtn');
+          btn.disabled = true;
+          btn.innerText = 'Processing Updates...';
+
+          try {
+            const newlyUploadedUrls = [];
+
+            // Step 4a: Upload any NEW images first
+            if (newBase64Files.length > 0) {
+              log(
+                `Starting upload of ${newBase64Files.length} new images to Cloudinary...`,
+              );
+              const uploadQuery = `
+                        mutation UploadImage($input: UploadImageInput!) {
+                            uploadImage(input: $input) { url }
+                        }
+                    `;
+
+              for (let i = 0; i < newBase64Files.length; i++) {
+                log(`Uploading new image ${i + 1}/${newBase64Files.length}...`);
+                try {
+                  const data = await fetchGraphQL(uploadQuery, {
+                    input: {
+                      base64Data: newBase64Files[i],
+                      folder: 'auctions',
+                    },
+                  });
+                  newlyUploadedUrls.push(data.uploadImage.url);
+                  log(`✅ New Image ${i + 1} uploaded.`);
+                } catch (uploadErr) {
+                  log(
+                    `⚠️ New Image ${i + 1} failed: ${uploadErr.message}. Skipping...`,
+                  );
+                }
+              }
+            }
+
+            // Step 4b: Combine Old Remaining Images + New Uploaded Images
+            const finalImagesArray = [
+              ...currentAuctionImages,
+              ...newlyUploadedUrls,
+            ];
+
+            // Step 4c: Call updateAuction
+            log('Updating auction details in database...');
+            const updateQuery = `
+                    mutation UpdateAuction($id: ID!, $input: UpdateAuctionInput!) {
+                        updateAuction(id: $id, input: $input) {
+                            _id
+                            title
+                            images
+                        }
+                    }
+                `;
+
+            // Collect data. Notice we are sending the final images array.
+            const input = {
+              title: document.getElementById('title').value,
+              description: document.getElementById('description').value,
+              category: document.getElementById('category').value,
+              startTime: new Date(
+                document.getElementById('startTime').value,
+              ).toISOString(),
+              endTime: new Date(
+                document.getElementById('endTime').value,
+              ).toISOString(),
+              images: finalImagesArray,
+            };
+
+            const auctionId = document.getElementById('auctionId').value;
+            const data = await fetchGraphQL(updateQuery, {
+              id: auctionId,
+              input,
+            });
+
+            log(
+              `🎉 <b>Auction Updated Successfully!</b><br>Title: ${data.updateAuction.title}<br>Total Images Now: ${data.updateAuction.images.length}`,
+            );
+
+            // Clear new images so they aren't uploaded again on next click
+            newBase64Files = [];
+            document.getElementById('newImagesPreview').innerHTML = '';
+            currentAuctionImages = data.updateAuction.images;
+            renderExistingImages();
+          } catch (err) {
+            log(`❌ Update Error: ${err.message}`);
+          } finally {
+            btn.disabled = false;
+            btn.innerText = '💾 Save Updates';
+          }
+        });
+    </script>
+  </body>
+</html>
