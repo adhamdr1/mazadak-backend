@@ -1,11 +1,13 @@
-import {
-  ConflictException,
-  Inject,
-  Injectable,
-  UnauthorizedException,
-  BadRequestException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import { EmailAlreadyExistsException } from '../users/exceptions/email-already-exists.exception';
+import { EmailAlreadyVerifiedException } from '../users/exceptions/email-already-verified.exception';
+import { UserNotFoundException } from '../users/exceptions/user-not-found.exception';
+import { InvalidCredentialsException } from './exceptions/invalid-credentials.exception';
+import { EmailNotVerifiedException } from './exceptions/email-not-verified.exception';
+import { InvalidTokenException } from './exceptions/invalid-token.exception';
+import { AccountDisabledException } from './exceptions/account-disabled.exception';
+import { GoogleAccountNoPasswordException } from './exceptions/google-account-no-password.exception';
+import { SamePasswordException } from './exceptions/same-password.exception';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
@@ -70,7 +72,7 @@ export class AuthService {
       registerInput.email,
     );
     if (existingUser) {
-      throw new ConflictException('Email already exists');
+      throw new EmailAlreadyExistsException();
     }
 
     // 2. Hash the raw password before persisting.
@@ -118,24 +120,20 @@ export class AuthService {
       loginInput.email,
     );
     if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new InvalidCredentialsException();
     }
 
     // 2. Reject soft-deleted accounts.
     if (user.deletedAt) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new InvalidCredentialsException();
     }
 
     if (!user.password) {
-      throw new UnauthorizedException(
-        'This account is registered via Google. Please use Google Login.',
-      );
+      throw new GoogleAccountNoPasswordException();
     }
 
     if (!user.isEmailVerified) {
-      throw new ForbiddenException(
-        'Please verify your email before logging in',
-      );
+      throw new EmailNotVerifiedException();
     }
 
     // 3. Compare password — password field has select:false, need to fetch it.
@@ -144,7 +142,7 @@ export class AuthService {
       user.password ?? '',
     );
     if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new InvalidCredentialsException();
     }
 
     return this.issueAuthTokens(user);
@@ -153,17 +151,15 @@ export class AuthService {
   async googleRegister(input: GoogleRegisterInput): Promise<AuthResponse> {
     const payload = await this.verifyGoogleToken(input.token);
     if (!payload || !payload.email) {
-      throw new UnauthorizedException('Invalid token payload');
+      throw new InvalidTokenException();
     }
     const { sub: googleId, email, email_verified } = payload;
     if (!email_verified) {
-      throw new UnauthorizedException('Google email is not verified');
+      throw new EmailNotVerifiedException();
     }
     const existingUser = await this.usersService.findByEmail(email);
     if (existingUser) {
-      throw new ConflictException(
-        'Email already registered. Please login instead.',
-      );
+      throw new EmailAlreadyExistsException();
     }
 
     // Create user + wallet in a single atomic transaction.
@@ -190,12 +186,12 @@ export class AuthService {
   async googleLogin(googleLoginInput: GoogleLoginInput): Promise<AuthResponse> {
     const payload = await this.verifyGoogleToken(googleLoginInput.token);
     if (!payload || !payload.email) {
-      throw new UnauthorizedException('Invalid token payload');
+      throw new InvalidTokenException();
     }
     const { sub: googleId, email, email_verified } = payload;
     // 2. Security Check
     if (!email_verified) {
-      throw new UnauthorizedException('Google email is not verified');
+      throw new EmailNotVerifiedException();
     }
     // 3. Find User
     let user = await this.usersService.findByEmail(email);
@@ -203,7 +199,7 @@ export class AuthService {
       throw new RegistrationRequiredException();
     }
     if (user.deletedAt) {
-      throw new UnauthorizedException('Account disabled');
+      throw new AccountDisabledException();
     }
     // 4. Link account if needed
     if (!user.googleId && user.authProvider === AuthProvider.LOCAL) {
@@ -228,7 +224,7 @@ export class AuthService {
 
       return true;
     } catch {
-      throw new BadRequestException('Invalid or expired verification token');
+      throw new InvalidTokenException();
     }
   }
 
@@ -240,7 +236,7 @@ export class AuthService {
       return true;
     }
     if (user.isEmailVerified) {
-      throw new BadRequestException('Email is already verified');
+      throw new EmailAlreadyVerifiedException();
     }
     const verificationToken = this.generateEmailVerificationToken(
       user._id.toString(),
@@ -274,7 +270,7 @@ export class AuthService {
     // 2. Look up the token in DB — if not found, it's invalid or already used.
     const storedToken = await this.authRepository.findRefreshToken(hashedToken);
     if (!storedToken) {
-      throw new UnauthorizedException('Invalid or expired refresh token');
+      throw new InvalidTokenException();
     }
 
     // 3. Verify the JWT signature and expiry are still valid.
@@ -287,7 +283,7 @@ export class AuthService {
     } catch {
       // Token is expired or invalid — clean it up from DB.
       await this.authRepository.deleteRefreshToken(hashedToken);
-      throw new UnauthorizedException('Invalid or expired refresh token');
+      throw new InvalidTokenException();
     }
 
     // 4. Token Rotation: delete the old token before issuing new ones.
@@ -297,7 +293,7 @@ export class AuthService {
     // 5. Fetch fresh user data — role/email might have changed since token was issued.
     const user = await this.usersService.findById(payload.sub);
     if (!user || user.deletedAt) {
-      throw new UnauthorizedException('User not found or disabled');
+      throw new AccountDisabledException();
     }
 
     return this.issueAuthTokens(user);
@@ -312,9 +308,7 @@ export class AuthService {
     if (!user) return true;
     // 1. التأكد إن الحساب له باسورد (لو معندوش، يبقى ده حساب Google Only عمره ما عمل باسورد)
     if (!user.password) {
-      throw new BadRequestException(
-        'This account does not have a password set. Please login using your social account.',
-      );
+      throw new GoogleAccountNoPasswordException();
     }
     // 2. حماية من تكرار الإرسال (Rate Limiting للإيميل لكل يوزر لمدة دقيقتين)
     const rateLimitKey = `rate-limit:forgot-password:${user._id.toString()}`;
@@ -342,18 +336,18 @@ export class AuthService {
   async resetPassword(input: ResetPasswordInput): Promise<boolean> {
     const user = await this.usersService.findByEmailWithPassword(input.email);
     if (!user) {
-      throw new BadRequestException('Invalid user account');
+      throw new UserNotFoundException();
     }
     // 1. نجيب الـ Hashed Token بتاع اليوزر من Redis
     const redisKey = this.getResetPasswordRedisKey(user._id.toString());
     const storedHashedToken = await this.redis.get(redisKey);
     if (!storedHashedToken) {
-      throw new BadRequestException('Invalid or expired reset token');
+      throw new InvalidTokenException();
     }
     // 2. نعمل Hash للي اليوزر بعته ونقارن
     const inputHashedToken = hashToken(input.token);
     if (storedHashedToken !== inputHashedToken) {
-      throw new BadRequestException('Invalid or expired reset token');
+      throw new InvalidTokenException();
     }
     // 3. تحديث الباسورد
     const hashedPassword = await bcrypt.hash(input.password, SALT_ROUNDS);
@@ -372,25 +366,21 @@ export class AuthService {
     const user = await this.usersService.findByUserIdWithPassword(userId);
 
     if (!user) {
-      throw new UnauthorizedException('User not found');
+      throw new UserNotFoundException();
     }
 
     if (!user.password) {
-      throw new BadRequestException(
-        'This account does not have a password set.',
-      );
+      throw new GoogleAccountNoPasswordException();
     }
 
     const isMatch = await bcrypt.compare(input.oldPassword, user.password);
     if (!isMatch) {
-      throw new BadRequestException('Incorrect old password');
+      throw new InvalidCredentialsException();
     }
 
     const isSamePassword = await bcrypt.compare(input.password, user.password);
     if (isSamePassword) {
-      throw new BadRequestException(
-        'New password must be different from current password',
-      );
+      throw new SamePasswordException();
     }
 
     const hashedPassword = await bcrypt.hash(input.password, SALT_ROUNDS);
@@ -456,7 +446,7 @@ export class AuthService {
       });
       return ticket.getPayload();
     } catch {
-      throw new UnauthorizedException('Invalid Google token');
+      throw new InvalidTokenException();
     }
   }
 
