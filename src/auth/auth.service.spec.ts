@@ -1,11 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuthService } from './auth.service';
-import {
-  ConflictException,
-  UnauthorizedException,
-  BadRequestException,
-  ForbiddenException,
-} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { UsersService } from '../users/users.service';
@@ -14,6 +8,15 @@ import { Types } from 'mongoose';
 import { User } from '../users/entities/user.entity';
 import { UserRole } from '../users/enums/user-role.enum';
 import { AuthProvider } from '../users/enums/auth-provider.enum';
+import { EmailAlreadyExistsException } from '../users/exceptions/email-already-exists.exception';
+import { EmailAlreadyVerifiedException } from '../users/exceptions/email-already-verified.exception';
+import { UserNotFoundException } from '../users/exceptions/user-not-found.exception';
+import { InvalidCredentialsException } from './exceptions/invalid-credentials.exception';
+import { EmailNotVerifiedException } from './exceptions/email-not-verified.exception';
+import { InvalidTokenException } from './exceptions/invalid-token.exception';
+import { AccountDisabledException } from './exceptions/account-disabled.exception';
+import { GoogleAccountNoPasswordException } from './exceptions/google-account-no-password.exception';
+import { SamePasswordException } from './exceptions/same-password.exception';
 import { RegistrationRequiredException } from './exceptions/registration-required.exception';
 import * as bcrypt from 'bcrypt';
 import { createHash } from 'crypto';
@@ -244,7 +247,7 @@ describe('AuthService', () => {
 
       // Act & Assert
       await expect(service.register(registerInput)).rejects.toThrow(
-        ConflictException,
+        EmailAlreadyExistsException,
       );
       expect(mockUsersService.create).not.toHaveBeenCalled();
     });
@@ -277,7 +280,7 @@ describe('AuthService', () => {
       mockUsersService.findByEmailWithPassword.mockResolvedValue(null);
 
       await expect(service.login(loginInput)).rejects.toThrow(
-        UnauthorizedException,
+        InvalidCredentialsException,
       );
     });
 
@@ -286,7 +289,7 @@ describe('AuthService', () => {
       mockUsersService.findByEmailWithPassword.mockResolvedValue(deletedUser);
 
       await expect(service.login(loginInput)).rejects.toThrow(
-        UnauthorizedException,
+        InvalidCredentialsException,
       );
     });
 
@@ -298,7 +301,7 @@ describe('AuthService', () => {
       mockUsersService.findByEmailWithPassword.mockResolvedValue(googleUser);
 
       await expect(service.login(loginInput)).rejects.toThrow(
-        UnauthorizedException,
+        GoogleAccountNoPasswordException,
       );
     });
 
@@ -312,7 +315,7 @@ describe('AuthService', () => {
       );
 
       await expect(service.login(loginInput)).rejects.toThrow(
-        ForbiddenException,
+        EmailNotVerifiedException,
       );
     });
 
@@ -322,7 +325,7 @@ describe('AuthService', () => {
       (mockedBcrypt.compare as jest.Mock).mockResolvedValue(false);
 
       await expect(service.login(loginInput)).rejects.toThrow(
-        UnauthorizedException,
+        InvalidCredentialsException,
       );
     });
   });
@@ -379,7 +382,7 @@ describe('AuthService', () => {
       mockVerifyIdToken.mockRejectedValue(new Error('invalid token'));
 
       await expect(service.googleRegister(googleRegisterInput)).rejects.toThrow(
-        UnauthorizedException,
+        InvalidTokenException,
       );
     });
 
@@ -389,7 +392,7 @@ describe('AuthService', () => {
       });
 
       await expect(service.googleRegister(googleRegisterInput)).rejects.toThrow(
-        UnauthorizedException,
+        EmailNotVerifiedException,
       );
     });
 
@@ -398,7 +401,7 @@ describe('AuthService', () => {
       mockUsersService.findByEmail.mockResolvedValue(createMockUser());
 
       await expect(service.googleRegister(googleRegisterInput)).rejects.toThrow(
-        ConflictException,
+        EmailAlreadyExistsException,
       );
     });
   });
@@ -444,7 +447,7 @@ describe('AuthService', () => {
 
       await expect(
         service.googleLogin({ token: 'google-id-token' }),
-      ).rejects.toThrow(UnauthorizedException);
+      ).rejects.toThrow(AccountDisabledException);
     });
 
     it('should link Google account if user exists with LOCAL provider and no googleId', async () => {
@@ -492,7 +495,7 @@ describe('AuthService', () => {
       });
 
       await expect(service.confirmEmail('invalid-token')).rejects.toThrow(
-        BadRequestException,
+        InvalidTokenException,
       );
     });
   });
@@ -522,7 +525,7 @@ describe('AuthService', () => {
 
       await expect(
         service.resendConfirmationEmail('test@example.com'),
-      ).rejects.toThrow(BadRequestException);
+      ).rejects.toThrow(EmailAlreadyVerifiedException);
     });
 
     it('should send verification email and return true', async () => {
@@ -621,7 +624,7 @@ describe('AuthService', () => {
       mockAuthRepository.findRefreshToken.mockResolvedValue(null);
 
       await expect(service.refreshTokens(rawRefreshToken)).rejects.toThrow(
-        UnauthorizedException,
+        InvalidTokenException,
       );
     });
 
@@ -635,7 +638,7 @@ describe('AuthService', () => {
 
       // Act & Assert
       await expect(service.refreshTokens(rawRefreshToken)).rejects.toThrow(
-        UnauthorizedException,
+        InvalidTokenException,
       );
       // الـ token لازم يتمسح من الـ DB حتى لو الـ JWT منتهي
       expect(mockAuthRepository.deleteRefreshToken).toHaveBeenCalledWith(
@@ -658,7 +661,7 @@ describe('AuthService', () => {
       );
 
       await expect(service.refreshTokens(rawRefreshToken)).rejects.toThrow(
-        UnauthorizedException,
+        AccountDisabledException,
       );
     });
   });
@@ -686,7 +689,7 @@ describe('AuthService', () => {
 
       await expect(
         service.forgotPassword(forgotInput, ip, browser),
-      ).rejects.toThrow(BadRequestException);
+      ).rejects.toThrow(GoogleAccountNoPasswordException);
     });
 
     it('should return true silently if user already requested within 2 minutes (rate limit)', async () => {
@@ -771,7 +774,7 @@ describe('AuthService', () => {
       mockUsersService.findByEmailWithPassword.mockResolvedValue(null);
 
       await expect(service.resetPassword(resetInput)).rejects.toThrow(
-        BadRequestException,
+        UserNotFoundException,
       );
     });
 
@@ -782,7 +785,7 @@ describe('AuthService', () => {
       mockRedis.get.mockResolvedValue(null);
 
       await expect(service.resetPassword(resetInput)).rejects.toThrow(
-        BadRequestException,
+        InvalidTokenException,
       );
     });
 
@@ -793,7 +796,7 @@ describe('AuthService', () => {
       mockRedis.get.mockResolvedValue('completely-different-hash');
 
       await expect(service.resetPassword(resetInput)).rejects.toThrow(
-        BadRequestException,
+        InvalidTokenException,
       );
     });
   });
@@ -833,7 +836,7 @@ describe('AuthService', () => {
       mockUsersService.findByUserIdWithPassword.mockResolvedValue(null);
 
       await expect(service.updatePassword(userId, updateInput)).rejects.toThrow(
-        UnauthorizedException,
+        UserNotFoundException,
       );
     });
 
@@ -843,7 +846,7 @@ describe('AuthService', () => {
       );
 
       await expect(service.updatePassword(userId, updateInput)).rejects.toThrow(
-        BadRequestException,
+        GoogleAccountNoPasswordException,
       );
     });
 
@@ -854,7 +857,7 @@ describe('AuthService', () => {
       (mockedBcrypt.compare as jest.Mock).mockResolvedValue(false);
 
       await expect(service.updatePassword(userId, updateInput)).rejects.toThrow(
-        BadRequestException,
+        InvalidCredentialsException,
       );
     });
 
@@ -867,7 +870,7 @@ describe('AuthService', () => {
         .mockResolvedValueOnce(true); // الباسورد الجديد نفس القديم
 
       await expect(service.updatePassword(userId, updateInput)).rejects.toThrow(
-        BadRequestException,
+        SamePasswordException,
       );
     });
   });

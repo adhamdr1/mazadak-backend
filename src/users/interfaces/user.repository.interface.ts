@@ -1,8 +1,33 @@
 import { ClientSession } from 'mongoose';
 import { User } from '../entities/user.entity';
+import { AuthProvider } from '../enums/auth-provider.enum';
+
+export interface CreateUserData {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phoneNumber: string;
+  dateOfBirth: Date;
+  address: { city: string; street: string };
+  password?: string; // Local users only
+  googleId?: string; // Google users only
+  authProvider?: AuthProvider;
+  isEmailVerified?: boolean;
+}
+
+export interface UpdateUserData {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phoneNumber?: string;
+  dateOfBirth?: Date;
+  address?: { city: string; street: string };
+  isEmailVerified?: boolean;
+  password?: string;
+}
 
 export interface IUserRepository {
-  create(user: Partial<User>, session?: ClientSession): Promise<User>;
+  create(data: CreateUserData, session?: ClientSession): Promise<User>;
 
   findById(id: string): Promise<User | null>;
 
@@ -16,9 +41,12 @@ export interface IUserRepository {
 
   findByGoogleId(googleId: string): Promise<User | null>;
 
-  update(id: string, data: Partial<User>): Promise<User | null>;
+  update(id: string, data: UpdateUserData): Promise<User | null>;
 
-  findAll(page: number, limit: number): Promise<User[]>;
+  findAll(
+    page: number,
+    limit: number,
+  ): Promise<{ items: User[]; total: number }>;
 
   softDelete(id: string): Promise<void>;
 

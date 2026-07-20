@@ -82,28 +82,36 @@ describe('UsersService', () => {
 
   // دالة findAll
   describe('findAll', () => {
-    it('should return all users', async () => {
+    it('should return paginated users', async () => {
       // Arrange
       const mockUsers = [
         { _id: new Types.ObjectId().toString(), firstName: 'Test1' },
         { _id: new Types.ObjectId().toString(), firstName: 'Test2' },
       ];
-      mockUserRepository.findAll.mockResolvedValue(mockUsers);
+      mockUserRepository.findAll.mockResolvedValue({
+        items: mockUsers,
+        total: 2,
+      });
       // Act
       const result = await service.findAll({ page: 1, limit: 10 });
       // Assert
-      expect(result).toEqual(mockUsers);
+      expect(result.items).toEqual(mockUsers);
+      expect(result.total).toBe(2);
+      expect(result.totalPages).toBe(1);
+      expect(result.hasNextPage).toBe(false);
       expect(mockUserRepository.findAll).toHaveBeenCalledTimes(1);
     });
 
-    it('should return an empty array if no users are found', async () => {
+    it('should return empty page if no users are found', async () => {
       // Arrange
-      mockUserRepository.findAll.mockResolvedValue([]);
+      mockUserRepository.findAll.mockResolvedValue({ items: [], total: 0 });
       // Act
       const result = await service.findAll({ page: 1, limit: 10 });
       // Assert
-      expect(result).toEqual([]);
-      expect(mockUserRepository.findAll).toHaveBeenCalledTimes(1);
+      expect(result.items).toEqual([]);
+      expect(result.total).toBe(0);
+      expect(result.totalPages).toBe(0);
+      expect(result.hasNextPage).toBe(false);
     });
   });
 
@@ -139,9 +147,9 @@ describe('UsersService', () => {
       expect(mockUserRepository.findByPhoneNumber).toHaveBeenCalledWith(
         createUserInput.phoneNumber,
       );
-      // تأكد أنه تم تمرير نفس البيانات للـ DB مع undefined كجلسة (session)
+      // تأكد أن create استُدعي بالبيانات المناسبة وجلسة فارغة
       expect(mockUserRepository.create).toHaveBeenCalledWith(
-        createUserInput,
+        expect.objectContaining({ email: createUserInput.email }),
         undefined,
       );
     });

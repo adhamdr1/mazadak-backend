@@ -1,7 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Model } from 'mongoose';
-import { IUserRepository } from '../interfaces/user.repository.interface';
+import {
+  IUserRepository,
+  CreateUserData,
+  UpdateUserData,
+} from '../interfaces/user.repository.interface';
 import { User, UserDocument } from '../entities/user.entity';
 import { AuthProvider } from '../enums/auth-provider.enum';
 
@@ -12,8 +16,8 @@ export class MongoUserRepository implements IUserRepository {
     private readonly userModel: Model<UserDocument>,
   ) {}
 
-  async create(user: Partial<User>, session?: ClientSession): Promise<User> {
-    const createdUser = new this.userModel(user);
+  async create(data: CreateUserData, session?: ClientSession): Promise<User> {
+    const createdUser = new this.userModel(data);
     return await createdUser.save({ session });
   }
 
@@ -73,7 +77,7 @@ export class MongoUserRepository implements IUserRepository {
       .exec();
   }
 
-  async update(id: string, data: Partial<User>): Promise<User | null> {
+  async update(id: string, data: UpdateUserData): Promise<User | null> {
     return await this.userModel
       .findOneAndUpdate(
         {
@@ -86,15 +90,23 @@ export class MongoUserRepository implements IUserRepository {
       .exec();
   }
 
-  async findAll(page: number, limit: number): Promise<User[]> {
+  async findAll(
+    page: number,
+    limit: number,
+  ): Promise<{ items: User[]; total: number }> {
     const skip = (page - 1) * limit;
 
-    return await this.userModel
-      .find({ deletedAt: null })
-      .sort({ _id: -1 })
-      .skip(skip)
-      .limit(limit)
-      .exec();
+    const [items, total] = await Promise.all([
+      this.userModel
+        .find({ deletedAt: null })
+        .sort({ _id: -1 })
+        .skip(skip)
+        .limit(limit)
+        .exec(),
+      this.userModel.countDocuments({ deletedAt: null }).exec(),
+    ]);
+
+    return { items, total };
   }
 
   async softDelete(id: string): Promise<void> {

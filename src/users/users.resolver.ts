@@ -11,6 +11,7 @@ import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { FindUserInput } from './dto/find-user.input';
 import { PaginationInput } from '../common/dto/pagination.input';
 import { UpdateUserInput } from './dto/update-user.input';
+import { UsersPage } from './dto/users-page.type';
 
 @Resolver(() => User)
 @UseGuards(JwtAuthGuard)
@@ -33,10 +34,10 @@ export class UsersResolver {
     return this.usersService.findById(input.id);
   }
 
-  @Query(() => [User], { name: 'users' })
+  @Query(() => UsersPage, { name: 'users' })
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
-  async findAll(@Args('input') input: PaginationInput): Promise<User[]> {
+  async findAll(@Args('input') input: PaginationInput): Promise<UsersPage> {
     return this.usersService.findAll(input);
   }
 
