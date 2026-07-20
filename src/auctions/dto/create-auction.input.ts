@@ -8,6 +8,7 @@ import {
   IsNumber,
   Min,
   IsArray,
+  ArrayMinSize,
   ArrayMaxSize,
   IsUrl,
   IsEnum,
@@ -49,8 +50,9 @@ export class CreateAuctionInput {
   @Min(1, { message: 'Minimum bid increment must be at least 1' })
   minimumBidIncrement!: number;
 
-  @Field(() => [String], { defaultValue: [] })
+  @Field(() => [String])
   @IsArray({ message: 'Images must be an array' })
+  @ArrayMinSize(1, { message: 'At least one image is required' })
   @ArrayMaxSize(10, { message: 'Maximum 10 images allowed' })
   @IsUrl({}, { each: true, message: 'Each image must be a valid URL' })
   images!: string[];

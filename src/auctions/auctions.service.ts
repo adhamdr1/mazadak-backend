@@ -15,6 +15,7 @@ import { AuctionForbiddenException } from './exceptions/auction-forbidden.except
 import { AuctionStartTimeTooSoonException } from './exceptions/auction-start-time-too-soon.exception';
 import { AuctionEndTimeInvalidException } from './exceptions/auction-end-time-invalid.exception';
 import { AuctionNotPendingException } from './exceptions/auction-not-pending.exception';
+import { UploadService } from '../upload/upload.service';
 
 const MIN_START_TIME_MS = 15 * 60 * 1000; // 15 minutes
 
@@ -25,6 +26,7 @@ export class AuctionsService {
   constructor(
     @Inject('IAuctionRepository')
     private readonly auctionRepository: IAuctionRepository,
+    private readonly uploadService: UploadService,
   ) {}
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -137,8 +139,31 @@ export class AuctionsService {
       this.validateTimes(newStart, newEnd);
     }
 
+    // Determine which images were deleted
+    let deletedImages: string[] = [];
+    if (input.images) {
+      const newImages = input.images;
+      deletedImages = auction.images.filter((img) => !newImages.includes(img));
+    }
+
+    // 1. Update Database First
     const updated = await this.auctionRepository.update(auctionId, input);
     if (!updated) throw new AuctionNotFoundException();
+
+    // 2. If DB update succeeds, clean up deleted images from Cloudinary (Fire & Forget)
+    if (deletedImages.length > 0) {
+      Promise.allSettled(
+        deletedImages.map((url) =>
+          this.uploadService.deleteImage(sellerId, url),
+        ),
+      ).catch((err) =>
+        this.logger.error(
+          `Failed to clean up images for auction ${auctionId}`,
+          err,
+        ),
+      );
+    }
+
     return updated;
   }
 

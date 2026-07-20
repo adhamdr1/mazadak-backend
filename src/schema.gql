@@ -281,7 +281,7 @@ input CreateAuctionInput {
   category: AuctionCategory!
   startingPrice: Float!
   minimumBidIncrement: Float!
-  images: [String!]! = []
+  images: [String!]!
   startTime: DateTime!
   endTime: DateTime!
 }
