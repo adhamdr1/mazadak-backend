@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuctionsService } from './auctions.service';
+import { UploadService } from '../upload/upload.service';
 import { Types } from 'mongoose';
 import { AuctionStatus } from './enums/auction-status.enum';
 import { AuctionCategory } from './enums/auction-category.enum';
@@ -35,6 +36,10 @@ describe('AuctionsService', () => {
       providers: [
         AuctionsService,
         { provide: 'IAuctionRepository', useValue: mockAuctionRepository },
+        {
+          provide: UploadService,
+          useValue: { uploadImage: jest.fn(), deleteImage: jest.fn() },
+        },
       ],
     }).compile();
 

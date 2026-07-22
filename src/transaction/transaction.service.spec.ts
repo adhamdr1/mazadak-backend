@@ -66,9 +66,9 @@ describe('TransactionService', () => {
 
     it('should throw WalletNotFoundException if user has no wallet', async () => {
       mockWalletRepository.findByUserId.mockResolvedValue(null);
-      await expect(service.getMyTransactions(userId, {})).rejects.toThrow(
-        WalletNotFoundException,
-      );
+      await expect(
+        service.getMyTransactions(userId, { page: 1, limit: 10 }),
+      ).rejects.toThrow(WalletNotFoundException);
     });
 
     it('should return transactions page with default pagination', async () => {
@@ -77,7 +77,10 @@ describe('TransactionService', () => {
       mockTransactionRepository.findByWalletId.mockResolvedValue(items);
       mockTransactionRepository.countByWalletId.mockResolvedValue(15);
 
-      const result = await service.getMyTransactions(userId, {});
+      const result = await service.getMyTransactions(userId, {
+        page: 1,
+        limit: 10,
+      });
 
       expect(result).toEqual({
         items,
