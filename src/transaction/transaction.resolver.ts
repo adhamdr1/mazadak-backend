@@ -15,7 +15,8 @@ export class TransactionResolver {
   @Query(() => TransactionsPage, { name: 'myTransactions' })
   async myTransactions(
     @CurrentUser() currentUser: JwtPayload,
-    @Args('input', { nullable: true }) input: MyTransactionsInput = {},
+    @Args('input', { nullable: true })
+    input: MyTransactionsInput = new MyTransactionsInput(),
   ): Promise<TransactionsPage> {
     return this.transactionService.getMyTransactions(currentUser.sub, input);
   }
