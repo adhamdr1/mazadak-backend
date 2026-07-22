@@ -1,4 +1,4 @@
-import { Resolver, Mutation, Args, Query, Context } from '@nestjs/graphql';
+import { Resolver, Mutation, Args, Context } from '@nestjs/graphql';
 import { AuthService } from './auth.service';
 import { RegisterInput } from './dto/register.input';
 import { AuthResponse } from './dto/auth.response';
@@ -17,12 +17,6 @@ import { UpdatePasswordInput } from './dto/update-password.input';
 @Resolver()
 export class AuthResolver {
   constructor(private readonly authService: AuthService) {}
-
-  @Public()
-  @Query(() => String)
-  health(): string {
-    return 'API is running';
-  }
 
   @Public()
   @Throttle({ strict: { ttl: 60_000, limit: 5 } })

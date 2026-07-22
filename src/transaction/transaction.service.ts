@@ -28,8 +28,7 @@ export class TransactionService {
     userId: string,
     input: MyTransactionsInput,
   ): Promise<TransactionsPage> {
-    const page = input.page ?? 1;
-    const limit = input.limit ?? 10;
+    const { page, limit } = input;
 
     const wallet = await this.walletRepository.findByUserId(userId);
     if (!wallet) throw new WalletNotFoundException();

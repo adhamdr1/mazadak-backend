@@ -4,6 +4,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -36,5 +37,6 @@ export class AuctionsFilterInput {
   @Field(() => Int, { defaultValue: 10 })
   @IsInt()
   @Min(1, { message: 'Limit must be at least 1' })
+  @Max(100, { message: 'Limit must not exceed 100' })
   limit: number = 10;
 }
