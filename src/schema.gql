@@ -148,8 +148,29 @@ type UploadImageResponse {
   url: String!
 }
 
+type Bid {
+  _id: ID!
+  auctionId: ID!
+  bidderId: ID!
+  amount: Float!
+  status: BidStatus!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+enum BidStatus {
+  WINNING
+  OUTBID
+}
+
+type BidsPage {
+  items: [Bid!]!
+  total: Int!
+  totalPages: Int!
+  hasNextPage: Boolean!
+}
+
 type Query {
-  health: String!
   me: User!
   findUser(input: FindUserInput!): User!
   users(input: PaginationInput!): UsersPage!
@@ -159,6 +180,8 @@ type Query {
   auction(id: ID!): Auction!
   myAuctions(filter: AuctionsFilterInput): AuctionsPage!
   myWonAuctions(filter: AuctionsFilterInput): AuctionsPage!
+  auctionBids(auctionId: String!, filter: BidsFilterInput): BidsPage!
+  myBids(filter: BidsFilterInput): BidsPage!
 }
 
 input FindUserInput {
@@ -171,8 +194,8 @@ input PaginationInput {
 }
 
 input MyTransactionsInput {
-  page: Int = 1
-  limit: Int = 10
+  page: Int! = 1
+  limit: Int! = 10
   type: TransactionType
 }
 
@@ -180,6 +203,11 @@ input AuctionsFilterInput {
   category: AuctionCategory
   status: AuctionStatus
   search: String
+  page: Int! = 1
+  limit: Int! = 10
+}
+
+input BidsFilterInput {
   page: Int! = 1
   limit: Int! = 10
 }
@@ -208,6 +236,7 @@ type Mutation {
   cancelAuction(id: ID!): Boolean!
   uploadImage(input: UploadImageInput!): UploadImageResponse!
   deleteImage(url: String!): Boolean!
+  placeBid(input: PlaceBidInput!): Bid!
 }
 
 input RegisterInput {
@@ -301,4 +330,9 @@ input UploadImageInput {
 
   """Optional folder name to store the image in"""
   folder: String
+}
+
+input PlaceBidInput {
+  auctionId: ID!
+  amount: Float!
 }

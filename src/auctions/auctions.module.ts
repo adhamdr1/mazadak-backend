@@ -19,6 +19,6 @@ import { UploadModule } from '../upload/upload.module';
       useClass: MongoAuctionRepository,
     },
   ],
-  exports: [AuctionsService],
+  exports: [AuctionsService, 'IAuctionRepository'],
 })
 export class AuctionsModule {}

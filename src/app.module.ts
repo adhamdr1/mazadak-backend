@@ -22,6 +22,7 @@ import { TransactionModule } from './transaction/transaction.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AuctionsModule } from './auctions/auctions.module';
 import { UploadModule } from './upload/upload.module';
+import { BidsModule } from './bids/bids.module';
 
 @Module({
   imports: [
@@ -89,6 +90,7 @@ import { UploadModule } from './upload/upload.module';
     TransactionModule,
     AuctionsModule,
     UploadModule,
+    BidsModule,
   ],
   providers: [
     // Global Authentication Guards

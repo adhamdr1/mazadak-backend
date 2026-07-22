@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model, Types, ClientSession } from 'mongoose';
 import {
   IAuctionRepository,
   AuctionsFilter,
@@ -97,6 +97,37 @@ export class MongoAuctionRepository implements IAuctionRepository {
       .find({
         status: AuctionStatus.ACTIVE,
         endTime: { $lte: new Date() },
+      })
+      .exec();
+  }
+
+  async updateCurrentPrice(
+    id: string,
+    price: number,
+    session?: ClientSession,
+  ): Promise<void> {
+    await this.auctionModel
+      .findByIdAndUpdate(
+        new Types.ObjectId(id),
+        { $set: { currentPrice: price } },
+        { session },
+      )
+      .exec();
+  }
+
+  async findEndedWithoutWinner(): Promise<Auction[]> {
+    return await this.auctionModel
+      .find({
+        status: AuctionStatus.ENDED,
+        winnerId: { $exists: false },
+      })
+      .exec();
+  }
+
+  async setWinner(id: string, winnerId: string): Promise<void> {
+    await this.auctionModel
+      .findByIdAndUpdate(new Types.ObjectId(id), {
+        $set: { winnerId: new Types.ObjectId(winnerId) },
       })
       .exec();
   }

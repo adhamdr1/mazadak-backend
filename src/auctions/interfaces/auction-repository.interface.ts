@@ -1,4 +1,4 @@
-import { Types } from 'mongoose';
+import { Types, ClientSession } from 'mongoose';
 import { Auction } from '../entities/auction.entity';
 import { AuctionStatus } from '../enums/auction-status.enum';
 import { AuctionCategory } from '../enums/auction-category.enum';
@@ -58,4 +58,14 @@ export interface IAuctionRepository {
   findPendingToActivate(): Promise<Auction[]>;
 
   findActiveToEnd(): Promise<Auction[]>;
+
+  updateCurrentPrice(
+    id: string,
+    price: number,
+    session?: ClientSession,
+  ): Promise<void>;
+
+  findEndedWithoutWinner(): Promise<Auction[]>;
+
+  setWinner(id: string, winnerId: string): Promise<void>;
 }
