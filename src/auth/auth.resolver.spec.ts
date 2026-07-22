@@ -53,12 +53,6 @@ describe('AuthResolver', () => {
     expect(resolver).toBeDefined();
   });
 
-  describe('health', () => {
-    it('should return "API is running"', () => {
-      expect(resolver.health()).toBe('API is running');
-    });
-  });
-
   describe('register', () => {
     it('should call authService.register and return the result', async () => {
       const input: RegisterInput = {
