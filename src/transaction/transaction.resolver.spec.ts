@@ -76,7 +76,7 @@ describe('TransactionResolver', () => {
       expect(result).toEqual(expectedResult);
       expect(mockTransactionService.getMyTransactions).toHaveBeenCalledWith(
         currentUser.sub,
-        {},
+        expect.objectContaining({ page: 1, limit: 10 }),
       );
     });
   });
