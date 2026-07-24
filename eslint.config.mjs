@@ -16,10 +16,13 @@ export default tseslint.config(
       globals: {
         ...globals.node,
         ...globals.jest,
+        ...globals.browser,
       },
       sourceType: 'commonjs',
       parserOptions: {
-        projectService: true,
+        projectService: {
+          allowDefaultProject: ['*.js', '*.mjs', 'ui-test/*.js'],
+        },
         tsconfigRootDir: import.meta.dirname,
       },
     },
@@ -29,7 +32,11 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-floating-promises': 'warn',
       '@typescript-eslint/no-unsafe-argument': 'warn',
-      "prettier/prettier": ["error", { endOfLine: "auto" }],
+      'prettier/prettier': ['error', { endOfLine: 'auto' }],
     },
+  },
+  {
+    files: ['**/*.js', '**/*.mjs'],
+    ...tseslint.configs.disableTypeChecked,
   },
 );

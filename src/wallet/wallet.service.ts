@@ -38,9 +38,14 @@ export class WalletService {
     userId: string;
     amount: number;
     type: TransactionType;
-    operation: (walletId: string, amount: number) => Promise<Wallet | null>;
+    operation: (
+      walletId: string,
+      amount: number,
+      session?: ClientSession,
+    ) => Promise<Wallet | null>;
     onNull: () => never;
     referenceId?: string;
+    session?: ClientSession;
   }): Promise<Wallet> {
     this.validateAmount(params.amount);
     const wallet = await this.getWalletOrThrow(params.userId);
@@ -49,7 +54,7 @@ export class WalletService {
     let updated: Wallet | null = null;
 
     try {
-      updated = await params.operation(walletId, params.amount);
+      updated = await params.operation(walletId, params.amount, params.session);
       if (!updated) params.onNull();
     } catch (error) {
       // Best-effort: log failed transaction without masking the original error
@@ -90,26 +95,38 @@ export class WalletService {
     return await this.getWalletOrThrow(userId);
   }
 
-  async deposit(userId: string, amount: number): Promise<Wallet> {
+  async deposit(
+    userId: string,
+    amount: number,
+    referenceId?: string,
+    session?: ClientSession,
+  ): Promise<Wallet> {
     return this.executeWalletOp({
       userId,
       amount,
       type: TransactionType.DEPOSIT,
-      operation: (walletId, amt) =>
-        this.walletRepository.creditBalance(walletId, amt),
+      referenceId,
+      session,
+      operation: (walletId, amt, sess) =>
+        this.walletRepository.creditBalance(walletId, amt, sess),
       onNull: () => {
         throw new WalletNotFoundException();
       },
     });
   }
 
-  async withdraw(userId: string, amount: number): Promise<Wallet> {
+  async withdraw(
+    userId: string,
+    amount: number,
+    session?: ClientSession,
+  ): Promise<Wallet> {
     return this.executeWalletOp({
       userId,
       amount,
       type: TransactionType.WITHDRAW,
-      operation: (walletId, amt) =>
-        this.walletRepository.debitBalance(walletId, amt),
+      session,
+      operation: (walletId, amt, sess) =>
+        this.walletRepository.debitBalance(walletId, amt, sess),
       onNull: () => {
         throw new InsufficientFundsException();
       },
@@ -122,17 +139,19 @@ export class WalletService {
     userId: string,
     amount: number,
     referenceId?: string,
+    session?: ClientSession,
   ): Promise<Wallet> {
     return this.executeWalletOp({
       userId,
       amount,
       type: TransactionType.HOLD,
-      operation: (walletId, amt) =>
-        this.walletRepository.holdBalance(walletId, amt),
+      referenceId,
+      session,
+      operation: (walletId, amt, sess) =>
+        this.walletRepository.holdBalance(walletId, amt, sess),
       onNull: () => {
         throw new InsufficientFundsException();
       },
-      referenceId,
     });
   }
 
@@ -140,17 +159,19 @@ export class WalletService {
     userId: string,
     amount: number,
     referenceId?: string,
+    session?: ClientSession,
   ): Promise<Wallet> {
     return this.executeWalletOp({
       userId,
       amount,
       type: TransactionType.RELEASE,
-      operation: (walletId, amt) =>
-        this.walletRepository.releaseBalance(walletId, amt),
+      referenceId,
+      session,
+      operation: (walletId, amt, sess) =>
+        this.walletRepository.releaseBalance(walletId, amt, sess),
       onNull: () => {
         throw new InsufficientFundsException();
       },
-      referenceId,
     });
   }
 
@@ -158,17 +179,19 @@ export class WalletService {
     userId: string,
     amount: number,
     referenceId?: string,
+    session?: ClientSession,
   ): Promise<Wallet> {
     return this.executeWalletOp({
       userId,
       amount,
       type: TransactionType.CAPTURE,
-      operation: (walletId, amt) =>
-        this.walletRepository.captureHeldBalance(walletId, amt),
+      referenceId,
+      session,
+      operation: (walletId, amt, sess) =>
+        this.walletRepository.captureHeldBalance(walletId, amt, sess),
       onNull: () => {
         throw new InsufficientFundsException();
       },
-      referenceId,
     });
   }
 }

@@ -58,5 +58,5 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 nothing.txt
 
-test-google.html
-frontend-test.html
+bids-test.html
+/ui-test/
