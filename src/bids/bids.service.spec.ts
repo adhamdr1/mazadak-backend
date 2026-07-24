@@ -1,0 +1,248 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { BidsService } from './bids.service';
+import { WalletService } from '../wallet/wallet.service';
+import { Types } from 'mongoose';
+import { getConnectionToken } from '@nestjs/mongoose';
+import { BidStatus } from './enums/bid-status.enum';
+import { AuctionStatus } from '../auctions/enums/auction-status.enum';
+import { PlaceBidInput } from './dto/place-bid.input';
+import { BidsFilterInput } from './dto/bids-filter.input';
+import { AuctionNotFoundException } from '../auctions/exceptions/auction-not-found.exception';
+import { AuctionNotActiveException } from './exceptions/auction-not-active.exception';
+import { BidOnOwnAuctionException } from './exceptions/bid-on-own-auction.exception';
+import { AlreadyHighestBidderException } from './exceptions/already-highest-bidder.exception';
+import { BidAmountTooLowException } from './exceptions/bid-amount-too-low.exception';
+
+const mockBidRepository = {
+  findWinningByAuctionId: jest.fn(),
+  updateStatus: jest.fn(),
+  create: jest.fn(),
+  findByAuctionId: jest.fn(),
+  findByBidderId: jest.fn(),
+};
+
+const mockAuctionRepository = {
+  findById: jest.fn(),
+  updateCurrentPrice: jest.fn(),
+  findEndedWithoutWinner: jest.fn(),
+  setWinner: jest.fn(),
+};
+
+const mockWalletService = {
+  hold: jest.fn(),
+  release: jest.fn(),
+  capture: jest.fn(),
+  deposit: jest.fn(),
+};
+
+const mockSession = {
+  startTransaction: jest.fn(),
+  commitTransaction: jest.fn(),
+  abortTransaction: jest.fn(),
+  endSession: jest.fn(),
+};
+
+const mockConnection = {
+  startSession: jest.fn().mockResolvedValue(mockSession),
+};
+
+describe('BidsService', () => {
+  let service: BidsService;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        BidsService,
+        { provide: 'IBidRepository', useValue: mockBidRepository },
+        { provide: 'IAuctionRepository', useValue: mockAuctionRepository },
+        { provide: WalletService, useValue: mockWalletService },
+        { provide: getConnectionToken(), useValue: mockConnection },
+      ],
+    }).compile();
+
+    service = module.get<BidsService>(BidsService);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should be defined', () => {
+    expect(service).toBeDefined();
+  });
+
+  describe('placeBid', () => {
+    const userId = new Types.ObjectId().toString();
+    const auctionId = new Types.ObjectId().toString();
+    const input: PlaceBidInput = { auctionId, amount: 200 };
+
+    const mockAuction = {
+      _id: auctionId,
+      sellerId: new Types.ObjectId(),
+      status: AuctionStatus.ACTIVE,
+      startingPrice: 100,
+      currentPrice: 150,
+      minimumBidIncrement: 10,
+    };
+
+    it('should place a bid successfully and outbid previous winner', async () => {
+      mockAuctionRepository.findById.mockResolvedValue(mockAuction);
+      const prevWinner = {
+        _id: new Types.ObjectId(),
+        bidderId: new Types.ObjectId(),
+        amount: 150,
+      };
+      mockBidRepository.findWinningByAuctionId.mockResolvedValue(prevWinner);
+
+      const newBid = {
+        _id: new Types.ObjectId(),
+        bidderId: new Types.ObjectId(userId),
+        amount: 200,
+        status: BidStatus.WINNING,
+      };
+      mockBidRepository.create.mockResolvedValue(newBid);
+
+      const result = await service.placeBid(userId, input);
+
+      expect(result).toEqual(newBid);
+      expect(mockWalletService.hold).toHaveBeenCalledWith(
+        userId,
+        200,
+        auctionId,
+        mockSession,
+      );
+      expect(mockWalletService.release).toHaveBeenCalledWith(
+        prevWinner.bidderId.toString(),
+        150,
+        auctionId,
+        mockSession,
+      );
+      expect(mockBidRepository.updateStatus).toHaveBeenCalledWith(
+        prevWinner._id.toString(),
+        BidStatus.OUTBID,
+        mockSession,
+      );
+      expect(mockBidRepository.create).toHaveBeenCalled();
+      expect(mockAuctionRepository.updateCurrentPrice).toHaveBeenCalledWith(
+        auctionId,
+        200,
+        mockSession,
+      );
+      expect(mockSession.commitTransaction).toHaveBeenCalled();
+    });
+
+    it('should throw AuctionNotFoundException if auction does not exist', async () => {
+      mockAuctionRepository.findById.mockResolvedValue(null);
+      await expect(service.placeBid(userId, input)).rejects.toThrow(
+        AuctionNotFoundException,
+      );
+    });
+
+    it('should throw AuctionNotActiveException if auction is not active', async () => {
+      mockAuctionRepository.findById.mockResolvedValue({
+        ...mockAuction,
+        status: AuctionStatus.PENDING,
+      });
+      await expect(service.placeBid(userId, input)).rejects.toThrow(
+        AuctionNotActiveException,
+      );
+    });
+
+    it('should throw BidOnOwnAuctionException if user is seller', async () => {
+      mockAuctionRepository.findById.mockResolvedValue({
+        ...mockAuction,
+        sellerId: new Types.ObjectId(userId),
+      });
+      await expect(service.placeBid(userId, input)).rejects.toThrow(
+        BidOnOwnAuctionException,
+      );
+    });
+
+    it('should throw AlreadyHighestBidderException if user is already winning', async () => {
+      mockAuctionRepository.findById.mockResolvedValue(mockAuction);
+      mockBidRepository.findWinningByAuctionId.mockResolvedValue({
+        bidderId: new Types.ObjectId(userId),
+      });
+      await expect(service.placeBid(userId, input)).rejects.toThrow(
+        AlreadyHighestBidderException,
+      );
+    });
+
+    it('should throw BidAmountTooLowException if amount is lower than required', async () => {
+      mockAuctionRepository.findById.mockResolvedValue(mockAuction);
+      mockBidRepository.findWinningByAuctionId.mockResolvedValue({
+        bidderId: new Types.ObjectId(),
+        amount: 150,
+      });
+      // minimum required = 150 + 10 = 160
+      const lowInput = { auctionId, amount: 155 };
+      await expect(service.placeBid(userId, lowInput)).rejects.toThrow(
+        BidAmountTooLowException,
+      );
+    });
+  });
+
+  describe('finalizeEndedAuctions', () => {
+    it('should finalize ended auctions successfully', async () => {
+      const auctionId = new Types.ObjectId().toString();
+      const sellerId = new Types.ObjectId().toString();
+      const mockEndedAuctions = [
+        { _id: auctionId, sellerId: new Types.ObjectId(sellerId) },
+      ];
+      const mockWinningBid = { bidderId: new Types.ObjectId(), amount: 200 };
+
+      mockAuctionRepository.findEndedWithoutWinner.mockResolvedValue(
+        mockEndedAuctions,
+      );
+      mockBidRepository.findWinningByAuctionId.mockResolvedValue(
+        mockWinningBid,
+      );
+
+      await service.finalizeEndedAuctions();
+
+      const winnerId = mockWinningBid.bidderId.toString();
+      expect(mockWalletService.capture).toHaveBeenCalledWith(
+        winnerId,
+        200,
+        auctionId,
+        mockSession,
+      );
+      expect(mockWalletService.deposit).toHaveBeenCalledWith(
+        sellerId,
+        200,
+        auctionId,
+        mockSession,
+      );
+      expect(mockAuctionRepository.setWinner).toHaveBeenCalledWith(
+        auctionId,
+        winnerId,
+      );
+      expect(mockSession.commitTransaction).toHaveBeenCalled();
+    });
+
+    it('should do nothing if no ended auctions', async () => {
+      mockAuctionRepository.findEndedWithoutWinner.mockResolvedValue([]);
+      await service.finalizeEndedAuctions();
+      expect(mockBidRepository.findWinningByAuctionId).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Queries', () => {
+    const filter = new BidsFilterInput();
+    const mockPage = { items: [], total: 0 };
+
+    it('should get auction bids', async () => {
+      mockBidRepository.findByAuctionId.mockResolvedValue(mockPage);
+      const result = await service.getAuctionBids('auctionId', filter);
+      expect(result.items).toEqual([]);
+      expect(result.total).toBe(0);
+    });
+
+    it('should get user bids', async () => {
+      mockBidRepository.findByBidderId.mockResolvedValue(mockPage);
+      const result = await service.getMyBids('userId', filter);
+      expect(result.items).toEqual([]);
+      expect(result.total).toBe(0);
+    });
+  });
+});
