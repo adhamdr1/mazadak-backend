@@ -75,7 +75,7 @@ export class MongoWalletRepository implements IWalletRepository {
             $gte: [{ $subtract: ['$balance', '$heldBalance'] }, amount],
           },
         },
-        { $inc: { balance: -amount, heldBalance: amount } },
+        { $inc: { heldBalance: amount } },
         { returnDocument: 'after', session },
       )
       .exec();
@@ -93,7 +93,7 @@ export class MongoWalletRepository implements IWalletRepository {
           _id: new Types.ObjectId(walletId),
           $expr: { $gte: ['$heldBalance', amount] },
         },
-        { $inc: { balance: amount, heldBalance: -amount } },
+        { $inc: { heldBalance: -amount } },
         { returnDocument: 'after', session },
       )
       .exec();
@@ -111,7 +111,7 @@ export class MongoWalletRepository implements IWalletRepository {
           _id: new Types.ObjectId(walletId),
           $expr: { $gte: ['$heldBalance', amount] },
         },
-        { $inc: { heldBalance: -amount } },
+        { $inc: { balance: -amount, heldBalance: -amount } },
         { returnDocument: 'after', session },
       )
       .exec();

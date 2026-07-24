@@ -79,7 +79,11 @@ export class MongoBidRepository implements IBidRepository {
     session?: ClientSession,
   ): Promise<void> {
     await this.bidModel
-      .findByIdAndUpdate(bidId, { status }, { session, new: true })
+      .findByIdAndUpdate(
+        bidId,
+        { status },
+        { session, returnDocument: 'after' },
+      )
       .exec();
   }
 }

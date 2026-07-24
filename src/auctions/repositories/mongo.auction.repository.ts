@@ -119,7 +119,7 @@ export class MongoAuctionRepository implements IAuctionRepository {
     return await this.auctionModel
       .find({
         status: AuctionStatus.ENDED,
-        winnerId: { $exists: false },
+        winnerId: null,
       })
       .exec();
   }
