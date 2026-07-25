@@ -7,8 +7,6 @@ export interface AuctionsFilter {
   category?: AuctionCategory;
   status?: AuctionStatus;
   search?: string;
-  page: number;
-  limit: number;
 }
 
 export interface CreateAuctionData {
@@ -37,15 +35,24 @@ export interface IAuctionRepository {
 
   findById(id: string): Promise<Auction | null>;
 
-  findAll(filter: AuctionsFilter): Promise<{ items: Auction[]; total: number }>;
+  findAll(
+    page: number,
+    limit: number,
+    filter: AuctionsFilter,
+    excludeStatuses?: AuctionStatus[],
+  ): Promise<{ items: Auction[]; total: number }>;
 
   findBySellerId(
     sellerId: string,
+    page: number,
+    limit: number,
     filter: AuctionsFilter,
   ): Promise<{ items: Auction[]; total: number }>;
 
   findByWinnerId(
     winnerId: string,
+    page: number,
+    limit: number,
     filter: AuctionsFilter,
   ): Promise<{ items: Auction[]; total: number }>;
 

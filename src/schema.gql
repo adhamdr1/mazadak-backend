@@ -186,10 +186,11 @@ type Query {
   myWallet: Wallet!
   myTransactions(input: PaginationInput, filter: TransactionsFilterInput): TransactionsPage!
   transactions(input: PaginationInput, filter: TransactionsFilterInput): TransactionsPage!
-  auctions(filter: AuctionsFilterInput): AuctionsPage!
+  auctions(input: PaginationInput!, filter: AuctionsFilterInput): AuctionsPage!
+  adminAuctions(input: PaginationInput!, filter: AuctionsFilterInput): AuctionsPage!
   auction(id: ID!): Auction!
-  myAuctions(filter: AuctionsFilterInput): AuctionsPage!
-  myWonAuctions(filter: AuctionsFilterInput): AuctionsPage!
+  myAuctions(input: PaginationInput!, filter: AuctionsFilterInput): AuctionsPage!
+  myWonAuctions(input: PaginationInput!, filter: AuctionsFilterInput): AuctionsPage!
   auctionBids(auctionId: String!, filter: BidsFilterInput): BidsPage!
   myBids(filter: BidsFilterInput): BidsPage!
 }
@@ -219,8 +220,6 @@ input AuctionsFilterInput {
   category: AuctionCategory
   status: AuctionStatus
   search: String
-  page: Int! = 1
-  limit: Int! = 10
 }
 
 input BidsFilterInput {

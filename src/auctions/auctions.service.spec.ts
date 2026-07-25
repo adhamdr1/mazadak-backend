@@ -14,6 +14,7 @@ import { AuctionStartTimeTooSoonException } from './exceptions/auction-start-tim
 import { AuctionEndTimeInvalidException } from './exceptions/auction-end-time-invalid.exception';
 import { AuctionInvalidStateException } from './exceptions/auction-invalid-state.exception';
 import { AuctionNotPendingException } from './exceptions/auction-not-pending.exception';
+import { PaginationInput } from '../common/dto/pagination.input';
 
 const mockAuctionRepository = {
   create: jest.fn(),
@@ -114,15 +115,32 @@ describe('AuctionsService', () => {
 
   describe('find queries', () => {
     const filter = new AuctionsFilterInput();
+    const pagination: PaginationInput = { page: 1, limit: 10 };
     const mockPageResult = { items: [mockAuction], total: 1 };
 
-    it('findAuctions should return paginated result', async () => {
+    it('findAuctions should return paginated result and exclude CANCELLED', async () => {
       mockAuctionRepository.findAll.mockResolvedValue(mockPageResult);
-      const result = await service.findAuctions(filter);
+      const result = await service.findAuctions(pagination, filter);
       expect(result.items).toEqual(mockPageResult.items);
       expect(result.total).toBe(1);
       expect(result.totalPages).toBe(1);
-      expect(mockAuctionRepository.findAll).toHaveBeenCalledWith(filter);
+      expect(mockAuctionRepository.findAll).toHaveBeenCalledWith(
+        pagination.page,
+        pagination.limit,
+        filter,
+        [AuctionStatus.CANCELLED],
+      );
+    });
+
+    it('findAllForAdmin should return all statuses', async () => {
+      mockAuctionRepository.findAll.mockResolvedValue(mockPageResult);
+      const result = await service.findAllForAdmin(pagination, filter);
+      expect(result.total).toBe(1);
+      expect(mockAuctionRepository.findAll).toHaveBeenCalledWith(
+        pagination.page,
+        pagination.limit,
+        filter,
+      );
     });
 
     it('findAuction should return single auction', async () => {
@@ -140,14 +158,30 @@ describe('AuctionsService', () => {
 
     it('findMyAuctions should return paginated result', async () => {
       mockAuctionRepository.findBySellerId.mockResolvedValue(mockPageResult);
-      const result = await service.findMyAuctions(sellerId, filter);
+      const result = await service.findMyAuctions(sellerId, pagination, filter);
       expect(result.total).toBe(1);
+      expect(mockAuctionRepository.findBySellerId).toHaveBeenCalledWith(
+        sellerId,
+        pagination.page,
+        pagination.limit,
+        filter,
+      );
     });
 
     it('findWonAuctions should return paginated result', async () => {
       mockAuctionRepository.findByWinnerId.mockResolvedValue(mockPageResult);
-      const result = await service.findWonAuctions(sellerId, filter);
+      const result = await service.findWonAuctions(
+        sellerId,
+        pagination,
+        filter,
+      );
       expect(result.total).toBe(1);
+      expect(mockAuctionRepository.findByWinnerId).toHaveBeenCalledWith(
+        sellerId,
+        pagination.page,
+        pagination.limit,
+        filter,
+      );
     });
   });
 

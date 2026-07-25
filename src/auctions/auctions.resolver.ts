@@ -8,9 +8,12 @@ import { AuctionsFilterInput } from './dto/auctions-filter.input';
 import { AuctionsPage } from './dto/auctions-page.type';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { UserRole } from '../users/enums/user-role.enum';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
+import { PaginationInput } from '../common/dto/pagination.input';
 
 @Resolver(() => Auction)
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -22,10 +25,21 @@ export class AuctionsResolver {
   @Public()
   @Query(() => AuctionsPage, { name: 'auctions' })
   async getAuctions(
+    @Args('input') input: PaginationInput,
     @Args('filter', { nullable: true })
     filter: AuctionsFilterInput = new AuctionsFilterInput(),
   ): Promise<AuctionsPage> {
-    return this.auctionsService.findAuctions(filter);
+    return this.auctionsService.findAuctions(input, filter);
+  }
+
+  @Query(() => AuctionsPage, { name: 'adminAuctions' })
+  @Roles(UserRole.ADMIN)
+  async adminAuctions(
+    @Args('input') input: PaginationInput,
+    @Args('filter', { nullable: true })
+    filter: AuctionsFilterInput = new AuctionsFilterInput(),
+  ): Promise<AuctionsPage> {
+    return this.auctionsService.findAllForAdmin(input, filter);
   }
 
   @Public()
@@ -39,19 +53,21 @@ export class AuctionsResolver {
   @Query(() => AuctionsPage, { name: 'myAuctions' })
   async getMyAuctions(
     @CurrentUser() currentUser: JwtPayload,
+    @Args('input') input: PaginationInput,
     @Args('filter', { nullable: true })
     filter: AuctionsFilterInput = new AuctionsFilterInput(),
   ): Promise<AuctionsPage> {
-    return this.auctionsService.findMyAuctions(currentUser.sub, filter);
+    return this.auctionsService.findMyAuctions(currentUser.sub, input, filter);
   }
 
   @Query(() => AuctionsPage, { name: 'myWonAuctions' })
   async getMyWonAuctions(
     @CurrentUser() currentUser: JwtPayload,
+    @Args('input') input: PaginationInput,
     @Args('filter', { nullable: true })
     filter: AuctionsFilterInput = new AuctionsFilterInput(),
   ): Promise<AuctionsPage> {
-    return this.auctionsService.findWonAuctions(currentUser.sub, filter);
+    return this.auctionsService.findWonAuctions(currentUser.sub, input, filter);
   }
 
   // ─── Mutations ────────────────────────────────────────────────────────────

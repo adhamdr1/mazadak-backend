@@ -10,6 +10,7 @@ import { CreateAuctionInput } from './dto/create-auction.input';
 
 const mockAuctionsService = {
   findAuctions: jest.fn(),
+  findAllForAdmin: jest.fn(),
   findAuction: jest.fn(),
   findMyAuctions: jest.fn(),
   findWonAuctions: jest.fn(),
@@ -63,13 +64,30 @@ describe('AuctionsResolver', () => {
   };
 
   describe('Queries', () => {
+    const pagination = { page: 1, limit: 10 };
+
     it('getAuctions should return paginated auctions', async () => {
       mockAuctionsService.findAuctions.mockResolvedValue(mockPageResult);
       const filter = new AuctionsFilterInput();
-      const result = await resolver.getAuctions(filter);
+      const result = await resolver.getAuctions(pagination, filter);
 
       expect(result).toEqual(mockPageResult);
-      expect(mockAuctionsService.findAuctions).toHaveBeenCalledWith(filter);
+      expect(mockAuctionsService.findAuctions).toHaveBeenCalledWith(
+        pagination,
+        filter,
+      );
+    });
+
+    it('adminAuctions should return all paginated auctions', async () => {
+      mockAuctionsService.findAllForAdmin.mockResolvedValue(mockPageResult);
+      const filter = new AuctionsFilterInput();
+      const result = await resolver.adminAuctions(pagination, filter);
+
+      expect(result).toEqual(mockPageResult);
+      expect(mockAuctionsService.findAllForAdmin).toHaveBeenCalledWith(
+        pagination,
+        filter,
+      );
     });
 
     it('getAuction should return single auction', async () => {
@@ -83,11 +101,16 @@ describe('AuctionsResolver', () => {
     it('getMyAuctions should return user auctions', async () => {
       mockAuctionsService.findMyAuctions.mockResolvedValue(mockPageResult);
       const filter = new AuctionsFilterInput();
-      const result = await resolver.getMyAuctions(mockCurrentUser, filter);
+      const result = await resolver.getMyAuctions(
+        mockCurrentUser,
+        pagination,
+        filter,
+      );
 
       expect(result).toEqual(mockPageResult);
       expect(mockAuctionsService.findMyAuctions).toHaveBeenCalledWith(
         userId,
+        pagination,
         filter,
       );
     });
@@ -95,11 +118,16 @@ describe('AuctionsResolver', () => {
     it('getMyWonAuctions should return user won auctions', async () => {
       mockAuctionsService.findWonAuctions.mockResolvedValue(mockPageResult);
       const filter = new AuctionsFilterInput();
-      const result = await resolver.getMyWonAuctions(mockCurrentUser, filter);
+      const result = await resolver.getMyWonAuctions(
+        mockCurrentUser,
+        pagination,
+        filter,
+      );
 
       expect(result).toEqual(mockPageResult);
       expect(mockAuctionsService.findWonAuctions).toHaveBeenCalledWith(
         userId,
+        pagination,
         filter,
       );
     });
