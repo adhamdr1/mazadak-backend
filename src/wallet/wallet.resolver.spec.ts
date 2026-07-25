@@ -8,10 +8,14 @@ import { Types } from 'mongoose';
 import { DepositInput } from './dto/deposit.input';
 import { WithdrawInput } from './dto/withdraw.input';
 
+import { PaginationInput } from '../common/dto/pagination.input';
+
 const mockWalletService = {
   getMyWallet: jest.fn(),
   deposit: jest.fn(),
   withdraw: jest.fn(),
+  getAllWallets: jest.fn(),
+  getWalletByUserId: jest.fn(),
 };
 
 describe('WalletResolver', () => {
@@ -97,6 +101,35 @@ describe('WalletResolver', () => {
         currentUser.sub,
         20,
       );
+    });
+  });
+  describe('wallets', () => {
+    it('should call getAllWallets on service', async () => {
+      const input: PaginationInput = { page: 1, limit: 10 };
+      const expectedPage = {
+        items: [mockWallet],
+        total: 1,
+        totalPages: 1,
+        hasNextPage: false,
+      };
+      mockWalletService.getAllWallets.mockResolvedValue(expectedPage);
+
+      const result = await resolver.wallets(input);
+
+      expect(result).toEqual(expectedPage);
+      expect(mockWalletService.getAllWallets).toHaveBeenCalledWith(input);
+    });
+  });
+
+  describe('adminGetWallet', () => {
+    it('should call getWalletByUserId on service', async () => {
+      const userId = new Types.ObjectId().toString();
+      mockWalletService.getWalletByUserId.mockResolvedValue(mockWallet);
+
+      const result = await resolver.adminGetWallet(userId);
+
+      expect(result).toEqual(mockWallet);
+      expect(mockWalletService.getWalletByUserId).toHaveBeenCalledWith(userId);
     });
   });
 });

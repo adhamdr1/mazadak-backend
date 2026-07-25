@@ -8,6 +8,8 @@ import { InvalidAmountException } from './exceptions/invalid-amount.exception';
 import { TransactionService } from '../transaction/transaction.service';
 import { TransactionType } from '../transaction/enums/transaction-type.enum';
 import { TransactionStatus } from '../transaction/enums/transaction-status.enum';
+import { WalletsPage } from './dto/wallets-page.type';
+import { PaginationInput } from '../common/dto/pagination.input';
 
 @Injectable()
 export class WalletService {
@@ -87,6 +89,28 @@ export class WalletService {
    */
   async createWallet(userId: string, session?: ClientSession): Promise<Wallet> {
     return await this.walletRepository.create(userId, session);
+  }
+
+  // ─── Admin-Facing ─────────────────────────────────────────────────────────────
+
+  async getAllWallets(input: PaginationInput): Promise<WalletsPage> {
+    const { page, limit } = input;
+    const [items, total] = await Promise.all([
+      this.walletRepository.findAll(page, limit),
+      this.walletRepository.countAll(),
+    ]);
+
+    const totalPages = Math.ceil(total / limit);
+    return {
+      items,
+      total,
+      totalPages,
+      hasNextPage: page < totalPages,
+    };
+  }
+
+  async getWalletByUserId(userId: string): Promise<Wallet> {
+    return await this.getWalletOrThrow(userId);
   }
 
   // ─── User-Facing ─────────────────────────────────────────────────────────────

@@ -7,6 +7,7 @@ import { InvalidAmountException } from './exceptions/invalid-amount.exception';
 import { TransactionType } from '../transaction/enums/transaction-type.enum';
 import { TransactionStatus } from '../transaction/enums/transaction-status.enum';
 import { Types } from 'mongoose';
+import { PaginationInput } from '../common/dto/pagination.input';
 
 const mockWalletRepository = {
   findByUserId: jest.fn(),
@@ -16,6 +17,8 @@ const mockWalletRepository = {
   holdBalance: jest.fn(),
   releaseBalance: jest.fn(),
   captureHeldBalance: jest.fn(),
+  findAll: jest.fn(),
+  countAll: jest.fn(),
 };
 
 const mockTransactionService = {
@@ -277,6 +280,43 @@ describe('WalletService', () => {
         status: TransactionStatus.FAILED,
         referenceId: refId,
       });
+    });
+  });
+  describe('getAllWallets', () => {
+    it('should return paginated wallets', async () => {
+      const input: PaginationInput = { page: 1, limit: 10 };
+      mockWalletRepository.findAll.mockResolvedValue([mockWallet]);
+      mockWalletRepository.countAll.mockResolvedValue(1);
+
+      const result = await service.getAllWallets(input);
+
+      expect(result).toEqual({
+        items: [mockWallet],
+        total: 1,
+        totalPages: 1,
+        hasNextPage: false,
+      });
+      expect(mockWalletRepository.findAll).toHaveBeenCalledWith(1, 10);
+      expect(mockWalletRepository.countAll).toHaveBeenCalled();
+    });
+  });
+
+  describe('getWalletByUserId', () => {
+    it('should return the wallet for the user', async () => {
+      mockWalletRepository.findByUserId.mockResolvedValue(mockWallet);
+
+      const result = await service.getWalletByUserId(userId);
+
+      expect(result).toEqual(mockWallet);
+      expect(mockWalletRepository.findByUserId).toHaveBeenCalledWith(userId);
+    });
+
+    it('should throw WalletNotFoundException if wallet does not exist', async () => {
+      mockWalletRepository.findByUserId.mockResolvedValue(null);
+
+      await expect(service.getWalletByUserId(userId)).rejects.toThrow(
+        WalletNotFoundException,
+      );
     });
   });
 });
