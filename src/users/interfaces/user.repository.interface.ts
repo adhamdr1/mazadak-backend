@@ -46,6 +46,7 @@ export interface IUserRepository {
   findAll(
     page: number,
     limit: number,
+    search?: string,
   ): Promise<{ items: User[]; total: number }>;
 
   softDelete(id: string): Promise<void>;

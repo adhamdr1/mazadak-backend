@@ -173,7 +173,7 @@ type BidsPage {
 type Query {
   me: User!
   findUser(input: FindUserInput!): User!
-  users(input: PaginationInput!): UsersPage!
+  users(input: PaginationInput!, filter: UsersFilterInput): UsersPage!
   myWallet: Wallet!
   myTransactions(input: MyTransactionsInput): TransactionsPage!
   auctions(filter: AuctionsFilterInput): AuctionsPage!
@@ -191,6 +191,10 @@ input FindUserInput {
 input PaginationInput {
   page: Int! = 1
   limit: Int! = 10
+}
+
+input UsersFilterInput {
+  search: String
 }
 
 input MyTransactionsInput {

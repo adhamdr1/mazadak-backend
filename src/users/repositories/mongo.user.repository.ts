@@ -93,17 +93,30 @@ export class MongoUserRepository implements IUserRepository {
   async findAll(
     page: number,
     limit: number,
+    search?: string,
   ): Promise<{ items: User[]; total: number }> {
     const skip = (page - 1) * limit;
 
+    const query: Record<string, any> = {
+      deletedAt: null,
+    };
+    if (search) {
+      query.$or = [
+        { firstName: { $regex: search, $options: 'i' } },
+        { lastName: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { phoneNumber: { $regex: search, $options: 'i' } },
+      ];
+    }
+
     const [items, total] = await Promise.all([
       this.userModel
-        .find({ deletedAt: null })
+        .find(query)
         .sort({ _id: -1 })
         .skip(skip)
         .limit(limit)
         .exec(),
-      this.userModel.countDocuments({ deletedAt: null }).exec(),
+      this.userModel.countDocuments(query).exec(),
     ]);
 
     return { items, total };
