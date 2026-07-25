@@ -10,10 +10,15 @@ import { UseGuards } from '@nestjs/common';
 import { WalletService } from './wallet.service';
 import { Wallet } from './entities/wallet.entity';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { UserRole } from '../users/enums/user-role.enum';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { DepositInput } from './dto/deposit.input';
 import { WithdrawInput } from './dto/withdraw.input';
+import { WalletsPage } from './dto/wallets-page.type';
+import { PaginationInput } from '../common/dto/pagination.input';
 
 @Resolver(() => Wallet)
 @UseGuards(JwtAuthGuard)
@@ -21,6 +26,20 @@ export class WalletResolver {
   constructor(private readonly walletService: WalletService) {}
 
   // ─── Queries ──────────────────────────────────────────────────────────────
+
+  @Query(() => WalletsPage, { name: 'wallets' })
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async wallets(@Args('input') input: PaginationInput): Promise<WalletsPage> {
+    return this.walletService.getAllWallets(input);
+  }
+
+  @Query(() => Wallet, { name: 'adminGetWallet' })
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async adminGetWallet(@Args('userId') userId: string): Promise<Wallet> {
+    return this.walletService.getWalletByUserId(userId);
+  }
 
   @Query(() => Wallet, { name: 'myWallet' })
   async myWallet(@CurrentUser() currentUser: JwtPayload): Promise<Wallet> {

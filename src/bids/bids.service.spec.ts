@@ -19,6 +19,7 @@ const mockBidRepository = {
   create: jest.fn(),
   findByAuctionId: jest.fn(),
   findByBidderId: jest.fn(),
+  findAll: jest.fn(),
 };
 
 const mockAuctionRepository = {
@@ -229,20 +230,49 @@ describe('BidsService', () => {
 
   describe('Queries', () => {
     const filter = new BidsFilterInput();
+    const pagination = { page: 1, limit: 10 };
     const mockPage = { items: [], total: 0 };
 
     it('should get auction bids', async () => {
       mockBidRepository.findByAuctionId.mockResolvedValue(mockPage);
-      const result = await service.getAuctionBids('auctionId', filter);
+      const result = await service.getAuctionBids(
+        'auctionId',
+        pagination,
+        filter,
+      );
       expect(result.items).toEqual([]);
       expect(result.total).toBe(0);
+      expect(mockBidRepository.findByAuctionId).toHaveBeenCalledWith(
+        'auctionId',
+        pagination.page,
+        pagination.limit,
+        filter,
+      );
     });
 
     it('should get user bids', async () => {
       mockBidRepository.findByBidderId.mockResolvedValue(mockPage);
-      const result = await service.getMyBids('userId', filter);
+      const result = await service.getMyBids('userId', pagination, filter);
       expect(result.items).toEqual([]);
       expect(result.total).toBe(0);
+      expect(mockBidRepository.findByBidderId).toHaveBeenCalledWith(
+        'userId',
+        pagination.page,
+        pagination.limit,
+        filter,
+      );
+    });
+
+    it('should get all bids for admin', async () => {
+      mockBidRepository.findAll.mockResolvedValue(mockPage);
+      const result = await service.adminGetAllBids(pagination, filter);
+      expect(result.items).toEqual([]);
+      expect(result.total).toBe(0);
+      expect(mockBidRepository.findAll).toHaveBeenCalledWith(
+        pagination.page,
+        pagination.limit,
+        filter,
+      );
     });
   });
 });

@@ -9,6 +9,7 @@ import { CreateAuctionInput } from './dto/create-auction.input';
 import { UpdateAuctionInput } from './dto/update-auction.input';
 import { AuctionsFilterInput } from './dto/auctions-filter.input';
 import { AuctionsPage } from './dto/auctions-page.type';
+import { PaginationInput } from '../common/dto/pagination.input';
 import { AuctionNotFoundException } from './exceptions/auction-not-found.exception';
 import { AuctionInvalidStateException } from './exceptions/auction-invalid-state.exception';
 import { AuctionForbiddenException } from './exceptions/auction-forbidden.exception';
@@ -62,13 +63,13 @@ export class AuctionsService {
   private buildPage(
     items: Auction[],
     total: number,
-    filter: AuctionsFilterInput,
+    pagination: PaginationInput,
   ): AuctionsPage {
     return {
       items,
       total,
-      totalPages: Math.ceil(total / filter.limit),
-      hasNextPage: filter.page * filter.limit < total,
+      totalPages: Math.ceil(total / pagination.limit),
+      hasNextPage: pagination.page * pagination.limit < total,
     };
   }
 
@@ -93,9 +94,29 @@ export class AuctionsService {
     });
   }
 
-  async findAuctions(filter: AuctionsFilterInput): Promise<AuctionsPage> {
-    const { items, total } = await this.auctionRepository.findAll(filter);
-    return this.buildPage(items, total, filter);
+  async findAuctions(
+    input: PaginationInput,
+    filter: AuctionsFilterInput,
+  ): Promise<AuctionsPage> {
+    const { items, total } = await this.auctionRepository.findAll(
+      input.page,
+      input.limit,
+      filter,
+      [AuctionStatus.CANCELLED],
+    );
+    return this.buildPage(items, total, input);
+  }
+
+  async findAllForAdmin(
+    input: PaginationInput,
+    filter: AuctionsFilterInput,
+  ): Promise<AuctionsPage> {
+    const { items, total } = await this.auctionRepository.findAll(
+      input.page,
+      input.limit,
+      filter,
+    );
+    return this.buildPage(items, total, input);
   }
 
   async findAuction(id: string): Promise<Auction> {
@@ -104,24 +125,30 @@ export class AuctionsService {
 
   async findMyAuctions(
     sellerId: string,
+    input: PaginationInput,
     filter: AuctionsFilterInput,
   ): Promise<AuctionsPage> {
     const { items, total } = await this.auctionRepository.findBySellerId(
       sellerId,
+      input.page,
+      input.limit,
       filter,
     );
-    return this.buildPage(items, total, filter);
+    return this.buildPage(items, total, input);
   }
 
   async findWonAuctions(
     winnerId: string,
+    input: PaginationInput,
     filter: AuctionsFilterInput,
   ): Promise<AuctionsPage> {
     const { items, total } = await this.auctionRepository.findByWinnerId(
       winnerId,
+      input.page,
+      input.limit,
       filter,
     );
-    return this.buildPage(items, total, filter);
+    return this.buildPage(items, total, input);
   }
 
   async updateAuction(

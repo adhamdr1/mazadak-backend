@@ -121,10 +121,14 @@ export class UsersService {
     return this.userRepository.findByGoogleId(googleId);
   }
 
-  async findAll(pagination: PaginationInput): Promise<UsersPage> {
+  async findAll(
+    pagination: PaginationInput,
+    search?: string,
+  ): Promise<UsersPage> {
     const { items, total } = await this.userRepository.findAll(
       pagination.page,
       pagination.limit,
+      search,
     );
     return this.buildPage(items, total, pagination.limit, pagination.page);
   }

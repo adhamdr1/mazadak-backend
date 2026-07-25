@@ -8,6 +8,10 @@ export interface IWalletRepository {
 
   findById(walletId: string): Promise<Wallet | null>;
 
+  findAll(page: number, limit: number): Promise<Wallet[]>;
+
+  countAll(): Promise<number>;
+
   creditBalance(
     walletId: string,
     amount: number,

@@ -6,6 +6,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { PlaceBidInput } from './dto/place-bid.input';
 import { BidsFilterInput } from './dto/bids-filter.input';
 import { BidsPage } from './dto/bids-page.type';
+import { PaginationInput } from '../common/dto/pagination.input';
 import { Bid } from './entities/bid.entity';
 import { BidStatus } from './enums/bid-status.enum';
 
@@ -181,36 +182,64 @@ export class BidsService {
     }
   }
 
+  async adminGetAllBids(
+    input: PaginationInput,
+    filter: BidsFilterInput,
+  ): Promise<BidsPage> {
+    const { items, total } = await this.bidRepository.findAll(
+      input.page,
+      input.limit,
+      filter,
+    );
+    const totalPages = Math.ceil(total / input.limit);
+
+    return {
+      items,
+      total,
+      totalPages,
+      hasNextPage: input.page < totalPages,
+    };
+  }
+
   async getAuctionBids(
     auctionId: string,
+    input: PaginationInput,
     filter: BidsFilterInput,
   ): Promise<BidsPage> {
     const { items, total } = await this.bidRepository.findByAuctionId(
       auctionId,
+      input.page,
+      input.limit,
       filter,
     );
-    const totalPages = Math.ceil(total / filter.limit);
+    const totalPages = Math.ceil(total / input.limit);
 
     return {
       items,
       total,
       totalPages,
-      hasNextPage: filter.page < totalPages,
+      hasNextPage: input.page < totalPages,
     };
   }
 
-  async getMyBids(userId: string, filter: BidsFilterInput): Promise<BidsPage> {
+  async getMyBids(
+    userId: string,
+    input: PaginationInput,
+    filter: BidsFilterInput,
+  ): Promise<BidsPage> {
     const { items, total } = await this.bidRepository.findByBidderId(
       userId,
+      input.page,
+      input.limit,
       filter,
     );
-    const totalPages = Math.ceil(total / filter.limit);
+    const totalPages = Math.ceil(total / input.limit);
 
     return {
       items,
       total,
       totalPages,
-      hasNextPage: filter.page < totalPages,
+      hasNextPage: input.page < totalPages,
     };
   }
 }

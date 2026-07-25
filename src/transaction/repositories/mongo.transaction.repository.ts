@@ -9,7 +9,7 @@ import {
   Transaction,
   TransactionDocument,
 } from '../entities/transaction.entity';
-import { TransactionType } from '../enums/transaction-type.enum';
+import { TransactionsFilterInput } from '../dto/transactions-filter.input';
 
 @Injectable()
 export class MongoTransactionRepository implements ITransactionRepository {
@@ -29,19 +29,42 @@ export class MongoTransactionRepository implements ITransactionRepository {
     return transaction.save();
   }
 
+  private buildFilterQuery(
+    baseFilter: Record<string, unknown>,
+    filter?: TransactionsFilterInput,
+  ): Record<string, unknown> {
+    const query = { ...baseFilter };
+    if (!filter) return query;
+
+    if (filter.type) query['type'] = filter.type;
+    if (filter.status) query['status'] = filter.status;
+    if (filter.search) {
+      query['referenceId'] = { $regex: filter.search, $options: 'i' };
+    }
+
+    if (filter.startDate || filter.endDate) {
+      const createdAtQuery: Record<string, Date> = {};
+      if (filter.startDate) createdAtQuery['$gte'] = filter.startDate;
+      if (filter.endDate) createdAtQuery['$lte'] = filter.endDate;
+      query['createdAt'] = createdAtQuery;
+    }
+
+    return query;
+  }
+
   async findByWalletId(
     walletId: string,
     page: number,
     limit: number,
-    type?: TransactionType,
+    filter?: TransactionsFilterInput,
   ): Promise<Transaction[]> {
-    const filter: Record<string, unknown> = {
-      walletId: new Types.ObjectId(walletId),
-    };
-    if (type) filter['type'] = type;
+    const query = this.buildFilterQuery(
+      { walletId: new Types.ObjectId(walletId) },
+      filter,
+    );
 
     return this.transactionModel
-      .find(filter)
+      .find(query)
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
@@ -50,13 +73,33 @@ export class MongoTransactionRepository implements ITransactionRepository {
 
   async countByWalletId(
     walletId: string,
-    type?: TransactionType,
+    filter?: TransactionsFilterInput,
   ): Promise<number> {
-    const filter: Record<string, unknown> = {
-      walletId: new Types.ObjectId(walletId),
-    };
-    if (type) filter['type'] = type;
+    const query = this.buildFilterQuery(
+      { walletId: new Types.ObjectId(walletId) },
+      filter,
+    );
 
-    return this.transactionModel.countDocuments(filter).exec();
+    return this.transactionModel.countDocuments(query).exec();
+  }
+
+  async findAll(
+    page: number,
+    limit: number,
+    filter?: TransactionsFilterInput,
+  ): Promise<Transaction[]> {
+    const query = this.buildFilterQuery({}, filter);
+
+    return this.transactionModel
+      .find(query)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .exec();
+  }
+
+  async countAll(filter?: TransactionsFilterInput): Promise<number> {
+    const query = this.buildFilterQuery({}, filter);
+    return this.transactionModel.countDocuments(query).exec();
   }
 }

@@ -1,13 +1,5 @@
-import { Field, InputType, Int } from '@nestjs/graphql';
-import {
-  IsEnum,
-  IsInt,
-  IsOptional,
-  IsString,
-  Max,
-  MaxLength,
-  Min,
-} from 'class-validator';
+import { Field, InputType } from '@nestjs/graphql';
+import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 import { AuctionCategory } from '../enums/auction-category.enum';
 import { AuctionStatus } from '../enums/auction-status.enum';
 
@@ -28,15 +20,4 @@ export class AuctionsFilterInput {
   @IsString()
   @MaxLength(100, { message: 'Search term must not exceed 100 characters' })
   search?: string;
-
-  @Field(() => Int, { defaultValue: 1 })
-  @IsInt()
-  @Min(1, { message: 'Page must be at least 1' })
-  page: number = 1;
-
-  @Field(() => Int, { defaultValue: 10 })
-  @IsInt()
-  @Min(1, { message: 'Limit must be at least 1' })
-  @Max(100, { message: 'Limit must not exceed 100' })
-  limit: number = 10;
 }

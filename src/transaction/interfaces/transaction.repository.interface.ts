@@ -1,6 +1,7 @@
 import { Transaction } from '../entities/transaction.entity';
 import { TransactionType } from '../enums/transaction-type.enum';
 import { TransactionStatus } from '../enums/transaction-status.enum';
+import { TransactionsFilterInput } from '../dto/transactions-filter.input';
 
 export interface CreateTransactionData {
   walletId: string;
@@ -17,8 +18,19 @@ export interface ITransactionRepository {
     walletId: string,
     page: number,
     limit: number,
-    type?: TransactionType,
+    filter?: TransactionsFilterInput,
   ): Promise<Transaction[]>;
 
-  countByWalletId(walletId: string, type?: TransactionType): Promise<number>;
+  countByWalletId(
+    walletId: string,
+    filter?: TransactionsFilterInput,
+  ): Promise<number>;
+
+  findAll(
+    page: number,
+    limit: number,
+    filter?: TransactionsFilterInput,
+  ): Promise<Transaction[]>;
+
+  countAll(filter?: TransactionsFilterInput): Promise<number>;
 }

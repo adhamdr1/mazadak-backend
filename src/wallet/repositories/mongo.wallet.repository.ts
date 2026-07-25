@@ -26,6 +26,20 @@ export class MongoWalletRepository implements IWalletRepository {
     return await this.walletModel.findById(new Types.ObjectId(walletId)).exec();
   }
 
+  async findAll(page: number, limit: number): Promise<Wallet[]> {
+    const skip = (page - 1) * limit;
+    return await this.walletModel
+      .find()
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .exec();
+  }
+
+  async countAll(): Promise<number> {
+    return await this.walletModel.countDocuments().exec();
+  }
+
   // Deposit: no condition needed, always safe to credit.
   async creditBalance(
     walletId: string,

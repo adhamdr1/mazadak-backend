@@ -12,6 +12,7 @@ import { FindUserInput } from './dto/find-user.input';
 import { PaginationInput } from '../common/dto/pagination.input';
 import { UpdateUserInput } from './dto/update-user.input';
 import { UsersPage } from './dto/users-page.type';
+import { UsersFilterInput } from './dto/users-filter.input';
 
 @Resolver(() => User)
 @UseGuards(JwtAuthGuard)
@@ -37,8 +38,11 @@ export class UsersResolver {
   @Query(() => UsersPage, { name: 'users' })
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
-  async findAll(@Args('input') input: PaginationInput): Promise<UsersPage> {
-    return this.usersService.findAll(input);
+  async findAll(
+    @Args('input') input: PaginationInput,
+    @Args('filter', { nullable: true }) filter?: UsersFilterInput,
+  ): Promise<UsersPage> {
+    return this.usersService.findAll(input, filter?.search);
   }
 
   // ─── User Mutations ────────────────────────────────────────────────────────

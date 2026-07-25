@@ -15,13 +15,23 @@ export interface IBidRepository {
 
   findWinningByAuctionId(auctionId: string): Promise<Bid | null>;
 
+  findAll(
+    page: number,
+    limit: number,
+    filter: BidsFilterInput,
+  ): Promise<{ items: Bid[]; total: number }>;
+
   findByAuctionId(
     auctionId: string,
+    page: number,
+    limit: number,
     filter: BidsFilterInput,
   ): Promise<{ items: Bid[]; total: number }>;
 
   findByBidderId(
     bidderId: string,
+    page: number,
+    limit: number,
     filter: BidsFilterInput,
   ): Promise<{ items: Bid[]; total: number }>;
 

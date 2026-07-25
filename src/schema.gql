@@ -62,6 +62,13 @@ type Wallet {
   updatedAt: DateTime!
 }
 
+type WalletsPage {
+  items: [Wallet!]!
+  total: Int!
+  totalPages: Int!
+  hasNextPage: Boolean!
+}
+
 type Transaction {
   _id: ID!
   walletId: ID!
@@ -173,15 +180,20 @@ type BidsPage {
 type Query {
   me: User!
   findUser(input: FindUserInput!): User!
-  users(input: PaginationInput!): UsersPage!
+  users(input: PaginationInput!, filter: UsersFilterInput): UsersPage!
+  wallets(input: PaginationInput!): WalletsPage!
+  adminGetWallet(userId: String!): Wallet!
   myWallet: Wallet!
-  myTransactions(input: MyTransactionsInput): TransactionsPage!
-  auctions(filter: AuctionsFilterInput): AuctionsPage!
+  myTransactions(input: PaginationInput, filter: TransactionsFilterInput): TransactionsPage!
+  transactions(input: PaginationInput, filter: TransactionsFilterInput): TransactionsPage!
+  auctions(input: PaginationInput!, filter: AuctionsFilterInput): AuctionsPage!
+  adminAuctions(input: PaginationInput!, filter: AuctionsFilterInput): AuctionsPage!
   auction(id: ID!): Auction!
-  myAuctions(filter: AuctionsFilterInput): AuctionsPage!
-  myWonAuctions(filter: AuctionsFilterInput): AuctionsPage!
-  auctionBids(auctionId: String!, filter: BidsFilterInput): BidsPage!
-  myBids(filter: BidsFilterInput): BidsPage!
+  myAuctions(input: PaginationInput!, filter: AuctionsFilterInput): AuctionsPage!
+  myWonAuctions(input: PaginationInput!, filter: AuctionsFilterInput): AuctionsPage!
+  auctionBids(auctionId: String!, input: PaginationInput!, filter: BidsFilterInput): BidsPage!
+  adminBids(input: PaginationInput!, filter: BidsFilterInput): BidsPage!
+  myBids(input: PaginationInput!, filter: BidsFilterInput): BidsPage!
 }
 
 input FindUserInput {
@@ -193,23 +205,26 @@ input PaginationInput {
   limit: Int! = 10
 }
 
-input MyTransactionsInput {
-  page: Int! = 1
-  limit: Int! = 10
+input UsersFilterInput {
+  search: String
+}
+
+input TransactionsFilterInput {
+  search: String
   type: TransactionType
+  status: TransactionStatus
+  startDate: DateTime
+  endDate: DateTime
 }
 
 input AuctionsFilterInput {
   category: AuctionCategory
   status: AuctionStatus
   search: String
-  page: Int! = 1
-  limit: Int! = 10
 }
 
 input BidsFilterInput {
-  page: Int! = 1
-  limit: Int! = 10
+  status: BidStatus
 }
 
 type Mutation {

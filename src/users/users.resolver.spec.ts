@@ -89,7 +89,10 @@ describe('UsersResolver', () => {
       const result = await resolver.findAll(paginationInput);
 
       expect(result).toEqual(expectedUsers);
-      expect(mockUsersService.findAll).toHaveBeenCalledWith(paginationInput);
+      expect(mockUsersService.findAll).toHaveBeenCalledWith(
+        paginationInput,
+        undefined,
+      );
     });
   });
 

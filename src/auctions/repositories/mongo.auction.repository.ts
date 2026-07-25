@@ -30,32 +30,39 @@ export class MongoAuctionRepository implements IAuctionRepository {
   }
 
   async findAll(
+    page: number,
+    limit: number,
     filter: AuctionsFilter,
+    excludeStatuses?: AuctionStatus[],
   ): Promise<{ items: Auction[]; total: number }> {
-    const query = this.buildQuery(filter);
-    return this.executePaginatedQuery(query, filter);
+    const query = this.buildQuery(filter, excludeStatuses);
+    return this.executePaginatedQuery(query, page, limit);
   }
 
   async findBySellerId(
     sellerId: string,
+    page: number,
+    limit: number,
     filter: AuctionsFilter,
   ): Promise<{ items: Auction[]; total: number }> {
     const query = {
       ...this.buildQuery(filter),
       sellerId: new Types.ObjectId(sellerId),
     };
-    return this.executePaginatedQuery(query, filter);
+    return this.executePaginatedQuery(query, page, limit);
   }
 
   async findByWinnerId(
     winnerId: string,
+    page: number,
+    limit: number,
     filter: AuctionsFilter,
   ): Promise<{ items: Auction[]; total: number }> {
     const query = {
       ...this.buildQuery(filter),
       winnerId: new Types.ObjectId(winnerId),
     };
-    return this.executePaginatedQuery(query, filter);
+    return this.executePaginatedQuery(query, page, limit);
   }
 
   async update(id: string, data: UpdateAuctionData): Promise<Auction | null> {
@@ -132,11 +139,19 @@ export class MongoAuctionRepository implements IAuctionRepository {
       .exec();
   }
 
-  private buildQuery(filter: AuctionsFilter) {
+  private buildQuery(
+    filter: AuctionsFilter,
+    excludeStatuses?: AuctionStatus[],
+  ) {
     const query: Record<string, unknown> = {};
 
     if (filter.category) query.category = filter.category;
-    if (filter.status) query.status = filter.status;
+    if (filter.status) {
+      query.status = filter.status;
+    } else if (excludeStatuses && excludeStatuses.length > 0) {
+      query.status = { $nin: excludeStatuses };
+    }
+
     if (filter.search) {
       query.title = { $regex: filter.search, $options: 'i' };
     }
@@ -146,16 +161,17 @@ export class MongoAuctionRepository implements IAuctionRepository {
 
   private async executePaginatedQuery(
     query: Record<string, unknown>,
-    filter: AuctionsFilter,
+    page: number,
+    limit: number,
   ): Promise<{ items: Auction[]; total: number }> {
-    const skip = (filter.page - 1) * filter.limit;
+    const skip = (page - 1) * limit;
 
     const [items, total] = await Promise.all([
       this.auctionModel
         .find(query)
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(filter.limit)
+        .limit(limit)
         .exec(),
       this.auctionModel.countDocuments(query).exec(),
     ]);
