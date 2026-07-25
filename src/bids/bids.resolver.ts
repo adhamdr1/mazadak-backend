@@ -9,6 +9,9 @@ import { Bid } from './entities/bid.entity';
 import { PlaceBidInput } from './dto/place-bid.input';
 import { BidsFilterInput } from './dto/bids-filter.input';
 import { BidsPage } from './dto/bids-page.type';
+import { PaginationInput } from '../common/dto/pagination.input';
+import { Roles } from '../common/decorators/roles.decorator';
+import { UserRole } from '../users/enums/user-role.enum';
 
 @Resolver(() => Bid)
 export class BidsResolver {
@@ -18,10 +21,21 @@ export class BidsResolver {
   @Query(() => BidsPage, { name: 'auctionBids' })
   async getAuctionBids(
     @Args('auctionId') auctionId: string,
+    @Args('input') input: PaginationInput,
     @Args('filter', { nullable: true })
     filter: BidsFilterInput = new BidsFilterInput(),
   ): Promise<BidsPage> {
-    return this.bidsService.getAuctionBids(auctionId, filter);
+    return this.bidsService.getAuctionBids(auctionId, input, filter);
+  }
+
+  @Query(() => BidsPage, { name: 'adminBids' })
+  @Roles(UserRole.ADMIN)
+  async adminBids(
+    @Args('input') input: PaginationInput,
+    @Args('filter', { nullable: true })
+    filter: BidsFilterInput = new BidsFilterInput(),
+  ): Promise<BidsPage> {
+    return this.bidsService.adminGetAllBids(input, filter);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -37,9 +51,10 @@ export class BidsResolver {
   @Query(() => BidsPage, { name: 'myBids' })
   async getMyBids(
     @CurrentUser() user: JwtPayload,
+    @Args('input') input: PaginationInput,
     @Args('filter', { nullable: true })
     filter: BidsFilterInput = new BidsFilterInput(),
   ): Promise<BidsPage> {
-    return this.bidsService.getMyBids(user.sub, filter);
+    return this.bidsService.getMyBids(user.sub, input, filter);
   }
 }

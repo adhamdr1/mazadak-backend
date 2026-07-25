@@ -31,19 +31,48 @@ export class MongoBidRepository implements IBidRepository {
     return bid;
   }
 
-  async findByAuctionId(
-    auctionId: string,
+  async findAll(
+    page: number,
+    limit: number,
     filter: BidsFilterInput,
   ): Promise<{ items: Bid[]; total: number }> {
-    const skip = (filter.page - 1) * filter.limit;
-    const query = { auctionId: new Types.ObjectId(auctionId) };
+    const skip = (page - 1) * limit;
+    const query = filter.status ? { status: filter.status } : {};
+
+    const [items, total] = await Promise.all([
+      this.bidModel
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean()
+        .exec(),
+      this.bidModel.countDocuments(query).exec(),
+    ]);
+
+    return { items, total };
+  }
+
+  async findByAuctionId(
+    auctionId: string,
+    page: number,
+    limit: number,
+    filter: BidsFilterInput,
+  ): Promise<{ items: Bid[]; total: number }> {
+    const skip = (page - 1) * limit;
+    const query: Record<string, any> = {
+      auctionId: new Types.ObjectId(auctionId),
+    };
+    if (filter.status) {
+      query.status = filter.status;
+    }
 
     const [items, total] = await Promise.all([
       this.bidModel
         .find(query)
         .sort({ amount: -1, createdAt: -1 }) // Highest bids first
         .skip(skip)
-        .limit(filter.limit)
+        .limit(limit)
         .lean()
         .exec(),
       this.bidModel.countDocuments(query).exec(),
@@ -54,17 +83,24 @@ export class MongoBidRepository implements IBidRepository {
 
   async findByBidderId(
     bidderId: string,
+    page: number,
+    limit: number,
     filter: BidsFilterInput,
   ): Promise<{ items: Bid[]; total: number }> {
-    const skip = (filter.page - 1) * filter.limit;
-    const query = { bidderId: new Types.ObjectId(bidderId) };
+    const skip = (page - 1) * limit;
+    const query: Record<string, any> = {
+      bidderId: new Types.ObjectId(bidderId),
+    };
+    if (filter.status) {
+      query.status = filter.status;
+    }
 
     const [items, total] = await Promise.all([
       this.bidModel
         .find(query)
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(filter.limit)
+        .limit(limit)
         .lean()
         .exec(),
       this.bidModel.countDocuments(query).exec(),

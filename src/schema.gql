@@ -191,8 +191,9 @@ type Query {
   auction(id: ID!): Auction!
   myAuctions(input: PaginationInput!, filter: AuctionsFilterInput): AuctionsPage!
   myWonAuctions(input: PaginationInput!, filter: AuctionsFilterInput): AuctionsPage!
-  auctionBids(auctionId: String!, filter: BidsFilterInput): BidsPage!
-  myBids(filter: BidsFilterInput): BidsPage!
+  auctionBids(auctionId: String!, input: PaginationInput!, filter: BidsFilterInput): BidsPage!
+  adminBids(input: PaginationInput!, filter: BidsFilterInput): BidsPage!
+  myBids(input: PaginationInput!, filter: BidsFilterInput): BidsPage!
 }
 
 input FindUserInput {
@@ -223,8 +224,7 @@ input AuctionsFilterInput {
 }
 
 input BidsFilterInput {
-  page: Int! = 1
-  limit: Int! = 10
+  status: BidStatus
 }
 
 type Mutation {

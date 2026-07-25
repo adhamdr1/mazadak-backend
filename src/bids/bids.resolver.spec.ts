@@ -10,6 +10,7 @@ const mockBidsService = {
   placeBid: jest.fn(),
   getAuctionBids: jest.fn(),
   getMyBids: jest.fn(),
+  adminGetAllBids: jest.fn(),
 };
 
 describe('BidsResolver', () => {
@@ -35,20 +36,49 @@ describe('BidsResolver', () => {
   });
 
   describe('getAuctionBids', () => {
+    const filter = new BidsFilterInput();
+    const pagination = { page: 1, limit: 10 };
+    const mockResult = {
+      items: [],
+      total: 0,
+      totalPages: 0,
+      hasNextPage: false,
+    };
+
     it('should return paginated bids for an auction', async () => {
-      const filter = new BidsFilterInput();
-      const mockResult = {
-        items: [],
-        total: 0,
-        totalPages: 0,
-        hasNextPage: false,
-      };
       mockBidsService.getAuctionBids.mockResolvedValue(mockResult);
 
-      const result = await resolver.getAuctionBids('auctionId', filter);
+      const result = await resolver.getAuctionBids(
+        'auctionId',
+        pagination,
+        filter,
+      );
       expect(result).toEqual(mockResult);
       expect(mockBidsService.getAuctionBids).toHaveBeenCalledWith(
         'auctionId',
+        pagination,
+        filter,
+      );
+    });
+  });
+
+  describe('adminBids', () => {
+    const filter = new BidsFilterInput();
+    const pagination = { page: 1, limit: 10 };
+    const mockResult = {
+      items: [],
+      total: 0,
+      totalPages: 0,
+      hasNextPage: false,
+    };
+
+    it('should return all paginated bids for admin', async () => {
+      mockBidsService.adminGetAllBids.mockResolvedValue(mockResult);
+
+      const result = await resolver.adminBids(pagination, filter);
+      expect(result).toEqual(mockResult);
+      expect(mockBidsService.adminGetAllBids).toHaveBeenCalledWith(
+        pagination,
         filter,
       );
     });
@@ -57,6 +87,7 @@ describe('BidsResolver', () => {
   describe('getMyBids', () => {
     it('should return paginated bids for current user', async () => {
       const filter = new BidsFilterInput();
+      const pagination = { page: 1, limit: 10 };
       const mockResult = {
         items: [],
         total: 0,
@@ -71,9 +102,13 @@ describe('BidsResolver', () => {
 
       mockBidsService.getMyBids.mockResolvedValue(mockResult);
 
-      const result = await resolver.getMyBids(user, filter);
+      const result = await resolver.getMyBids(user, pagination, filter);
       expect(result).toEqual(mockResult);
-      expect(mockBidsService.getMyBids).toHaveBeenCalledWith('userId', filter);
+      expect(mockBidsService.getMyBids).toHaveBeenCalledWith(
+        'userId',
+        pagination,
+        filter,
+      );
     });
   });
 
