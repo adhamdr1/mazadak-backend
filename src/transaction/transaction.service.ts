@@ -3,7 +3,8 @@ import type { ITransactionRepository } from './interfaces/transaction.repository
 import type { CreateTransactionData } from './interfaces/transaction.repository.interface';
 import { Transaction } from './entities/transaction.entity';
 import { TransactionsPage } from './dto/transactions-page.type';
-import { MyTransactionsInput } from './dto/my-transactions.input';
+import { TransactionsFilterInput } from './dto/transactions-filter.input';
+import { PaginationInput } from '../common/dto/pagination.input';
 import type { IWalletRepository } from '../wallet/interfaces/wallet.repository.interface';
 import { WalletNotFoundException } from '../wallet/exceptions/wallet-not-found.exception';
 
@@ -26,7 +27,8 @@ export class TransactionService {
 
   async getMyTransactions(
     userId: string,
-    input: MyTransactionsInput,
+    input: PaginationInput,
+    filter?: TransactionsFilterInput,
   ): Promise<TransactionsPage> {
     const { page, limit } = input;
 
@@ -36,13 +38,29 @@ export class TransactionService {
     const walletId = wallet._id.toString();
 
     const [items, total] = await Promise.all([
-      this.transactionRepository.findByWalletId(
-        walletId,
-        page,
-        limit,
-        input.type,
-      ),
-      this.transactionRepository.countByWalletId(walletId, input.type),
+      this.transactionRepository.findByWalletId(walletId, page, limit, filter),
+      this.transactionRepository.countByWalletId(walletId, filter),
+    ]);
+
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      items,
+      total,
+      totalPages,
+      hasNextPage: page < totalPages,
+    };
+  }
+
+  async getAllTransactions(
+    input: PaginationInput,
+    filter?: TransactionsFilterInput,
+  ): Promise<TransactionsPage> {
+    const { page, limit } = input;
+
+    const [items, total] = await Promise.all([
+      this.transactionRepository.findAll(page, limit, filter),
+      this.transactionRepository.countAll(filter),
     ]);
 
     const totalPages = Math.ceil(total / limit);

@@ -175,7 +175,8 @@ type Query {
   findUser(input: FindUserInput!): User!
   users(input: PaginationInput!, filter: UsersFilterInput): UsersPage!
   myWallet: Wallet!
-  myTransactions(input: MyTransactionsInput): TransactionsPage!
+  myTransactions(input: PaginationInput, filter: TransactionsFilterInput): TransactionsPage!
+  transactions(input: PaginationInput, filter: TransactionsFilterInput): TransactionsPage!
   auctions(filter: AuctionsFilterInput): AuctionsPage!
   auction(id: ID!): Auction!
   myAuctions(filter: AuctionsFilterInput): AuctionsPage!
@@ -197,10 +198,12 @@ input UsersFilterInput {
   search: String
 }
 
-input MyTransactionsInput {
-  page: Int! = 1
-  limit: Int! = 10
+input TransactionsFilterInput {
+  search: String
   type: TransactionType
+  status: TransactionStatus
+  startDate: DateTime
+  endDate: DateTime
 }
 
 input AuctionsFilterInput {

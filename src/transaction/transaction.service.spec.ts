@@ -4,11 +4,15 @@ import { WalletNotFoundException } from '../wallet/exceptions/wallet-not-found.e
 import { TransactionType } from './enums/transaction-type.enum';
 import { TransactionStatus } from './enums/transaction-status.enum';
 import { Types } from 'mongoose';
+import { TransactionsFilterInput } from './dto/transactions-filter.input';
+import { PaginationInput } from '../common/dto/pagination.input';
 
 const mockTransactionRepository = {
   create: jest.fn(),
   findByWalletId: jest.fn(),
   countByWalletId: jest.fn(),
+  findAll: jest.fn(),
+  countAll: jest.fn(),
 };
 
 const mockWalletRepository = {
@@ -85,8 +89,8 @@ describe('TransactionService', () => {
       expect(result).toEqual({
         items,
         total: 15,
-        totalPages: 2, // Math.ceil(15 / 10)
-        hasNextPage: true, // page(1) < totalPages(2)
+        totalPages: 2,
+        hasNextPage: true,
       });
       expect(mockTransactionRepository.findByWalletId).toHaveBeenCalledWith(
         walletId,
@@ -100,31 +104,59 @@ describe('TransactionService', () => {
       );
     });
 
-    it('should respect provided pagination and type filter', async () => {
+    it('should respect provided pagination and filter', async () => {
       mockWalletRepository.findByUserId.mockResolvedValue(mockWallet);
       const items = [{ _id: 'tx1' }];
       mockTransactionRepository.findByWalletId.mockResolvedValue(items);
       mockTransactionRepository.countByWalletId.mockResolvedValue(5);
 
-      const input = { page: 2, limit: 5, type: TransactionType.DEPOSIT };
-      const result = await service.getMyTransactions(userId, input);
+      const input = { page: 2, limit: 5 };
+      const filter: TransactionsFilterInput = { type: TransactionType.DEPOSIT };
+      const result = await service.getMyTransactions(userId, input, filter);
 
       expect(result).toEqual({
         items,
         total: 5,
-        totalPages: 1, // Math.ceil(5 / 5)
-        hasNextPage: false, // page(2) < totalPages(1) is false
+        totalPages: 1,
+        hasNextPage: false,
       });
       expect(mockTransactionRepository.findByWalletId).toHaveBeenCalledWith(
         walletId,
         2,
         5,
-        TransactionType.DEPOSIT,
+        filter,
       );
       expect(mockTransactionRepository.countByWalletId).toHaveBeenCalledWith(
         walletId,
-        TransactionType.DEPOSIT,
+        filter,
       );
+    });
+  });
+
+  describe('getAllTransactions', () => {
+    it('should return all transactions page with pagination and filter', async () => {
+      const items = [{ _id: 'tx1' }, { _id: 'tx2' }];
+      mockTransactionRepository.findAll.mockResolvedValue(items);
+      mockTransactionRepository.countAll.mockResolvedValue(20);
+
+      const input: PaginationInput = { page: 2, limit: 10 };
+      const filter: TransactionsFilterInput = {
+        status: TransactionStatus.SUCCESS,
+      };
+      const result = await service.getAllTransactions(input, filter);
+
+      expect(result).toEqual({
+        items,
+        total: 20,
+        totalPages: 2,
+        hasNextPage: false,
+      });
+      expect(mockTransactionRepository.findAll).toHaveBeenCalledWith(
+        2,
+        10,
+        filter,
+      );
+      expect(mockTransactionRepository.countAll).toHaveBeenCalledWith(filter);
     });
   });
 });
