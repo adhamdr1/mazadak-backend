@@ -35,12 +35,13 @@ export class NotificationsService {
     const resetLink = `${this.configService.getOrThrow('FRONTEND_URL')}/auth/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
     const name =
       [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
+    const formattedTime = this.formatDate(metadata.time);
 
     await this.emailService.send(
       email,
       EmailSubjects.RESET_PASSWORD,
       EmailTemplates.RESET_PASSWORD,
-      { resetLink, email, name, ...metadata },
+      { resetLink, email, name, ...metadata, time: formattedTime },
     );
   }
 
@@ -53,6 +54,35 @@ export class NotificationsService {
       EmailSubjects.WELCOME,
       EmailTemplates.WELCOME,
       { name, frontendUrl },
+    );
+  }
+
+  async sendPasswordChangedEmail(
+    email: string,
+    name: string,
+    date?: Date | string,
+  ): Promise<void> {
+    const formattedDate = this.formatDate(date);
+
+    await this.emailService.send(
+      email,
+      EmailSubjects.PASSWORD_CHANGED,
+      EmailTemplates.PASSWORD_CHANGED,
+      { name, date: formattedDate },
+    );
+  }
+
+  formatDate(dateInput?: Date | string): string {
+    const date = dateInput ? new Date(dateInput) : new Date();
+    const timeZone =
+      this.configService.get<string>('APP_TIMEZONE') || 'Africa/Cairo';
+
+    return (
+      date.toLocaleString('en-US', {
+        dateStyle: 'full',
+        timeStyle: 'short',
+        timeZone,
+      }) + ' (Cairo Time)'
     );
   }
 }

@@ -366,6 +366,14 @@ export class AuthService {
     await this.redis.del(redisKey);
     // 5. طرد اليوزر من كل الأجهزة
     await this.logoutAll(user._id.toString());
+
+    // 6. إرسال إشعار أمني بتغيير كلمة المرور
+    const name =
+      [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
+    this.notificationsService
+      .sendPasswordChangedEmail(user.email, name)
+      .catch(() => {});
+
     return true;
   }
 
@@ -396,6 +404,14 @@ export class AuthService {
     const hashedPassword = await bcrypt.hash(input.password, SALT_ROUNDS);
     await this.usersService.updatePassword(userId, hashedPassword);
     await this.logoutAll(user._id.toString());
+
+    // إرسال إشعار أمني بتغيير كلمة المرور
+    const name =
+      [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
+    this.notificationsService
+      .sendPasswordChangedEmail(user.email, name)
+      .catch(() => {});
+
     return true;
   }
 
