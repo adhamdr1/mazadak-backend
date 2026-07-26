@@ -43,4 +43,16 @@ export class NotificationsService {
       { resetLink, email, name, ...metadata },
     );
   }
+
+  async sendWelcomeEmail(email: string, name: string): Promise<void> {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'https://mazadak.com';
+
+    await this.emailService.send(
+      email,
+      EmailSubjects.WELCOME,
+      EmailTemplates.WELCOME,
+      { name, frontendUrl },
+    );
+  }
 }
