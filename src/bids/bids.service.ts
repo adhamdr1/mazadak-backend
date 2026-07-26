@@ -207,6 +207,18 @@ export class BidsService {
 
         await session.commitTransaction();
 
+        // 4. Send AUCTION_WON email notification to winner (Post-commit, non-blocking)
+        this.notifyAuctionWinner(
+          winnerId,
+          auction.title,
+          winningBid.amount,
+          auctionId,
+        ).catch((err) => {
+          this.logger.error(
+            `Failed to send auction won notification for ${auctionId}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        });
+
         this.logger.log(
           `Successfully finalized auction ${auctionId}. Winner: ${winnerId}, Seller: ${sellerId}, Amount: ${winningBid.amount}`,
         );
@@ -219,6 +231,27 @@ export class BidsService {
         await session.endSession();
       }
     }
+  }
+
+  private async notifyAuctionWinner(
+    winnerId: string,
+    auctionTitle: string,
+    winningAmount: number,
+    auctionId: string,
+  ): Promise<void> {
+    const winner = await this.usersService.findById(winnerId);
+    if (!winner) return;
+
+    const name =
+      [winner.firstName, winner.lastName].filter(Boolean).join(' ') || 'User';
+
+    await this.notificationsService.sendAuctionWonEmail(
+      winner.email,
+      name,
+      auctionTitle,
+      winningAmount,
+      auctionId,
+    );
   }
 
   async adminGetAllBids(

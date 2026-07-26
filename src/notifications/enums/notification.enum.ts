@@ -5,6 +5,7 @@ export enum EmailTemplates {
   WELCOME = 'welcome',
   PASSWORD_CHANGED = 'password-changed',
   OUTBID = 'outbid',
+  AUCTION_WON = 'auction-won',
 }
 
 export enum EmailSubjects {
@@ -13,4 +14,5 @@ export enum EmailSubjects {
   WELCOME = 'Welcome to Mazadak - Account Verified',
   PASSWORD_CHANGED = 'Security Alert - Your Mazadak password was changed',
   OUTBID = 'You have been outbid on Mazadak!',
+  AUCTION_WON = 'Congratulations! You won the auction on Mazadak!',
 }

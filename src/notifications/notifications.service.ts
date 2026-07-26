@@ -91,6 +91,25 @@ export class NotificationsService {
     );
   }
 
+  async sendAuctionWonEmail(
+    email: string,
+    name: string,
+    auctionTitle: string,
+    winningAmount: number,
+    auctionId: string,
+  ): Promise<void> {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'https://mazadak.com';
+    const auctionLink = `${frontendUrl}/auctions/${auctionId}`;
+
+    await this.emailService.send(
+      email,
+      EmailSubjects.AUCTION_WON,
+      EmailTemplates.AUCTION_WON,
+      { name, auctionTitle, winningAmount, auctionLink },
+    );
+  }
+
   formatDate(dateInput?: Date | string): string {
     const date = dateInput ? new Date(dateInput) : new Date();
     const timeZone =

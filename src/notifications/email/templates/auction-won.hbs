@@ -1,0 +1,39 @@
+<html lang='en'>
+  <head>
+    <meta charset='utf-8' />
+    <title>Congratulations! You Won the Auction</title>
+  </head>
+  <body
+    style='font-family: Arial, sans-serif; padding: 20px; color: #333; line-height: 1.6;'
+  >
+    <div
+      style='max-width: 600px; margin: 0 auto; text-align: center; border: 1px solid #eee; padding: 30px; border-radius: 8px;'
+    >
+      <h2 style='color: #28a745;'>Auction Victory! 🏆🎉</h2>
+      <p>Hello <strong>{{name}}</strong>,</p>
+      <p>Great news! You are the official winning bidder for the auction:
+        <strong>{{auctionTitle}}</strong>.</p>
+
+      <div
+        style='background-color: #f8f9fa; padding: 20px; border-radius: 6px; margin: 25px 0; text-align: left;'
+      >
+        <p style='margin: 5px 0;'><strong>Auction:</strong> {{auctionTitle}}</p>
+        <p style='margin: 5px 0;'><strong>Winning Price:</strong>
+          ${{winningAmount}}</p>
+      </div>
+
+      <p>You can view your item details and proceed with the order confirmation
+        by visiting the auction page below:</p>
+
+      <a
+        href='{{auctionLink}}'
+        style='display: inline-block; padding: 12px 24px; background-color: #28a745; color: #ffffff; text-decoration: none; border-radius: 6px; margin: 15px 0; font-weight: bold;'
+      >
+        View Winning Auction
+      </a>
+
+      <p style='font-size: 12px; color: #888; margin-top: 30px;'>Thank you for
+        bidding on Mazadak!</p>
+    </div>
+  </body>
+</html>
