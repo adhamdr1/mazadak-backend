@@ -2,24 +2,23 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
 import { Cron, CronExpression } from '@nestjs/schedule';
-
 import { PlaceBidInput } from './dto/place-bid.input';
 import { BidsFilterInput } from './dto/bids-filter.input';
 import { BidsPage } from './dto/bids-page.type';
 import { PaginationInput } from '../common/dto/pagination.input';
 import { Bid } from './entities/bid.entity';
 import { BidStatus } from './enums/bid-status.enum';
-
 import type { IBidRepository } from './interfaces/bid-repository.interface';
 import type { IAuctionRepository } from '../auctions/interfaces/auction-repository.interface';
 import { WalletService } from '../wallet/wallet.service';
 import { AuctionStatus } from '../auctions/enums/auction-status.enum';
-
 import { AlreadyHighestBidderException } from './exceptions/already-highest-bidder.exception';
 import { AuctionNotActiveException } from './exceptions/auction-not-active.exception';
 import { BidAmountTooLowException } from './exceptions/bid-amount-too-low.exception';
 import { BidOnOwnAuctionException } from './exceptions/bid-on-own-auction.exception';
 import { AuctionNotFoundException } from '../auctions/exceptions/auction-not-found.exception';
+import { NotificationsService } from '../notifications/notifications.service';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class BidsService {
@@ -31,6 +30,8 @@ export class BidsService {
     @Inject('IAuctionRepository')
     private readonly auctionRepository: IAuctionRepository,
     private readonly walletService: WalletService,
+    private readonly notificationsService: NotificationsService,
+    private readonly usersService: UsersService,
     @InjectConnection() private readonly connection: Connection,
   ) {}
 
@@ -110,6 +111,21 @@ export class BidsService {
       );
 
       await session.commitTransaction();
+
+      // 5. Send Outbid email notification to previous winner (Post-commit, non-blocking)
+      if (currentWinner) {
+        this.notifyOutbidUser(
+          currentWinner.bidderId.toString(),
+          auction.title,
+          input.amount,
+          input.auctionId,
+        ).catch((err) => {
+          this.logger.error(
+            `Failed to send outbid notification: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        });
+      }
+
       return newBid;
     } catch (error) {
       await session.abortTransaction();
@@ -117,6 +133,29 @@ export class BidsService {
     } finally {
       await session.endSession();
     }
+  }
+
+  private async notifyOutbidUser(
+    previousBidderId: string,
+    auctionTitle: string,
+    newAmount: number,
+    auctionId: string,
+  ): Promise<void> {
+    const previousBidder = await this.usersService.findById(previousBidderId);
+    if (!previousBidder) return;
+
+    const name =
+      [previousBidder.firstName, previousBidder.lastName]
+        .filter(Boolean)
+        .join(' ') || 'User';
+
+    await this.notificationsService.sendOutbidEmail(
+      previousBidder.email,
+      name,
+      auctionTitle,
+      newAmount,
+      auctionId,
+    );
   }
 
   @Cron(CronExpression.EVERY_MINUTE)

@@ -1,0 +1,40 @@
+<html lang='en'>
+  <head>
+    <meta charset='utf-8' />
+    <title>You Have Been Outbid!</title>
+  </head>
+  <body
+    style='font-family: Arial, sans-serif; padding: 20px; color: #333; line-height: 1.6;'
+  >
+    <div
+      style='max-width: 600px; margin: 0 auto; text-align: center; border: 1px solid #eee; padding: 30px; border-radius: 8px;'
+    >
+      <h2 style='color: #ffc107;'>Outbid Notification ⚡</h2>
+      <p>Hello <strong>{{name}}</strong>,</p>
+      <p>Someone has placed a higher bid on the auction you were participating
+        in:
+        <strong>{{auctionTitle}}</strong>.</p>
+
+      <div
+        style='background-color: #f8f9fa; padding: 20px; border-radius: 6px; margin: 25px 0; text-align: left;'
+      >
+        <p style='margin: 5px 0;'><strong>Auction:</strong> {{auctionTitle}}</p>
+        <p style='margin: 5px 0;'><strong>New Highest Bid:</strong>
+          ${{newAmount}}</p>
+      </div>
+
+      <p>Don't lose out! You can place a new bid to regain the highest bidder
+        position:</p>
+
+      <a
+        href='{{auctionLink}}'
+        style='display: inline-block; padding: 12px 24px; background-color: #ffc107; color: #212529; text-decoration: none; border-radius: 6px; margin: 15px 0; font-weight: bold;'
+      >
+        Place a Higher Bid
+      </a>
+
+      <p style='font-size: 12px; color: #888; margin-top: 30px;'>If you no
+        longer wish to bid on this item, no action is required.</p>
+    </div>
+  </body>
+</html>
