@@ -21,6 +21,7 @@ import { createHash, randomBytes } from 'crypto';
 import { StringValue } from 'ms';
 import { LoginInput } from './dto/login.input';
 import { NotificationsService } from '../notifications/notifications.service';
+import { InAppNotificationType } from '../notifications/in-app/enums/in-app-notification-type.enum';
 import { OAuth2Client } from 'google-auth-library';
 import { RegistrationRequiredException } from './exceptions/registration-required.exception';
 import { User } from '../users/entities/user.entity';
@@ -231,6 +232,15 @@ export class AuthService {
 
     this.notificationsService
       .sendWelcomeEmail(user.email, name)
+      .catch(() => {});
+
+    this.notificationsService
+      .createInAppNotification({
+        userId,
+        type: InAppNotificationType.WELCOME,
+        title: 'Welcome to Mazadak! 🌟',
+        body: 'Your account is now fully verified. Happy bidding!',
+      })
       .catch(() => {});
 
     return true;

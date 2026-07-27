@@ -3,11 +3,22 @@ import { MailerModule } from '@nestjs-modules/mailer';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { HandlebarsAdapter } from '@nestjs-modules/mailer/adapters/handlebars.adapter';
 import { join } from 'path';
+import { MongooseModule } from '@nestjs/mongoose';
 import { NotificationsService } from './notifications.service';
 import { EmailService } from './email/email.service';
+import {
+  InAppNotification,
+  InAppNotificationSchema,
+} from './in-app/entities/in-app-notification.entity';
+import { InAppNotificationsService } from './in-app/in-app-notifications.service';
+import { InAppNotificationsResolver } from './in-app/in-app-notifications.resolver';
+import { MongoInAppNotificationRepository } from './in-app/repositories/mongo.in-app-notification.repository';
 
 @Module({
   imports: [
+    MongooseModule.forFeature([
+      { name: InAppNotification.name, schema: InAppNotificationSchema },
+    ]),
     MailerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -34,7 +45,16 @@ import { EmailService } from './email/email.service';
       }),
     }),
   ],
-  providers: [EmailService, NotificationsService],
-  exports: [EmailService, NotificationsService],
+  providers: [
+    EmailService,
+    NotificationsService,
+    InAppNotificationsService,
+    InAppNotificationsResolver,
+    {
+      provide: 'IInAppNotificationRepository',
+      useClass: MongoInAppNotificationRepository,
+    },
+  ],
+  exports: [EmailService, NotificationsService, InAppNotificationsService],
 })
 export class NotificationsModule {}

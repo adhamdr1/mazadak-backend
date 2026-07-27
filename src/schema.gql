@@ -52,6 +52,43 @@ type AuthResponse {
   user: User!
 }
 
+type InAppNotification {
+  _id: ID!
+  userId: ID!
+  type: InAppNotificationType!
+  title: String!
+  body: String!
+  isRead: Boolean!
+  referenceId: String
+  referenceType: NotificationReferenceType
+  createdAt: DateTime!
+}
+
+enum InAppNotificationType {
+  OUTBID
+  AUCTION_WON
+  AUCTION_ENDED_SELLER
+  DEPOSIT_SUCCESSFUL
+  WITHDRAWAL_COMPLETED
+  AUCTION_STARTED
+  WELCOME
+  NEW_BID
+  AUCTION_CANCELLED
+}
+
+enum NotificationReferenceType {
+  AUCTION
+  TRANSACTION
+  WALLET
+}
+
+type InAppNotificationsPage {
+  items: [InAppNotification!]!
+  total: Int!
+  totalPages: Int!
+  hasNextPage: Boolean!
+}
+
 type Wallet {
   _id: ID!
   userId: ID!
@@ -151,11 +188,6 @@ type AuctionsPage {
   hasNextPage: Boolean!
 }
 
-type UploadImageResponse {
-  """Public URL of the uploaded image"""
-  url: String!
-}
-
 type Bid {
   _id: ID!
   auctionId: ID!
@@ -171,6 +203,11 @@ enum BidStatus {
   OUTBID
 }
 
+type UploadImageResponse {
+  """Public URL of the uploaded image"""
+  url: String!
+}
+
 type BidsPage {
   items: [Bid!]!
   total: Int!
@@ -182,6 +219,8 @@ type Query {
   me: User!
   findUser(input: FindUserInput!): User!
   users(input: PaginationInput!, filter: UsersFilterInput): UsersPage!
+  myNotifications(input: PaginationInput!): InAppNotificationsPage!
+  unreadNotificationsCount: Int!
   wallets(input: PaginationInput!): WalletsPage!
   adminGetWallet(userId: String!): Wallet!
   myWallet: Wallet!
@@ -245,6 +284,8 @@ type Mutation {
   deleteAccount: Boolean!
   adminUpdateUser(targetUser: FindUserInput!, input: UpdateUserInput!): User!
   adminDeleteUser(targetUser: FindUserInput!): Boolean!
+  markNotificationAsRead(notificationId: ID!): InAppNotification!
+  markAllNotificationsAsRead: Boolean!
   deposit(input: DepositInput!): Wallet!
   withdraw(input: WithdrawInput!): Wallet!
   createAuction(input: CreateAuctionInput!): Auction!

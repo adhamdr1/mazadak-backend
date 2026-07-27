@@ -19,6 +19,9 @@ import { AuctionNotPendingException } from './exceptions/auction-not-pending.exc
 import { UploadService } from '../upload/upload.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from '../users/users.service';
+import { WalletService } from '../wallet/wallet.service';
+import { InAppNotificationType } from '../notifications/in-app/enums/in-app-notification-type.enum';
+import { NotificationReferenceType } from '../notifications/in-app/enums/notification-reference-type.enum';
 
 const MIN_START_TIME_MS = 15 * 60 * 1000; // 15 minutes
 
@@ -32,6 +35,7 @@ export class AuctionsService {
     private readonly uploadService: UploadService,
     private readonly notificationsService: NotificationsService,
     private readonly usersService: UsersService,
+    private readonly walletService: WalletService,
   ) {}
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -217,12 +221,68 @@ export class AuctionsService {
       throw new AuctionInvalidStateException();
     }
 
-    await this.auctionRepository.updateStatus(
-      auctionId,
-      AuctionStatus.CANCELLED,
-    );
+    const session = await this.auctionRepository.startSession();
+    session.startTransaction();
 
-    return true;
+    try {
+      // 1. If auction was active, look for highest winning bid to release funds and notify them
+      if (auction.status === AuctionStatus.ACTIVE) {
+        const winningBid =
+          await this.auctionRepository.findWinningBidByAuctionId(
+            auctionId,
+            session,
+          );
+
+        if (winningBid) {
+          const bidderId = winningBid.bidderId;
+
+          // Release the held funds within the transaction
+          await this.walletService.release(
+            bidderId,
+            winningBid.amount,
+            auctionId,
+            session,
+          );
+
+          // Send in-app notification to the bidder (transactional)
+          this.notificationsService
+            .createInAppNotification(
+              {
+                userId: bidderId,
+                type: InAppNotificationType.AUCTION_CANCELLED,
+                title: 'Auction Cancelled ❌',
+                body: `The auction "${auction.title}" has been cancelled and your held funds of ${winningBid.amount} EGP have been released.`,
+                referenceId: auctionId,
+                referenceType: NotificationReferenceType.AUCTION,
+              },
+              session,
+            )
+            .catch((err) => {
+              this.logger.error(
+                `Failed to send auction cancelled in-app notification to bidder ${bidderId}: ${err instanceof Error ? err.message : String(err)}`,
+              );
+            });
+        }
+      }
+
+      // 2. Update auction status within the transaction
+      await this.auctionRepository.updateStatus(
+        auctionId,
+        AuctionStatus.CANCELLED,
+        session,
+      );
+
+      await session.commitTransaction();
+      return true;
+    } catch (error) {
+      await session.abortTransaction();
+      this.logger.error(
+        `Transaction aborted during cancelAuction for ${auctionId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw error;
+    } finally {
+      await session.endSession();
+    }
   }
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -269,5 +329,14 @@ export class AuctionsService {
       auction.title,
       auction._id.toString(),
     );
+
+    await this.notificationsService.createInAppNotification({
+      userId: auction.sellerId.toString(),
+      type: InAppNotificationType.AUCTION_STARTED,
+      title: 'Your auction is now LIVE! 🚀',
+      body: `Your auction "${auction.title}" is now live and accepting bids.`,
+      referenceId: auction._id.toString(),
+      referenceType: NotificationReferenceType.AUCTION,
+    });
   }
 }

@@ -7,13 +7,19 @@ import { MongoAuctionRepository } from './repositories/mongo.auction.repository'
 import { UploadModule } from '../upload/upload.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { UsersModule } from '../users/users.module';
+import { WalletModule } from '../wallet/wallet.module';
+import { Bid, BidSchema } from '../bids/entities/bid.entity';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: Auction.name, schema: AuctionSchema }]),
+    MongooseModule.forFeature([
+      { name: Auction.name, schema: AuctionSchema },
+      { name: Bid.name, schema: BidSchema },
+    ]),
     UploadModule,
     NotificationsModule,
     UsersModule,
+    WalletModule,
   ],
   providers: [
     AuctionsResolver,

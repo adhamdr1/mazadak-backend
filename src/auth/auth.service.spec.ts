@@ -91,6 +91,7 @@ const mockNotificationsService = {
   sendPasswordResetEmail: jest.fn().mockResolvedValue(undefined),
   sendWelcomeEmail: jest.fn().mockResolvedValue(undefined),
   sendPasswordChangedEmail: jest.fn().mockResolvedValue(undefined),
+  createInAppNotification: jest.fn().mockResolvedValue(undefined),
 };
 
 const mockRedis = {
