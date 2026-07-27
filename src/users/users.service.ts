@@ -23,6 +23,10 @@ export class UsersService {
     private readonly userRepository: IUserRepository,
   ) {}
 
+  async startSession(): Promise<ClientSession> {
+    return await this.userRepository.startSession();
+  }
+
   // ─── Helpers ────────────────────────────────────────────────────────────────
 
   private buildPage(

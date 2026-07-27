@@ -32,8 +32,7 @@ import { ResetPasswordInput } from './dto/reset-password.input';
 import { UpdatePasswordInput } from './dto/update-password.input';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';
-import { InjectConnection } from '@nestjs/mongoose';
-import { ClientSession, Connection } from 'mongoose';
+import { ClientSession } from 'mongoose';
 import { WalletService } from '../wallet/wallet.service';
 
 const SALT_ROUNDS = 12;
@@ -58,7 +57,6 @@ export class AuthService {
     private readonly authRepository: IAuthRepository,
     private readonly notificationsService: NotificationsService,
     @InjectRedis() private readonly redis: Redis,
-    @InjectConnection() private readonly connection: Connection,
     private readonly walletService: WalletService,
   ) {
     this.googleClient = new OAuth2Client(
@@ -506,7 +504,7 @@ export class AuthService {
   private async withTransaction<T>(
     fn: (session: ClientSession) => Promise<T>,
   ): Promise<T> {
-    const session = await this.connection.startSession();
+    const session = await this.usersService.startSession();
     session.startTransaction();
     try {
       const result = await fn(session);

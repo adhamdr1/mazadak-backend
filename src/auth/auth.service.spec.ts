@@ -21,7 +21,6 @@ import { RegistrationRequiredException } from './exceptions/registration-require
 import * as bcrypt from 'bcrypt';
 import { createHash } from 'crypto';
 import { getRedisConnectionToken } from '@nestjs-modules/ioredis';
-import { getConnectionToken } from '@nestjs/mongoose';
 import { WalletService } from '../wallet/wallet.service';
 // ─── Mock google-auth-library ──────────────────────────────────────────────
 // يجب إنشاء الـ mock قبل أي import يستخدم google-auth-library.
@@ -49,7 +48,15 @@ const MOCK_REFRESH_TOKEN = 'mock-refresh-token';
 const MOCK_EXP = Math.floor(Date.now() / 1000) + 604800; // 7 days from now
 
 // ─── Mocks ────────────────────────────────────────────────────────────────
+const mockSession = {
+  startTransaction: jest.fn(),
+  commitTransaction: jest.fn(),
+  abortTransaction: jest.fn(),
+  endSession: jest.fn(),
+};
+
 const mockUsersService = {
+  startSession: jest.fn().mockResolvedValue(mockSession),
   findByEmail: jest.fn(),
   findByEmailWithPassword: jest.fn(),
   findByUserIdWithPassword: jest.fn(),
@@ -82,23 +89,14 @@ const mockAuthRepository = {
 const mockNotificationsService = {
   sendEmailVerification: jest.fn().mockResolvedValue(undefined),
   sendPasswordResetEmail: jest.fn().mockResolvedValue(undefined),
+  sendWelcomeEmail: jest.fn().mockResolvedValue(undefined),
+  sendPasswordChangedEmail: jest.fn().mockResolvedValue(undefined),
 };
 
 const mockRedis = {
   get: jest.fn(),
   set: jest.fn().mockResolvedValue('OK'),
   del: jest.fn().mockResolvedValue(1),
-};
-
-const mockSession = {
-  startTransaction: jest.fn(),
-  commitTransaction: jest.fn(),
-  abortTransaction: jest.fn(),
-  endSession: jest.fn(),
-};
-
-const mockConnection = {
-  startSession: jest.fn().mockResolvedValue(mockSession),
 };
 
 const mockWalletService = {
@@ -158,7 +156,6 @@ describe('AuthService', () => {
         { provide: NotificationsService, useValue: mockNotificationsService },
         { provide: 'IAuthRepository', useValue: mockAuthRepository },
         { provide: getRedisConnectionToken(), useValue: mockRedis },
-        { provide: getConnectionToken(), useValue: mockConnection },
         { provide: WalletService, useValue: mockWalletService },
       ],
     }).compile();
@@ -212,7 +209,7 @@ describe('AuthService', () => {
         registerInput.password,
         12,
       );
-      expect(mockConnection.startSession).toHaveBeenCalled();
+      expect(mockUsersService.startSession).toHaveBeenCalled();
       expect(mockSession.startTransaction).toHaveBeenCalled();
       expect(mockUsersService.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -361,7 +358,7 @@ describe('AuthService', () => {
 
       // Assert
       expect(result.accessToken).toBe(MOCK_ACCESS_TOKEN);
-      expect(mockConnection.startSession).toHaveBeenCalled();
+      expect(mockUsersService.startSession).toHaveBeenCalled();
       expect(mockSession.startTransaction).toHaveBeenCalled();
       expect(mockUsersService.createGoogleUser).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -480,6 +477,11 @@ describe('AuthService', () => {
       const userId = new Types.ObjectId().toString();
       mockJwtService.verify.mockReturnValue({ sub: userId });
       mockUsersService.verifyEmail.mockResolvedValue(undefined);
+      mockUsersService.findById.mockResolvedValue({
+        firstName: 'Test',
+        lastName: 'User',
+        email: 'test@example.com',
+      });
 
       // Act
       const result = await service.confirmEmail('valid-token');

@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BidsService } from './bids.service';
 import { WalletService } from '../wallet/wallet.service';
 import { Types } from 'mongoose';
-import { getConnectionToken } from '@nestjs/mongoose';
 import { BidStatus } from './enums/bid-status.enum';
 import { AuctionStatus } from '../auctions/enums/auction-status.enum';
 import { PlaceBidInput } from './dto/place-bid.input';
@@ -12,8 +11,18 @@ import { AuctionNotActiveException } from './exceptions/auction-not-active.excep
 import { BidOnOwnAuctionException } from './exceptions/bid-on-own-auction.exception';
 import { AlreadyHighestBidderException } from './exceptions/already-highest-bidder.exception';
 import { BidAmountTooLowException } from './exceptions/bid-amount-too-low.exception';
+import { NotificationsService } from '../notifications/notifications.service';
+import { UsersService } from '../users/users.service';
+
+const mockSession = {
+  startTransaction: jest.fn(),
+  commitTransaction: jest.fn(),
+  abortTransaction: jest.fn(),
+  endSession: jest.fn(),
+};
 
 const mockBidRepository = {
+  startSession: jest.fn().mockResolvedValue(mockSession),
   findWinningByAuctionId: jest.fn(),
   updateStatus: jest.fn(),
   create: jest.fn(),
@@ -26,25 +35,36 @@ const mockAuctionRepository = {
   findById: jest.fn(),
   updateCurrentPrice: jest.fn(),
   findEndedWithoutWinner: jest.fn(),
-  setWinner: jest.fn(),
+  finalizeAuction: jest.fn(),
 };
 
 const mockWalletService = {
-  hold: jest.fn(),
-  release: jest.fn(),
-  capture: jest.fn(),
-  deposit: jest.fn(),
+  hold: jest.fn().mockResolvedValue({
+    wallet: {},
+    transaction: { _id: new Types.ObjectId() },
+  }),
+  release: jest.fn().mockResolvedValue({
+    wallet: {},
+    transaction: { _id: new Types.ObjectId() },
+  }),
+  capture: jest.fn().mockResolvedValue({
+    wallet: {},
+    transaction: { _id: new Types.ObjectId() },
+  }),
+  deposit: jest.fn().mockResolvedValue({
+    wallet: {},
+    transaction: { _id: new Types.ObjectId() },
+  }),
 };
 
-const mockSession = {
-  startTransaction: jest.fn(),
-  commitTransaction: jest.fn(),
-  abortTransaction: jest.fn(),
-  endSession: jest.fn(),
+const mockNotificationsService = {
+  sendOutbidEmail: jest.fn().mockResolvedValue(undefined),
+  sendAuctionWonEmail: jest.fn().mockResolvedValue(undefined),
+  sendAuctionEndedSellerEmail: jest.fn().mockResolvedValue(undefined),
 };
 
-const mockConnection = {
-  startSession: jest.fn().mockResolvedValue(mockSession),
+const mockUsersService = {
+  findById: jest.fn(),
 };
 
 describe('BidsService', () => {
@@ -57,7 +77,8 @@ describe('BidsService', () => {
         { provide: 'IBidRepository', useValue: mockBidRepository },
         { provide: 'IAuctionRepository', useValue: mockAuctionRepository },
         { provide: WalletService, useValue: mockWalletService },
-        { provide: getConnectionToken(), useValue: mockConnection },
+        { provide: NotificationsService, useValue: mockNotificationsService },
+        { provide: UsersService, useValue: mockUsersService },
       ],
     }).compile();
 
@@ -214,9 +235,10 @@ describe('BidsService', () => {
         auctionId,
         mockSession,
       );
-      expect(mockAuctionRepository.setWinner).toHaveBeenCalledWith(
+      expect(mockAuctionRepository.finalizeAuction).toHaveBeenCalledWith(
         auctionId,
         winnerId,
+        mockSession,
       );
       expect(mockSession.commitTransaction).toHaveBeenCalled();
     });
