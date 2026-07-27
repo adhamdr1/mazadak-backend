@@ -17,6 +17,18 @@ import { AuctionNotPendingException } from './exceptions/auction-not-pending.exc
 import { PaginationInput } from '../common/dto/pagination.input';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from '../users/users.service';
+import { WalletService } from '../wallet/wallet.service';
+
+const mockWalletService = {
+  release: jest.fn(),
+};
+
+const mockSession = {
+  startTransaction: jest.fn(),
+  commitTransaction: jest.fn(),
+  abortTransaction: jest.fn(),
+  endSession: jest.fn(),
+};
 
 const mockAuctionRepository = {
   create: jest.fn(),
@@ -29,11 +41,14 @@ const mockAuctionRepository = {
   updateManyStatus: jest.fn(),
   findPendingToActivate: jest.fn(),
   findActiveToEnd: jest.fn(),
+  findWinningBidByAuctionId: jest.fn(),
+  startSession: jest.fn().mockResolvedValue(mockSession),
 };
 
 const mockNotificationsService = {
   sendAuctionStartedSellerEmail: jest.fn().mockResolvedValue(undefined),
   sendAuctionEndedSellerEmail: jest.fn().mockResolvedValue(undefined),
+  createInAppNotification: jest.fn().mockResolvedValue(undefined),
 };
 
 const mockUsersService = {
@@ -54,10 +69,12 @@ describe('AuctionsService', () => {
         },
         { provide: NotificationsService, useValue: mockNotificationsService },
         { provide: UsersService, useValue: mockUsersService },
+        { provide: WalletService, useValue: mockWalletService },
       ],
     }).compile();
 
     service = module.get<AuctionsService>(AuctionsService);
+    mockAuctionRepository.findWinningBidByAuctionId.mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -246,6 +263,7 @@ describe('AuctionsService', () => {
       expect(mockAuctionRepository.updateStatus).toHaveBeenCalledWith(
         auctionId,
         AuctionStatus.CANCELLED,
+        mockSession,
       );
     });
 

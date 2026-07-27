@@ -31,6 +31,8 @@ export interface UpdateAuctionData {
 }
 
 export interface IAuctionRepository {
+  startSession(): Promise<ClientSession>;
+
   create(data: CreateAuctionData): Promise<Auction>;
 
   findById(id: string): Promise<Auction | null>;
@@ -58,7 +60,11 @@ export interface IAuctionRepository {
 
   update(id: string, data: UpdateAuctionData): Promise<Auction | null>;
 
-  updateStatus(id: string, status: AuctionStatus): Promise<void>;
+  updateStatus(
+    id: string,
+    status: AuctionStatus,
+    session?: ClientSession,
+  ): Promise<void>;
 
   updateManyStatus(ids: Types.ObjectId[], status: AuctionStatus): Promise<void>;
 
@@ -79,4 +85,9 @@ export interface IAuctionRepository {
     winnerId?: string,
     session?: ClientSession,
   ): Promise<void>;
+
+  findWinningBidByAuctionId(
+    auctionId: string,
+    session?: ClientSession,
+  ): Promise<{ bidderId: string; amount: number } | null>;
 }

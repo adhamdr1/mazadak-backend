@@ -9,13 +9,21 @@ import {
 } from '../interfaces/auction-repository.interface';
 import { Auction, AuctionDocument } from '../entities/auction.entity';
 import { AuctionStatus } from '../enums/auction-status.enum';
+import { Bid, BidDocument } from '../../bids/entities/bid.entity';
+import { BidStatus } from '../../bids/enums/bid-status.enum';
 
 @Injectable()
 export class MongoAuctionRepository implements IAuctionRepository {
   constructor(
     @InjectModel(Auction.name)
     private readonly auctionModel: Model<AuctionDocument>,
+    @InjectModel(Bid.name)
+    private readonly bidModel: Model<BidDocument>,
   ) {}
+
+  async startSession(): Promise<ClientSession> {
+    return this.auctionModel.db.startSession();
+  }
 
   async create(data: CreateAuctionData): Promise<Auction> {
     const auction = new this.auctionModel({
@@ -75,9 +83,17 @@ export class MongoAuctionRepository implements IAuctionRepository {
       .exec();
   }
 
-  async updateStatus(id: string, status: AuctionStatus): Promise<void> {
+  async updateStatus(
+    id: string,
+    status: AuctionStatus,
+    session?: ClientSession,
+  ): Promise<void> {
     await this.auctionModel
-      .findByIdAndUpdate(new Types.ObjectId(id), { $set: { status } })
+      .findByIdAndUpdate(
+        new Types.ObjectId(id),
+        { $set: { status } },
+        { session },
+      )
       .exec();
   }
 
@@ -189,5 +205,28 @@ export class MongoAuctionRepository implements IAuctionRepository {
     ]);
 
     return { items, total };
+  }
+
+  async findWinningBidByAuctionId(
+    auctionId: string,
+    session?: ClientSession,
+  ): Promise<{ bidderId: string; amount: number } | null> {
+    const winningBid = await this.bidModel
+      .findOne(
+        {
+          auctionId: new Types.ObjectId(auctionId),
+          status: BidStatus.WINNING,
+        },
+        null,
+        { session },
+      )
+      .exec();
+
+    if (!winningBid) return null;
+
+    return {
+      bidderId: winningBid.bidderId.toString(),
+      amount: winningBid.amount,
+    };
   }
 }

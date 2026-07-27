@@ -18,6 +18,8 @@ import { BidOnOwnAuctionException } from './exceptions/bid-on-own-auction.except
 import { AuctionNotFoundException } from '../auctions/exceptions/auction-not-found.exception';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from '../users/users.service';
+import { InAppNotificationType } from '../notifications/in-app/enums/in-app-notification-type.enum';
+import { NotificationReferenceType } from '../notifications/in-app/enums/notification-reference-type.enum';
 
 @Injectable()
 export class BidsService {
@@ -111,11 +113,39 @@ export class BidsService {
         session,
       );
 
+      // 5. Send Outbid In-App Notification (Transactional)
+      if (currentWinner) {
+        await this.notificationsService.createInAppNotification(
+          {
+            userId: currentWinner.bidderId.toString(),
+            type: InAppNotificationType.OUTBID,
+            title: 'You have been outbid! ⚠️',
+            body: `Someone placed a higher bid of ${input.amount} EGP on the auction "${auction.title}".`,
+            referenceId: input.auctionId,
+            referenceType: NotificationReferenceType.AUCTION,
+          },
+          session,
+        );
+      }
+
+      // 6. Send New Bid In-App Notification to seller (Transactional)
+      await this.notificationsService.createInAppNotification(
+        {
+          userId: auction.sellerId.toString(),
+          type: InAppNotificationType.NEW_BID,
+          title: 'New bid placed! 📈',
+          body: `Someone placed a bid of ${input.amount} EGP on your auction "${auction.title}".`,
+          referenceId: input.auctionId,
+          referenceType: NotificationReferenceType.AUCTION,
+        },
+        session,
+      );
+
       await session.commitTransaction();
 
-      // 5. Send Outbid email notification to previous winner (Post-commit, non-blocking)
+      // 7. Send Outbid Email (Post-commit, non-blocking)
       if (currentWinner) {
-        this.notifyOutbidUser(
+        this.sendOutbidEmail(
           currentWinner.bidderId.toString(),
           auction.title,
           input.amount,
@@ -123,7 +153,7 @@ export class BidsService {
           outbidTransactionId,
         ).catch((err) => {
           this.logger.error(
-            `Failed to send outbid notification: ${err instanceof Error ? err.message : String(err)}`,
+            `Failed to send outbid email: ${err instanceof Error ? err.message : String(err)}`,
           );
         });
       }
@@ -137,7 +167,7 @@ export class BidsService {
     }
   }
 
-  private async notifyOutbidUser(
+  private async sendOutbidEmail(
     previousBidderId: string,
     auctionTitle: string,
     newAmount: number,
@@ -190,10 +220,23 @@ export class BidsService {
             undefined,
             session,
           );
+          // Send In-App notification (Transactional)
+          await this.notificationsService.createInAppNotification(
+            {
+              userId: auction.sellerId.toString(),
+              type: InAppNotificationType.AUCTION_ENDED_SELLER,
+              title: 'Your auction has ended 🏁',
+              body: `Your auction "${auction.title}" has ended with no bids.`,
+              referenceId: auctionId,
+              referenceType: NotificationReferenceType.AUCTION,
+            },
+            session,
+          );
+
           await session.commitTransaction();
 
-          // Notify seller that auction ended (no winner, no transaction)
-          this.notifySellerAuctionEnded(
+          // Send Email to seller (Post-commit)
+          this.sendAuctionEndedSellerEmail(
             auction.sellerId.toString(),
             auction.title,
             auction.currentPrice,
@@ -236,10 +279,50 @@ export class BidsService {
           session,
         );
 
+        // 4. Send AUCTION_WON In-App Notification to winner
+        await this.notificationsService.createInAppNotification(
+          {
+            userId: winnerId,
+            type: InAppNotificationType.AUCTION_WON,
+            title: 'Congratulations! You won! 🎉',
+            body: `You won the auction "${auction.title}" with a final bid of ${winningBid.amount} EGP.`,
+            referenceId: auctionId,
+            referenceType: NotificationReferenceType.AUCTION,
+          },
+          session,
+        );
+
+        // Fetch winner name for seller's notification
+        let winnerName: string | null = null;
+        try {
+          const winnerUser = await this.usersService.findById(winnerId);
+          if (winnerUser) {
+            winnerName =
+              [winnerUser.firstName, winnerUser.lastName]
+                .filter(Boolean)
+                .join(' ') || 'Winning Bidder';
+          }
+        } catch {
+          winnerName = 'Winning Bidder';
+        }
+
+        // 5. Send AUCTION_ENDED_SELLER In-App Notification to seller
+        await this.notificationsService.createInAppNotification(
+          {
+            userId: sellerId,
+            type: InAppNotificationType.AUCTION_ENDED_SELLER,
+            title: 'Your auction has ended 🏁',
+            body: `Your auction "${auction.title}" has successfully ended. Sold for ${auction.currentPrice} EGP to ${winnerName || 'Winning Bidder'}.`,
+            referenceId: auctionId,
+            referenceType: NotificationReferenceType.AUCTION,
+          },
+          session,
+        );
+
         await session.commitTransaction();
 
-        // 4. Send AUCTION_WON email notification to winner (Post-commit, non-blocking)
-        this.notifyAuctionWinner(
+        // 6. Send AUCTION_WON Email to winner (Post-commit)
+        this.sendAuctionWonEmail(
           winnerId,
           auction.title,
           winningBid.amount,
@@ -247,16 +330,16 @@ export class BidsService {
           captureTransaction._id.toString(),
         ).catch((err) => {
           this.logger.error(
-            `Failed to send auction won notification for ${auctionId}: ${err instanceof Error ? err.message : String(err)}`,
+            `Failed to send auction won email for ${auctionId}: ${err instanceof Error ? err.message : String(err)}`,
           );
         });
 
-        // 5. Send AUCTION_ENDED_SELLER email notification to seller
-        this.notifySellerAuctionEnded(
+        // 7. Send AUCTION_ENDED_SELLER Email to seller (Post-commit)
+        this.sendAuctionEndedSellerEmail(
           sellerId,
           auction.title,
           auction.currentPrice,
-          winnerId,
+          winnerName, // pass the fetched name so we don't fetch again
           auctionId,
           depositTransaction._id.toString(),
         ).catch((err) => {
@@ -279,7 +362,7 @@ export class BidsService {
     }
   }
 
-  private async notifyAuctionWinner(
+  private async sendAuctionWonEmail(
     winnerId: string,
     auctionTitle: string,
     winningAmount: number,
@@ -302,11 +385,11 @@ export class BidsService {
     );
   }
 
-  private async notifySellerAuctionEnded(
+  private async sendAuctionEndedSellerEmail(
     sellerId: string,
     auctionTitle: string,
     currentPrice: number,
-    winnerId: string | null,
+    winnerName: string | null,
     auctionId: string,
     transactionId?: string,
   ): Promise<void> {
@@ -315,20 +398,6 @@ export class BidsService {
 
     const name =
       [seller.firstName, seller.lastName].filter(Boolean).join(' ') || 'User';
-
-    let winnerName: string | null = null;
-    if (winnerId) {
-      try {
-        const winner = await this.usersService.findById(winnerId);
-        if (winner) {
-          winnerName =
-            [winner.firstName, winner.lastName].filter(Boolean).join(' ') ||
-            'Winning Bidder';
-        }
-      } catch {
-        winnerName = 'Winning Bidder';
-      }
-    }
 
     await this.notificationsService.sendAuctionEndedSellerEmail(
       seller.email,

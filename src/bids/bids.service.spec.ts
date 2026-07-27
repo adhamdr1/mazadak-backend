@@ -61,6 +61,7 @@ const mockNotificationsService = {
   sendOutbidEmail: jest.fn().mockResolvedValue(undefined),
   sendAuctionWonEmail: jest.fn().mockResolvedValue(undefined),
   sendAuctionEndedSellerEmail: jest.fn().mockResolvedValue(undefined),
+  createInAppNotification: jest.fn().mockResolvedValue(undefined),
 };
 
 const mockUsersService = {

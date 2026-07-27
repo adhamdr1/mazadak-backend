@@ -32,6 +32,7 @@ const mockTransactionService = {
 const mockNotificationsService = {
   sendDepositSuccessfulEmail: jest.fn().mockResolvedValue(undefined),
   sendWithdrawalCompletedEmail: jest.fn().mockResolvedValue(undefined),
+  createInAppNotification: jest.fn().mockResolvedValue(undefined),
 };
 
 const mockUsersService = {

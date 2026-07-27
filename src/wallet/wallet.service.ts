@@ -13,6 +13,8 @@ import { WalletsPage } from './dto/wallets-page.type';
 import { PaginationInput } from '../common/dto/pagination.input';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from '../users/users.service';
+import { InAppNotificationType } from '../notifications/in-app/enums/in-app-notification-type.enum';
+import { NotificationReferenceType } from '../notifications/in-app/enums/notification-reference-type.enum';
 
 @Injectable()
 export class WalletService {
@@ -212,6 +214,15 @@ export class WalletService {
       amount,
       transactionId,
     );
+
+    await this.notificationsService.createInAppNotification({
+      userId,
+      type: InAppNotificationType.DEPOSIT_SUCCESSFUL,
+      title: 'Deposit Successful 💰',
+      body: `An amount of ${amount} EGP has been credited to your wallet. Ref: ${transactionId || 'N/A'}.`,
+      referenceId: transactionId,
+      referenceType: NotificationReferenceType.TRANSACTION,
+    });
   }
 
   private async notifyWithdrawal(
@@ -231,6 +242,15 @@ export class WalletService {
       amount,
       transactionId,
     );
+
+    await this.notificationsService.createInAppNotification({
+      userId,
+      type: InAppNotificationType.WITHDRAWAL_COMPLETED,
+      title: 'Withdrawal Completed 💸',
+      body: `An amount of ${amount} EGP has been withdrawn from your wallet. Ref: ${transactionId || 'N/A'}.`,
+      referenceId: transactionId,
+      referenceType: NotificationReferenceType.TRANSACTION,
+    });
   }
 
   // ─── Internal (called by AuctionService) ─────────────────────────────────────
