@@ -1,14 +1,34 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EmailService } from './email/email.service';
 import { EmailSubjects, EmailTemplates } from './enums/notification.enum';
+import { InAppNotificationsService } from './in-app/in-app-notifications.service';
+import { CreateInAppNotificationDto } from './in-app/dto/create-in-app-notification.dto';
+import { ClientSession } from 'mongoose';
 
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
   constructor(
     private readonly emailService: EmailService,
     private readonly configService: ConfigService,
+    private readonly inAppNotificationsService: InAppNotificationsService,
   ) {}
+
+  async createInAppNotification(
+    dto: CreateInAppNotificationDto,
+    session?: ClientSession,
+  ): Promise<void> {
+    try {
+      await this.inAppNotificationsService.create(dto, session);
+    } catch (error) {
+      this.logger.error(
+        `Failed to create in-app notification for user ${dto.userId}:`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+  }
 
   async sendEmailVerification(
     email: string,
