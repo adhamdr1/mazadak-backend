@@ -16,6 +16,10 @@ export class MongoUserRepository implements IUserRepository {
     private readonly userModel: Model<UserDocument>,
   ) {}
 
+  async startSession(): Promise<ClientSession> {
+    return await this.userModel.db.startSession();
+  }
+
   async create(data: CreateUserData, session?: ClientSession): Promise<User> {
     const createdUser = new this.userModel(data);
     return await createdUser.save({ session });

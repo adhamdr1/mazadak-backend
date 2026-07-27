@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { WalletService } from './wallet.service';
 import { TransactionService } from '../transaction/transaction.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { UsersService } from '../users/users.service';
 import { WalletNotFoundException } from './exceptions/wallet-not-found.exception';
 import { InsufficientFundsException } from './exceptions/insufficient-funds.exception';
 import { InvalidAmountException } from './exceptions/invalid-amount.exception';
@@ -8,6 +10,8 @@ import { TransactionType } from '../transaction/enums/transaction-type.enum';
 import { TransactionStatus } from '../transaction/enums/transaction-status.enum';
 import { Types } from 'mongoose';
 import { PaginationInput } from '../common/dto/pagination.input';
+
+const mockTransaction = { _id: new Types.ObjectId() };
 
 const mockWalletRepository = {
   findByUserId: jest.fn(),
@@ -22,7 +26,16 @@ const mockWalletRepository = {
 };
 
 const mockTransactionService = {
-  createTransaction: jest.fn(),
+  createTransaction: jest.fn().mockResolvedValue(mockTransaction),
+};
+
+const mockNotificationsService = {
+  sendDepositSuccessfulEmail: jest.fn().mockResolvedValue(undefined),
+  sendWithdrawalCompletedEmail: jest.fn().mockResolvedValue(undefined),
+};
+
+const mockUsersService = {
+  findById: jest.fn(),
 };
 
 describe('WalletService', () => {
@@ -34,6 +47,8 @@ describe('WalletService', () => {
         WalletService,
         { provide: 'IWalletRepository', useValue: mockWalletRepository },
         { provide: TransactionService, useValue: mockTransactionService },
+        { provide: NotificationsService, useValue: mockNotificationsService },
+        { provide: UsersService, useValue: mockUsersService },
       ],
     }).compile();
 
@@ -120,9 +135,9 @@ describe('WalletService', () => {
       const updatedWallet = { ...mockWallet, balance: 200 };
       mockWalletRepository.creditBalance.mockResolvedValue(updatedWallet);
 
-      const result = await service.deposit(userId, 100);
+      const { wallet } = await service.deposit(userId, 100);
 
-      expect(result).toEqual(updatedWallet);
+      expect(wallet).toEqual(updatedWallet);
       expect(mockTransactionService.createTransaction).toHaveBeenCalledWith({
         walletId,
         type: TransactionType.DEPOSIT,
@@ -139,9 +154,9 @@ describe('WalletService', () => {
       const updatedWallet = { ...mockWallet, balance: 50 };
       mockWalletRepository.debitBalance.mockResolvedValue(updatedWallet);
 
-      const result = await service.withdraw(userId, 50);
+      const { wallet } = await service.withdraw(userId, 50);
 
-      expect(result).toEqual(updatedWallet);
+      expect(wallet).toEqual(updatedWallet);
       expect(mockTransactionService.createTransaction).toHaveBeenCalledWith({
         walletId,
         type: TransactionType.WITHDRAW,
@@ -177,9 +192,9 @@ describe('WalletService', () => {
       const updatedWallet = { ...mockWallet, balance: 50, heldBalance: 50 };
       mockWalletRepository.holdBalance.mockResolvedValue(updatedWallet);
 
-      const result = await service.hold(userId, 50, refId);
+      const { wallet } = await service.hold(userId, 50, refId);
 
-      expect(result).toEqual(updatedWallet);
+      expect(wallet).toEqual(updatedWallet);
       expect(mockTransactionService.createTransaction).toHaveBeenCalledWith({
         walletId,
         type: TransactionType.HOLD,
@@ -215,9 +230,9 @@ describe('WalletService', () => {
       const updatedWallet = { ...mockWallet, balance: 150, heldBalance: 0 };
       mockWalletRepository.releaseBalance.mockResolvedValue(updatedWallet);
 
-      const result = await service.release(userId, 50, refId);
+      const { wallet } = await service.release(userId, 50, refId);
 
-      expect(result).toEqual(updatedWallet);
+      expect(wallet).toEqual(updatedWallet);
       expect(mockTransactionService.createTransaction).toHaveBeenCalledWith({
         walletId,
         type: TransactionType.RELEASE,
@@ -253,9 +268,9 @@ describe('WalletService', () => {
       const updatedWallet = { ...mockWallet, balance: 50, heldBalance: 0 };
       mockWalletRepository.captureHeldBalance.mockResolvedValue(updatedWallet);
 
-      const result = await service.capture(userId, 50, refId);
+      const { wallet } = await service.capture(userId, 50, refId);
 
-      expect(result).toEqual(updatedWallet);
+      expect(wallet).toEqual(updatedWallet);
       expect(mockTransactionService.createTransaction).toHaveBeenCalledWith({
         walletId,
         type: TransactionType.CAPTURE,

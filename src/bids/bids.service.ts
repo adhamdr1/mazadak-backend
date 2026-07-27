@@ -1,6 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { InjectConnection } from '@nestjs/mongoose';
-import { Connection, Types } from 'mongoose';
+import { Types } from 'mongoose';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PlaceBidInput } from './dto/place-bid.input';
 import { BidsFilterInput } from './dto/bids-filter.input';
@@ -32,7 +31,6 @@ export class BidsService {
     private readonly walletService: WalletService,
     private readonly notificationsService: NotificationsService,
     private readonly usersService: UsersService,
-    @InjectConnection() private readonly connection: Connection,
   ) {}
 
   async placeBid(userId: string, input: PlaceBidInput): Promise<Bid> {
@@ -65,7 +63,7 @@ export class BidsService {
       throw new BidAmountTooLowException();
     }
 
-    const session = await this.connection.startSession();
+    const session = await this.bidRepository.startSession();
     session.startTransaction();
 
     try {

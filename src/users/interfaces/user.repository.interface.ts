@@ -27,6 +27,8 @@ export interface UpdateUserData {
 }
 
 export interface IUserRepository {
+  startSession(): Promise<ClientSession>;
+
   create(data: CreateUserData, session?: ClientSession): Promise<User>;
 
   findById(id: string): Promise<User | null>;

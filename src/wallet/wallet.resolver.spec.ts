@@ -76,7 +76,10 @@ describe('WalletResolver', () => {
     it('should call deposit on wallet service', async () => {
       const depositInput: DepositInput = { amount: 50 };
       const updatedWallet = { ...mockWallet, balance: 150 };
-      mockWalletService.deposit.mockResolvedValue(updatedWallet);
+      mockWalletService.deposit.mockResolvedValue({
+        wallet: updatedWallet,
+        transaction: { _id: 'mock-tx-id' },
+      });
 
       const result = await resolver.deposit(currentUser, depositInput);
 
@@ -92,7 +95,10 @@ describe('WalletResolver', () => {
     it('should call withdraw on wallet service', async () => {
       const withdrawInput: WithdrawInput = { amount: 20 };
       const updatedWallet = { ...mockWallet, balance: 80 };
-      mockWalletService.withdraw.mockResolvedValue(updatedWallet);
+      mockWalletService.withdraw.mockResolvedValue({
+        wallet: updatedWallet,
+        transaction: { _id: 'mock-tx-id' },
+      });
 
       const result = await resolver.withdraw(currentUser, withdrawInput);
 

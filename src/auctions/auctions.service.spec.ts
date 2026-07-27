@@ -15,6 +15,8 @@ import { AuctionEndTimeInvalidException } from './exceptions/auction-end-time-in
 import { AuctionInvalidStateException } from './exceptions/auction-invalid-state.exception';
 import { AuctionNotPendingException } from './exceptions/auction-not-pending.exception';
 import { PaginationInput } from '../common/dto/pagination.input';
+import { NotificationsService } from '../notifications/notifications.service';
+import { UsersService } from '../users/users.service';
 
 const mockAuctionRepository = {
   create: jest.fn(),
@@ -29,6 +31,15 @@ const mockAuctionRepository = {
   findActiveToEnd: jest.fn(),
 };
 
+const mockNotificationsService = {
+  sendAuctionStartedSellerEmail: jest.fn().mockResolvedValue(undefined),
+  sendAuctionEndedSellerEmail: jest.fn().mockResolvedValue(undefined),
+};
+
+const mockUsersService = {
+  findById: jest.fn(),
+};
+
 describe('AuctionsService', () => {
   let service: AuctionsService;
 
@@ -41,6 +52,8 @@ describe('AuctionsService', () => {
           provide: UploadService,
           useValue: { uploadImage: jest.fn(), deleteImage: jest.fn() },
         },
+        { provide: NotificationsService, useValue: mockNotificationsService },
+        { provide: UsersService, useValue: mockUsersService },
       ],
     }).compile();
 
