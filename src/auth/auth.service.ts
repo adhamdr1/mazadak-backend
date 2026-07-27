@@ -212,6 +212,7 @@ export class AuthService {
   }
 
   async confirmEmail(token: string): Promise<boolean> {
+    let userId: string;
     try {
       // 1. فك تشفير التوكن والتأكد من صلاحيته باستخدام المفتاح المخصص للإيميل
       const payload = this.jwtService.verify<{ sub: string }>(token, {
@@ -219,13 +220,22 @@ export class AuthService {
           'JWT_VERIFICATION_SECRET',
         ),
       });
-
-      await this.usersService.verifyEmail(payload.sub);
-
-      return true;
+      userId = payload.sub;
     } catch {
       throw new InvalidTokenException();
     }
+
+    const user = await this.usersService.findById(userId);
+    await this.usersService.verifyEmail(userId);
+
+    const name =
+      [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
+
+    this.notificationsService
+      .sendWelcomeEmail(user.email, name)
+      .catch(() => {});
+
+    return true;
   }
 
   async resendConfirmationEmail(email: string): Promise<boolean> {
@@ -356,6 +366,14 @@ export class AuthService {
     await this.redis.del(redisKey);
     // 5. طرد اليوزر من كل الأجهزة
     await this.logoutAll(user._id.toString());
+
+    // 6. إرسال إشعار أمني بتغيير كلمة المرور
+    const name =
+      [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
+    this.notificationsService
+      .sendPasswordChangedEmail(user.email, name)
+      .catch(() => {});
+
     return true;
   }
 
@@ -386,6 +404,14 @@ export class AuthService {
     const hashedPassword = await bcrypt.hash(input.password, SALT_ROUNDS);
     await this.usersService.updatePassword(userId, hashedPassword);
     await this.logoutAll(user._id.toString());
+
+    // إرسال إشعار أمني بتغيير كلمة المرور
+    const name =
+      [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
+    this.notificationsService
+      .sendPasswordChangedEmail(user.email, name)
+      .catch(() => {});
+
     return true;
   }
 

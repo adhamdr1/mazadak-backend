@@ -6,12 +6,16 @@ import { BidsService } from './bids.service';
 import { MongoBidRepository } from './repositories/mongo.bid.repository';
 import { WalletModule } from '../wallet/wallet.module';
 import { AuctionsModule } from '../auctions/auctions.module';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: Bid.name, schema: BidSchema }]),
     WalletModule,
     AuctionsModule,
+    NotificationsModule,
+    UsersModule,
   ],
   providers: [
     BidsResolver,

@@ -74,5 +74,9 @@ export interface IAuctionRepository {
 
   findEndedWithoutWinner(): Promise<Auction[]>;
 
-  setWinner(id: string, winnerId: string): Promise<void>;
+  finalizeAuction(
+    id: string,
+    winnerId?: string,
+    session?: ClientSession,
+  ): Promise<void>;
 }

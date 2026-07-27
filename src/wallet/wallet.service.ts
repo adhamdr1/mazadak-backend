@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ClientSession } from 'mongoose';
 import type { IWalletRepository } from './interfaces/wallet.repository.interface';
 import { Wallet } from './entities/wallet.entity';
@@ -8,15 +8,22 @@ import { InvalidAmountException } from './exceptions/invalid-amount.exception';
 import { TransactionService } from '../transaction/transaction.service';
 import { TransactionType } from '../transaction/enums/transaction-type.enum';
 import { TransactionStatus } from '../transaction/enums/transaction-status.enum';
+import { Transaction } from '../transaction/entities/transaction.entity';
 import { WalletsPage } from './dto/wallets-page.type';
 import { PaginationInput } from '../common/dto/pagination.input';
+import { NotificationsService } from '../notifications/notifications.service';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class WalletService {
+  private readonly logger = new Logger(WalletService.name);
+
   constructor(
     @Inject('IWalletRepository')
     private readonly walletRepository: IWalletRepository,
     private readonly transactionService: TransactionService,
+    private readonly notificationsService: NotificationsService,
+    private readonly usersService: UsersService,
   ) {}
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -33,7 +40,7 @@ export class WalletService {
 
   /**
    * Executes a wallet operation and logs its result as a Transaction.
-   * - If the operation succeeds → logs SUCCESS.
+   * - If the operation succeeds → logs SUCCESS and returns both wallet and created Transaction record.
    * - If the operation fails (any exception) → logs FAILED then re-throws.
    */
   private async executeWalletOp(params: {
@@ -48,7 +55,7 @@ export class WalletService {
     onNull: () => never;
     referenceId?: string;
     session?: ClientSession;
-  }): Promise<Wallet> {
+  }): Promise<{ wallet: Wallet; transaction: Transaction }> {
     this.validateAmount(params.amount);
     const wallet = await this.getWalletOrThrow(params.userId);
     const walletId = wallet._id.toString();
@@ -70,7 +77,7 @@ export class WalletService {
       throw error;
     }
 
-    await this.transactionService.createTransaction({
+    const transaction = await this.transactionService.createTransaction({
       walletId,
       type: params.type,
       amount: params.amount,
@@ -78,7 +85,7 @@ export class WalletService {
       referenceId: params.referenceId,
     });
 
-    return updated;
+    return { wallet: updated, transaction };
   }
 
   // ─── Internal (called by AuthService) ───────────────────────────────────────
@@ -124,8 +131,8 @@ export class WalletService {
     amount: number,
     referenceId?: string,
     session?: ClientSession,
-  ): Promise<Wallet> {
-    return this.executeWalletOp({
+  ): Promise<{ wallet: Wallet; transaction: Transaction }> {
+    const { wallet, transaction } = await this.executeWalletOp({
       userId,
       amount,
       type: TransactionType.DEPOSIT,
@@ -137,17 +144,34 @@ export class WalletService {
         throw new WalletNotFoundException();
       },
     });
+
+    // Only send the generic deposit email if this is a manual deposit (no referenceId).
+    // If referenceId is present, it's a system action (like winning an auction),
+    // and the user will already receive a context-specific email (e.g., Auction Won).
+    if (!referenceId) {
+      this.notifyDeposit(userId, amount, transaction._id.toString()).catch(
+        (err) => {
+          this.logger.error(
+            `Failed to send deposit email: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        },
+      );
+    }
+
+    return { wallet, transaction };
   }
 
   async withdraw(
     userId: string,
     amount: number,
+    referenceId?: string,
     session?: ClientSession,
-  ): Promise<Wallet> {
-    return this.executeWalletOp({
+  ): Promise<{ wallet: Wallet; transaction: Transaction }> {
+    const { wallet, transaction } = await this.executeWalletOp({
       userId,
       amount,
       type: TransactionType.WITHDRAW,
+      referenceId,
       session,
       operation: (walletId, amt, sess) =>
         this.walletRepository.debitBalance(walletId, amt, sess),
@@ -155,6 +179,58 @@ export class WalletService {
         throw new InsufficientFundsException();
       },
     });
+
+    // Only send the generic withdrawal email if this is a manual withdrawal.
+    if (!referenceId) {
+      // Pass created MongoDB Transaction _id to email!
+      this.notifyWithdrawal(userId, amount, transaction._id.toString()).catch(
+        (err) => {
+          this.logger.error(
+            `Failed to send withdrawal email for user ${userId}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        },
+      );
+    }
+
+    return { wallet, transaction };
+  }
+
+  private async notifyDeposit(
+    userId: string,
+    amount: number,
+    transactionId?: string,
+  ): Promise<void> {
+    const user = await this.usersService.findById(userId);
+    if (!user) return;
+
+    const name =
+      [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
+
+    await this.notificationsService.sendDepositSuccessfulEmail(
+      user.email,
+      name,
+      amount,
+      transactionId,
+    );
+  }
+
+  private async notifyWithdrawal(
+    userId: string,
+    amount: number,
+    transactionId?: string,
+  ): Promise<void> {
+    const user = await this.usersService.findById(userId);
+    if (!user) return;
+
+    const name =
+      [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
+
+    await this.notificationsService.sendWithdrawalCompletedEmail(
+      user.email,
+      name,
+      amount,
+      transactionId,
+    );
   }
 
   // ─── Internal (called by AuctionService) ─────────────────────────────────────
@@ -164,8 +240,8 @@ export class WalletService {
     amount: number,
     referenceId?: string,
     session?: ClientSession,
-  ): Promise<Wallet> {
-    return this.executeWalletOp({
+  ): Promise<{ wallet: Wallet; transaction: Transaction }> {
+    return await this.executeWalletOp({
       userId,
       amount,
       type: TransactionType.HOLD,
@@ -184,8 +260,8 @@ export class WalletService {
     amount: number,
     referenceId?: string,
     session?: ClientSession,
-  ): Promise<Wallet> {
-    return this.executeWalletOp({
+  ): Promise<{ wallet: Wallet; transaction: Transaction }> {
+    return await this.executeWalletOp({
       userId,
       amount,
       type: TransactionType.RELEASE,
@@ -204,8 +280,8 @@ export class WalletService {
     amount: number,
     referenceId?: string,
     session?: ClientSession,
-  ): Promise<Wallet> {
-    return this.executeWalletOp({
+  ): Promise<{ wallet: Wallet; transaction: Transaction }> {
+    return await this.executeWalletOp({
       userId,
       amount,
       type: TransactionType.CAPTURE,

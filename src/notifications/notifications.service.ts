@@ -35,12 +35,206 @@ export class NotificationsService {
     const resetLink = `${this.configService.getOrThrow('FRONTEND_URL')}/auth/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
     const name =
       [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
+    const formattedTime = this.formatDate(metadata.time);
 
     await this.emailService.send(
       email,
       EmailSubjects.RESET_PASSWORD,
       EmailTemplates.RESET_PASSWORD,
-      { resetLink, email, name, ...metadata },
+      { resetLink, email, name, ...metadata, time: formattedTime },
+    );
+  }
+
+  async sendWelcomeEmail(email: string, name: string): Promise<void> {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'https://mazadak.com';
+
+    await this.emailService.send(
+      email,
+      EmailSubjects.WELCOME,
+      EmailTemplates.WELCOME,
+      { name, frontendUrl },
+    );
+  }
+
+  async sendPasswordChangedEmail(
+    email: string,
+    name: string,
+    date?: Date | string,
+  ): Promise<void> {
+    const formattedDate = this.formatDate(date);
+
+    await this.emailService.send(
+      email,
+      EmailSubjects.PASSWORD_CHANGED,
+      EmailTemplates.PASSWORD_CHANGED,
+      { name, date: formattedDate },
+    );
+  }
+
+  async sendOutbidEmail(
+    email: string,
+    name: string,
+    auctionTitle: string,
+    newAmount: number,
+    auctionId: string,
+    transactionId?: string,
+  ): Promise<void> {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'https://mazadak.com';
+    const auctionLink = `${frontendUrl}/auctions/${auctionId}`;
+    const transactionLink = transactionId
+      ? `${frontendUrl}/wallet/transactions/${transactionId}`
+      : undefined;
+
+    await this.emailService.send(
+      email,
+      EmailSubjects.OUTBID,
+      EmailTemplates.OUTBID,
+      {
+        name,
+        auctionTitle,
+        newAmount,
+        auctionLink,
+        transactionId,
+        transactionLink,
+      },
+    );
+  }
+
+  async sendAuctionWonEmail(
+    email: string,
+    name: string,
+    auctionTitle: string,
+    winningAmount: number,
+    auctionId: string,
+    transactionId?: string,
+  ): Promise<void> {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'https://mazadak.com';
+    const auctionLink = `${frontendUrl}/auctions/${auctionId}`;
+    const transactionLink = transactionId
+      ? `${frontendUrl}/wallet/transactions/${transactionId}`
+      : undefined;
+
+    await this.emailService.send(
+      email,
+      EmailSubjects.AUCTION_WON,
+      EmailTemplates.AUCTION_WON,
+      {
+        name,
+        auctionTitle,
+        winningAmount,
+        auctionLink,
+        transactionId,
+        transactionLink,
+      },
+    );
+  }
+
+  async sendAuctionStartedSellerEmail(
+    email: string,
+    name: string,
+    auctionTitle: string,
+    auctionId: string,
+  ): Promise<void> {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'https://mazadak.com';
+    const auctionLink = `${frontendUrl}/auctions/${auctionId}`;
+
+    await this.emailService.send(
+      email,
+      EmailSubjects.AUCTION_STARTED_SELLER,
+      EmailTemplates.AUCTION_STARTED_SELLER,
+      { name, auctionTitle, auctionLink },
+    );
+  }
+
+  async sendAuctionEndedSellerEmail(
+    email: string,
+    name: string,
+    auctionTitle: string,
+    finalPrice: number,
+    winnerName: string | null,
+    auctionId: string,
+    transactionId?: string,
+  ): Promise<void> {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'https://mazadak.com';
+    const auctionLink = `${frontendUrl}/auctions/${auctionId}`;
+    const hasWinner = Boolean(winnerName);
+    const transactionLink = transactionId
+      ? `${frontendUrl}/wallet/transactions/${transactionId}`
+      : undefined;
+
+    await this.emailService.send(
+      email,
+      EmailSubjects.AUCTION_ENDED_SELLER,
+      EmailTemplates.AUCTION_ENDED_SELLER,
+      {
+        name,
+        auctionTitle,
+        finalPrice,
+        winnerName,
+        hasWinner,
+        auctionLink,
+        transactionId,
+        transactionLink,
+      },
+    );
+  }
+
+  async sendDepositSuccessfulEmail(
+    email: string,
+    name: string,
+    amount: number,
+    transactionId?: string,
+  ): Promise<void> {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'https://mazadak.com';
+    const transactionLink = transactionId
+      ? `${frontendUrl}/wallet/transactions/${transactionId}`
+      : `${frontendUrl}/wallet`;
+
+    await this.emailService.send(
+      email,
+      EmailSubjects.DEPOSIT_SUCCESSFUL,
+      EmailTemplates.DEPOSIT_SUCCESSFUL,
+      { name, amount, transactionId, transactionLink },
+    );
+  }
+
+  async sendWithdrawalCompletedEmail(
+    email: string,
+    name: string,
+    amount: number,
+    transactionId?: string,
+  ): Promise<void> {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'https://mazadak.com';
+    const transactionLink = transactionId
+      ? `${frontendUrl}/wallet/transactions/${transactionId}`
+      : `${frontendUrl}/wallet`;
+
+    await this.emailService.send(
+      email,
+      EmailSubjects.WITHDRAWAL_COMPLETED,
+      EmailTemplates.WITHDRAWAL_COMPLETED,
+      { name, amount, transactionId, transactionLink },
+    );
+  }
+
+  formatDate(dateInput?: Date | string): string {
+    const date = dateInput ? new Date(dateInput) : new Date();
+    const timeZone =
+      this.configService.get<string>('APP_TIMEZONE') || 'Africa/Cairo';
+
+    return (
+      date.toLocaleString('en-US', {
+        dateStyle: 'full',
+        timeStyle: 'short',
+        timeZone,
+      }) + ' (Cairo Time)'
     );
   }
 }

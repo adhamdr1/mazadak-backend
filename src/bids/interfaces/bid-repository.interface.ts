@@ -11,9 +11,13 @@ export interface CreateBidData {
 }
 
 export interface IBidRepository {
+  startSession(): Promise<ClientSession>;
   create(data: CreateBidData, session?: ClientSession): Promise<Bid>;
 
-  findWinningByAuctionId(auctionId: string): Promise<Bid | null>;
+  findWinningByAuctionId(
+    auctionId: string,
+    session?: ClientSession,
+  ): Promise<Bid | null>;
 
   findAll(
     page: number,

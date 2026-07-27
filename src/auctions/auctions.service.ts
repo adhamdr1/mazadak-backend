@@ -17,6 +17,8 @@ import { AuctionStartTimeTooSoonException } from './exceptions/auction-start-tim
 import { AuctionEndTimeInvalidException } from './exceptions/auction-end-time-invalid.exception';
 import { AuctionNotPendingException } from './exceptions/auction-not-pending.exception';
 import { UploadService } from '../upload/upload.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { UsersService } from '../users/users.service';
 
 const MIN_START_TIME_MS = 15 * 60 * 1000; // 15 minutes
 
@@ -28,6 +30,8 @@ export class AuctionsService {
     @Inject('IAuctionRepository')
     private readonly auctionRepository: IAuctionRepository,
     private readonly uploadService: UploadService,
+    private readonly notificationsService: NotificationsService,
+    private readonly usersService: UsersService,
   ) {}
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -221,8 +225,6 @@ export class AuctionsService {
     return true;
   }
 
-  // ─── Cron Jobs ───────────────────────────────────────────────────────────────
-
   @Cron(CronExpression.EVERY_MINUTE)
   async activatePendingAuctions(): Promise<void> {
     const auctions = await this.auctionRepository.findPendingToActivate();
@@ -231,6 +233,14 @@ export class AuctionsService {
     const ids = auctions.map((a) => a._id);
     await this.auctionRepository.updateManyStatus(ids, AuctionStatus.ACTIVE);
     this.logger.log(`Activated ${ids.length} auction(s)`);
+
+    for (const auction of auctions) {
+      this.notifySellerAuctionStarted(auction).catch((err) => {
+        this.logger.error(
+          `Failed to send auction started email for ${auction._id.toString()}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+    }
   }
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -241,5 +251,23 @@ export class AuctionsService {
     const ids = auctions.map((a) => a._id);
     await this.auctionRepository.updateManyStatus(ids, AuctionStatus.ENDED);
     this.logger.log(`Ended ${ids.length} auction(s)`);
+    // Note: Emails are handled by bids.service.ts (finalizeEndedAuctions)
+  }
+
+  private async notifySellerAuctionStarted(auction: Auction): Promise<void> {
+    const seller = await this.usersService.findById(
+      auction.sellerId.toString(),
+    );
+    if (!seller) return;
+
+    const name =
+      [seller.firstName, seller.lastName].filter(Boolean).join(' ') || 'User';
+
+    await this.notificationsService.sendAuctionStartedSellerEmail(
+      seller.email,
+      name,
+      auction.title,
+      auction._id.toString(),
+    );
   }
 }
