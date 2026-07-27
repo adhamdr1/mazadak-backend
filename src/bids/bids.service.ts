@@ -78,13 +78,16 @@ export class BidsService {
       );
 
       // 2. Release previous winner's funds and mark OUTBID
+      let outbidTransactionId: string | undefined;
       if (currentWinner) {
-        await this.walletService.release(
+        const { transaction } = await this.walletService.release(
           currentWinner.bidderId.toString(),
           currentWinner.amount,
           input.auctionId,
           session,
         );
+        outbidTransactionId = transaction._id.toString();
+
         await this.bidRepository.updateStatus(
           currentWinner._id.toString(),
           BidStatus.OUTBID,
@@ -92,8 +95,8 @@ export class BidsService {
         );
       }
 
-      // 3. Create the new WINNING bid
-      const newBid = await this.bidRepository.create(
+      // 3. Record the bid
+      const bid = await this.bidRepository.create(
         {
           auctionId: new Types.ObjectId(input.auctionId),
           bidderId: new Types.ObjectId(userId),
@@ -119,6 +122,7 @@ export class BidsService {
           auction.title,
           input.amount,
           input.auctionId,
+          outbidTransactionId,
         ).catch((err) => {
           this.logger.error(
             `Failed to send outbid notification: ${err instanceof Error ? err.message : String(err)}`,
@@ -126,7 +130,7 @@ export class BidsService {
         });
       }
 
-      return newBid;
+      return bid;
     } catch (error) {
       await session.abortTransaction();
       throw error;
@@ -140,6 +144,7 @@ export class BidsService {
     auctionTitle: string,
     newAmount: number,
     auctionId: string,
+    transactionId?: string,
   ): Promise<void> {
     const previousBidder = await this.usersService.findById(previousBidderId);
     if (!previousBidder) return;
@@ -155,6 +160,7 @@ export class BidsService {
       auctionTitle,
       newAmount,
       auctionId,
+      transactionId,
     );
   }
 
@@ -170,16 +176,37 @@ export class BidsService {
 
     for (const auction of endedAuctions) {
       const auctionId = auction._id.toString();
-      const session = await this.connection.startSession();
+      const session = await this.bidRepository.startSession();
       session.startTransaction();
 
       try {
-        const winningBid =
-          await this.bidRepository.findWinningByAuctionId(auctionId);
+        const winningBid = await this.bidRepository.findWinningByAuctionId(
+          auctionId,
+          session,
+        );
 
         if (!winningBid) {
           this.logger.log(`Auction ${auctionId} ended with no bids`);
-          await session.abortTransaction();
+          await this.auctionRepository.finalizeAuction(
+            auctionId,
+            undefined,
+            session,
+          );
+          await session.commitTransaction();
+
+          // Notify seller that auction ended (no winner, no transaction)
+          this.notifySellerAuctionEnded(
+            auction.sellerId.toString(),
+            auction.title,
+            auction.currentPrice,
+            null,
+            auctionId,
+            undefined,
+          ).catch((err) => {
+            this.logger.error(
+              `Failed to send auction ended email (no winner) for ${auctionId}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          });
           continue;
         }
 
@@ -187,23 +214,29 @@ export class BidsService {
         const sellerId = auction.sellerId.toString();
 
         // 1. Capture the funds from the winner
-        await this.walletService.capture(
-          winnerId,
-          winningBid.amount,
-          auctionId,
-          session,
-        );
+        const { transaction: captureTransaction } =
+          await this.walletService.capture(
+            winnerId,
+            winningBid.amount,
+            auctionId,
+            session,
+          );
 
         // 2. Deposit the funds to the seller
-        await this.walletService.deposit(
-          sellerId,
-          winningBid.amount,
+        const { transaction: depositTransaction } =
+          await this.walletService.deposit(
+            sellerId,
+            winningBid.amount,
+            auctionId,
+            session,
+          );
+
+        // 3. Assign the winner to the auction and mark as finalized
+        await this.auctionRepository.finalizeAuction(
           auctionId,
+          winnerId,
           session,
         );
-
-        // 3. Assign the winner to the auction
-        await this.auctionRepository.setWinner(auctionId, winnerId);
 
         await session.commitTransaction();
 
@@ -213,9 +246,24 @@ export class BidsService {
           auction.title,
           winningBid.amount,
           auctionId,
+          captureTransaction._id.toString(),
         ).catch((err) => {
           this.logger.error(
             `Failed to send auction won notification for ${auctionId}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        });
+
+        // 5. Send AUCTION_ENDED_SELLER email notification to seller
+        this.notifySellerAuctionEnded(
+          sellerId,
+          auction.title,
+          auction.currentPrice,
+          winnerId,
+          auctionId,
+          depositTransaction._id.toString(),
+        ).catch((err) => {
+          this.logger.error(
+            `Failed to send auction ended email to seller for ${auctionId}: ${err instanceof Error ? err.message : String(err)}`,
           );
         });
 
@@ -238,6 +286,7 @@ export class BidsService {
     auctionTitle: string,
     winningAmount: number,
     auctionId: string,
+    transactionId?: string,
   ): Promise<void> {
     const winner = await this.usersService.findById(winnerId);
     if (!winner) return;
@@ -251,6 +300,46 @@ export class BidsService {
       auctionTitle,
       winningAmount,
       auctionId,
+      transactionId,
+    );
+  }
+
+  private async notifySellerAuctionEnded(
+    sellerId: string,
+    auctionTitle: string,
+    currentPrice: number,
+    winnerId: string | null,
+    auctionId: string,
+    transactionId?: string,
+  ): Promise<void> {
+    const seller = await this.usersService.findById(sellerId);
+    if (!seller) return;
+
+    const name =
+      [seller.firstName, seller.lastName].filter(Boolean).join(' ') || 'User';
+
+    let winnerName: string | null = null;
+    if (winnerId) {
+      try {
+        const winner = await this.usersService.findById(winnerId);
+        if (winner) {
+          winnerName =
+            [winner.firstName, winner.lastName].filter(Boolean).join(' ') ||
+            'Winning Bidder';
+        }
+      } catch {
+        winnerName = 'Winning Bidder';
+      }
+    }
+
+    await this.notificationsService.sendAuctionEndedSellerEmail(
+      seller.email,
+      name,
+      auctionTitle,
+      currentPrice,
+      winnerName,
+      auctionId,
+      transactionId,
     );
   }
 

@@ -78,16 +78,27 @@ export class NotificationsService {
     auctionTitle: string,
     newAmount: number,
     auctionId: string,
+    transactionId?: string,
   ): Promise<void> {
     const frontendUrl =
       this.configService.get<string>('FRONTEND_URL') || 'https://mazadak.com';
     const auctionLink = `${frontendUrl}/auctions/${auctionId}`;
+    const transactionLink = transactionId
+      ? `${frontendUrl}/wallet/transactions/${transactionId}`
+      : undefined;
 
     await this.emailService.send(
       email,
       EmailSubjects.OUTBID,
       EmailTemplates.OUTBID,
-      { name, auctionTitle, newAmount, auctionLink },
+      {
+        name,
+        auctionTitle,
+        newAmount,
+        auctionLink,
+        transactionId,
+        transactionLink,
+      },
     );
   }
 
@@ -97,6 +108,35 @@ export class NotificationsService {
     auctionTitle: string,
     winningAmount: number,
     auctionId: string,
+    transactionId?: string,
+  ): Promise<void> {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'https://mazadak.com';
+    const auctionLink = `${frontendUrl}/auctions/${auctionId}`;
+    const transactionLink = transactionId
+      ? `${frontendUrl}/wallet/transactions/${transactionId}`
+      : undefined;
+
+    await this.emailService.send(
+      email,
+      EmailSubjects.AUCTION_WON,
+      EmailTemplates.AUCTION_WON,
+      {
+        name,
+        auctionTitle,
+        winningAmount,
+        auctionLink,
+        transactionId,
+        transactionLink,
+      },
+    );
+  }
+
+  async sendAuctionStartedSellerEmail(
+    email: string,
+    name: string,
+    auctionTitle: string,
+    auctionId: string,
   ): Promise<void> {
     const frontendUrl =
       this.configService.get<string>('FRONTEND_URL') || 'https://mazadak.com';
@@ -104,9 +144,83 @@ export class NotificationsService {
 
     await this.emailService.send(
       email,
-      EmailSubjects.AUCTION_WON,
-      EmailTemplates.AUCTION_WON,
-      { name, auctionTitle, winningAmount, auctionLink },
+      EmailSubjects.AUCTION_STARTED_SELLER,
+      EmailTemplates.AUCTION_STARTED_SELLER,
+      { name, auctionTitle, auctionLink },
+    );
+  }
+
+  async sendAuctionEndedSellerEmail(
+    email: string,
+    name: string,
+    auctionTitle: string,
+    finalPrice: number,
+    winnerName: string | null,
+    auctionId: string,
+    transactionId?: string,
+  ): Promise<void> {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'https://mazadak.com';
+    const auctionLink = `${frontendUrl}/auctions/${auctionId}`;
+    const hasWinner = Boolean(winnerName);
+    const transactionLink = transactionId
+      ? `${frontendUrl}/wallet/transactions/${transactionId}`
+      : undefined;
+
+    await this.emailService.send(
+      email,
+      EmailSubjects.AUCTION_ENDED_SELLER,
+      EmailTemplates.AUCTION_ENDED_SELLER,
+      {
+        name,
+        auctionTitle,
+        finalPrice,
+        winnerName,
+        hasWinner,
+        auctionLink,
+        transactionId,
+        transactionLink,
+      },
+    );
+  }
+
+  async sendDepositSuccessfulEmail(
+    email: string,
+    name: string,
+    amount: number,
+    transactionId?: string,
+  ): Promise<void> {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'https://mazadak.com';
+    const transactionLink = transactionId
+      ? `${frontendUrl}/wallet/transactions/${transactionId}`
+      : `${frontendUrl}/wallet`;
+
+    await this.emailService.send(
+      email,
+      EmailSubjects.DEPOSIT_SUCCESSFUL,
+      EmailTemplates.DEPOSIT_SUCCESSFUL,
+      { name, amount, transactionId, transactionLink },
+    );
+  }
+
+  async sendWithdrawalCompletedEmail(
+    email: string,
+    name: string,
+    amount: number,
+    transactionId?: string,
+  ): Promise<void> {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'https://mazadak.com';
+    const transactionLink = transactionId
+      ? `${frontendUrl}/wallet/transactions/${transactionId}`
+      : `${frontendUrl}/wallet`;
+
+    await this.emailService.send(
+      email,
+      EmailSubjects.WITHDRAWAL_COMPLETED,
+      EmailTemplates.WITHDRAWAL_COMPLETED,
+      { name, amount, transactionId, transactionLink },
     );
   }
 

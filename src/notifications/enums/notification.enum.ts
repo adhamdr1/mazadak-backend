@@ -6,6 +6,10 @@ export enum EmailTemplates {
   PASSWORD_CHANGED = 'password-changed',
   OUTBID = 'outbid',
   AUCTION_WON = 'auction-won',
+  AUCTION_STARTED_SELLER = 'auction-started-seller',
+  AUCTION_ENDED_SELLER = 'auction-ended-seller',
+  DEPOSIT_SUCCESSFUL = 'deposit-successful',
+  WITHDRAWAL_COMPLETED = 'withdrawal-completed',
 }
 
 export enum EmailSubjects {
@@ -15,4 +19,8 @@ export enum EmailSubjects {
   PASSWORD_CHANGED = 'Security Alert - Your Mazadak password was changed',
   OUTBID = 'You have been outbid on Mazadak!',
   AUCTION_WON = 'Congratulations! You won the auction on Mazadak!',
+  AUCTION_STARTED_SELLER = 'Your auction is now LIVE on Mazadak!',
+  AUCTION_ENDED_SELLER = 'Your auction has ended on Mazadak',
+  DEPOSIT_SUCCESSFUL = 'Wallet Deposit Successful - Mazadak',
+  WITHDRAWAL_COMPLETED = 'Wallet Withdrawal Completed - Mazadak',
 }

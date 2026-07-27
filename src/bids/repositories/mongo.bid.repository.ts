@@ -15,17 +15,28 @@ export class MongoBidRepository implements IBidRepository {
     @InjectModel(Bid.name) private readonly bidModel: Model<BidDocument>,
   ) {}
 
+  async startSession(): Promise<ClientSession> {
+    return await this.bidModel.db.startSession();
+  }
+
   async create(data: CreateBidData, session?: ClientSession): Promise<Bid> {
     const bids = await this.bidModel.create([data], { session });
     return bids[0].toObject();
   }
 
-  async findWinningByAuctionId(auctionId: string): Promise<Bid | null> {
+  async findWinningByAuctionId(
+    auctionId: string,
+    session?: ClientSession,
+  ): Promise<Bid | null> {
     const bid = await this.bidModel
-      .findOne({
-        auctionId: new Types.ObjectId(auctionId),
-        status: BidStatus.WINNING,
-      })
+      .findOne(
+        {
+          auctionId: new Types.ObjectId(auctionId),
+          status: BidStatus.WINNING,
+        },
+        null,
+        { session },
+      )
       .lean()
       .exec();
     return bid;

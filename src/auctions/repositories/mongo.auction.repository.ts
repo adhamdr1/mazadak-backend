@@ -127,15 +127,27 @@ export class MongoAuctionRepository implements IAuctionRepository {
       .find({
         status: AuctionStatus.ENDED,
         winnerId: null,
+        isFinalized: false,
       })
       .exec();
   }
 
-  async setWinner(id: string, winnerId: string): Promise<void> {
+  async finalizeAuction(
+    id: string,
+    winnerId?: string,
+    session?: ClientSession,
+  ): Promise<void> {
+    const updateQuery: Record<string, unknown> = { isFinalized: true };
+    if (winnerId) {
+      updateQuery.winnerId = new Types.ObjectId(winnerId);
+    }
+
     await this.auctionModel
-      .findByIdAndUpdate(new Types.ObjectId(id), {
-        $set: { winnerId: new Types.ObjectId(winnerId) },
-      })
+      .findByIdAndUpdate(
+        new Types.ObjectId(id),
+        { $set: updateQuery },
+        { session },
+      )
       .exec();
   }
 

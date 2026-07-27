@@ -60,7 +60,11 @@ export class WalletResolver {
     @CurrentUser() currentUser: JwtPayload,
     @Args('input') input: DepositInput,
   ): Promise<Wallet> {
-    return this.walletService.deposit(currentUser.sub, input.amount);
+    const { wallet } = await this.walletService.deposit(
+      currentUser.sub,
+      input.amount,
+    );
+    return wallet;
   }
 
   @Mutation(() => Wallet, { name: 'withdraw' })
@@ -68,6 +72,10 @@ export class WalletResolver {
     @CurrentUser() currentUser: JwtPayload,
     @Args('input') input: WithdrawInput,
   ): Promise<Wallet> {
-    return this.walletService.withdraw(currentUser.sub, input.amount);
+    const { wallet } = await this.walletService.withdraw(
+      currentUser.sub,
+      input.amount,
+    );
+    return wallet;
   }
 }

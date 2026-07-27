@@ -61,3 +61,4 @@ nothing.txt
 bids-test.html
 /ui-test/
 seed.ts
+clear-db.ts

@@ -68,6 +68,10 @@ export class Auction {
   @Prop({ type: Types.ObjectId, ref: 'User', default: null })
   winnerId?: Types.ObjectId;
 
+  @Field(() => Boolean)
+  @Prop({ default: false })
+  isFinalized!: boolean;
+
   @Field()
   readonly createdAt!: Date;
 
