@@ -19,6 +19,8 @@ const mockAuctionsService = {
   cancelAuction: jest.fn(),
 };
 
+const mockPubSub = { asyncIterableIterator: jest.fn(), publish: jest.fn() };
+
 describe('AuctionsResolver', () => {
   let resolver: AuctionsResolver;
 
@@ -27,6 +29,7 @@ describe('AuctionsResolver', () => {
       providers: [
         AuctionsResolver,
         { provide: AuctionsService, useValue: mockAuctionsService },
+        { provide: 'PUB_SUB', useValue: mockPubSub },
       ],
     }).compile();
 

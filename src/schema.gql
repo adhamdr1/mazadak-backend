@@ -188,6 +188,10 @@ type AuctionsPage {
   hasNextPage: Boolean!
 }
 
+type AuctionStatusChangedPayload {
+  auction: Auction!
+}
+
 type Bid {
   _id: ID!
   auctionId: ID!
@@ -213,6 +217,13 @@ type BidsPage {
   total: Int!
   totalPages: Int!
   hasNextPage: Boolean!
+}
+
+type BidAddedPayload {
+  bid: Bid!
+  currentPrice: Float!
+  leadingBidderId: ID!
+  bidCount: Int!
 }
 
 type Query {
@@ -392,4 +403,10 @@ input UploadImageInput {
 input PlaceBidInput {
   auctionId: ID!
   amount: Float!
+}
+
+type Subscription {
+  notificationAdded: InAppNotification!
+  auctionStatusChanged(auctionId: ID!): AuctionStatusChangedPayload!
+  bidAdded(auctionId: ID!): BidAddedPayload!
 }

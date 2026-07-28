@@ -44,4 +44,6 @@ export interface IBidRepository {
     status: BidStatus,
     session?: ClientSession,
   ): Promise<void>;
+
+  countByAuctionId(auctionId: string): Promise<number>;
 }

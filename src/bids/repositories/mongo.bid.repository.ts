@@ -133,4 +133,10 @@ export class MongoBidRepository implements IBidRepository {
       )
       .exec();
   }
+
+  async countByAuctionId(auctionId: string): Promise<number> {
+    return this.bidModel
+      .countDocuments({ auctionId: new Types.ObjectId(auctionId) })
+      .exec();
+  }
 }

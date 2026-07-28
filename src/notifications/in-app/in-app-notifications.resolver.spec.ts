@@ -25,6 +25,10 @@ describe('InAppNotificationsResolver', () => {
           provide: InAppNotificationsService,
           useValue: mockInAppNotificationsService,
         },
+        {
+          provide: 'PUB_SUB',
+          useValue: { publish: jest.fn(), asyncIterableIterator: jest.fn() },
+        },
       ],
     }).compile();
 

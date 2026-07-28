@@ -70,6 +70,13 @@ describe('AuctionsService', () => {
         { provide: NotificationsService, useValue: mockNotificationsService },
         { provide: UsersService, useValue: mockUsersService },
         { provide: WalletService, useValue: mockWalletService },
+        {
+          provide: 'PUB_SUB',
+          useValue: {
+            publish: jest.fn().mockResolvedValue(undefined),
+            asyncIterableIterator: jest.fn(),
+          },
+        },
       ],
     }).compile();
 

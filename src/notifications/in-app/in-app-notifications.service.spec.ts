@@ -25,6 +25,13 @@ describe('InAppNotificationsService', () => {
           provide: 'IInAppNotificationRepository',
           useValue: mockNotificationRepository,
         },
+        {
+          provide: 'PUB_SUB',
+          useValue: {
+            publish: jest.fn().mockResolvedValue(undefined),
+            asyncIterableIterator: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
