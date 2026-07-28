@@ -1,6 +1,14 @@
-import { Resolver, Query, Mutation, Args, ID } from '@nestjs/graphql';
-import { UseGuards } from '@nestjs/common';
+import {
+  Resolver,
+  Query,
+  Mutation,
+  Args,
+  ID,
+  Subscription,
+} from '@nestjs/graphql';
+import { Inject, UseGuards } from '@nestjs/common';
 import { AuctionsService } from './auctions.service';
+import { PUB_SUB_EVENTS } from '../infrastructure/pubsub/events.constants';
 import { Auction } from './entities/auction.entity';
 import { CreateAuctionInput } from './dto/create-auction.input';
 import { UpdateAuctionInput } from './dto/update-auction.input';
@@ -14,11 +22,17 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { PaginationInput } from '../common/dto/pagination.input';
+import { AuctionStatusChangedPayload } from './dto/auction-status-changed.payload';
+import type { RedisPubSub } from 'graphql-redis-subscriptions';
+import { PUB_SUB } from '../infrastructure/pubsub/pubsub.provider';
 
 @Resolver(() => Auction)
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AuctionsResolver {
-  constructor(private readonly auctionsService: AuctionsService) {}
+  constructor(
+    private readonly auctionsService: AuctionsService,
+    @Inject(PUB_SUB) private readonly pubSub: RedisPubSub,
+  ) {}
 
   // ─── Queries ──────────────────────────────────────────────────────────────
 
@@ -99,5 +113,32 @@ export class AuctionsResolver {
       currentUser.sub,
       currentUser.role,
     );
+  }
+
+  /**
+   * Real-time subscription: fires when an auction status changes.
+   * Covers: PENDING→ACTIVE (Cron), ACTIVE→ENDED (Cron), any→CANCELLED (manual).
+   * Public — anyone watching an auction page should receive status updates.
+   * Filter: only delivers events for the requested auctionId.
+   */
+  @Public()
+  @Subscription(() => AuctionStatusChangedPayload, {
+    name: 'auctionStatusChanged',
+    filter: (
+      payload: { auctionStatusChanged: AuctionStatusChangedPayload },
+      variables: { auctionId: string },
+    ) =>
+      payload.auctionStatusChanged.auction._id.toString() ===
+      variables.auctionId,
+  })
+  auctionStatusChanged(
+    // auctionId is declared in the schema via @Args for the filter function;
+    // it is intentionally unused in the method body (filter reads from variables).
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    @Args('auctionId', { type: () => ID }) _id: string,
+  ) {
+    return this.pubSub.asyncIterableIterator(
+      PUB_SUB_EVENTS.AUCTION_STATUS_CHANGED,
+    ) as AsyncIterable<{ auctionStatusChanged: AuctionStatusChangedPayload }>;
   }
 }

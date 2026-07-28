@@ -13,6 +13,11 @@ const mockBidsService = {
   adminGetAllBids: jest.fn(),
 };
 
+const mockPubSub = {
+  asyncIterableIterator: jest.fn(),
+  publish: jest.fn(),
+};
+
 describe('BidsResolver', () => {
   let resolver: BidsResolver;
 
@@ -21,6 +26,7 @@ describe('BidsResolver', () => {
       providers: [
         BidsResolver,
         { provide: BidsService, useValue: mockBidsService },
+        { provide: 'PUB_SUB', useValue: mockPubSub },
       ],
     }).compile();
 

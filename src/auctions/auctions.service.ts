@@ -22,6 +22,9 @@ import { UsersService } from '../users/users.service';
 import { WalletService } from '../wallet/wallet.service';
 import { InAppNotificationType } from '../notifications/in-app/enums/in-app-notification-type.enum';
 import { NotificationReferenceType } from '../notifications/in-app/enums/notification-reference-type.enum';
+import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
+
+export const AUCTION_STATUS_CHANGED = 'AUCTION_STATUS_CHANGED';
 
 const MIN_START_TIME_MS = 15 * 60 * 1000; // 15 minutes
 
@@ -36,6 +39,7 @@ export class AuctionsService {
     private readonly notificationsService: NotificationsService,
     private readonly usersService: UsersService,
     private readonly walletService: WalletService,
+    private readonly realtimeService: RealtimeService,
   ) {}
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -273,6 +277,12 @@ export class AuctionsService {
       );
 
       await session.commitTransaction();
+
+      // Publish real-time status change (post-commit, fire-and-forget)
+      void this.realtimeService.publishAuctionStatusChanged({
+        auction: { ...auction, status: AuctionStatus.CANCELLED },
+      });
+
       return true;
     } catch (error) {
       await session.abortTransaction();
@@ -295,10 +305,16 @@ export class AuctionsService {
     this.logger.log(`Activated ${ids.length} auction(s)`);
 
     for (const auction of auctions) {
+      // Notify seller via email/in-app
       this.notifySellerAuctionStarted(auction).catch((err) => {
         this.logger.error(
           `Failed to send auction started email for ${auction._id.toString()}: ${err instanceof Error ? err.message : String(err)}`,
         );
+      });
+
+      // Publish real-time status change (non-blocking)
+      void this.realtimeService.publishAuctionStatusChanged({
+        auction: { ...auction, status: AuctionStatus.ACTIVE },
       });
     }
   }
@@ -311,6 +327,13 @@ export class AuctionsService {
     const ids = auctions.map((a) => a._id);
     await this.auctionRepository.updateManyStatus(ids, AuctionStatus.ENDED);
     this.logger.log(`Ended ${ids.length} auction(s)`);
+
+    // Publish real-time status change for each ended auction (non-blocking)
+    for (const auction of auctions) {
+      void this.realtimeService.publishAuctionStatusChanged({
+        auction: { ...auction, status: AuctionStatus.ENDED },
+      });
+    }
     // Note: Emails are handled by bids.service.ts (finalizeEndedAuctions)
   }
 

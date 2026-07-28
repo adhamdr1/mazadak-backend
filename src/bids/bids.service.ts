@@ -20,6 +20,9 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from '../users/users.service';
 import { InAppNotificationType } from '../notifications/in-app/enums/in-app-notification-type.enum';
 import { NotificationReferenceType } from '../notifications/in-app/enums/notification-reference-type.enum';
+import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
+
+export const BID_ADDED = 'BID_ADDED';
 
 @Injectable()
 export class BidsService {
@@ -33,6 +36,7 @@ export class BidsService {
     private readonly walletService: WalletService,
     private readonly notificationsService: NotificationsService,
     private readonly usersService: UsersService,
+    private readonly realtimeService: RealtimeService,
   ) {}
 
   async placeBid(userId: string, input: PlaceBidInput): Promise<Bid> {
@@ -143,7 +147,25 @@ export class BidsService {
 
       await session.commitTransaction();
 
-      // 7. Send Outbid Email (Post-commit, non-blocking)
+      // 7. Publish real-time event (post-commit, non-blocking)
+      // bidCount is fetched after commit to get the accurate total
+      this.bidRepository
+        .countByAuctionId(input.auctionId)
+        .then((bidCount) => {
+          void this.realtimeService.publishBidAdded({
+            bid,
+            currentPrice: input.amount,
+            leadingBidderId: userId,
+            bidCount,
+          });
+        })
+        .catch((err: Error) => {
+          this.logger.error(
+            `Failed to fetch bid count for publish: ${err.message}`,
+          );
+        });
+
+      // 8. Send Outbid Email (Post-commit, non-blocking)
       if (currentWinner) {
         this.sendOutbidEmail(
           currentWinner.bidderId.toString(),

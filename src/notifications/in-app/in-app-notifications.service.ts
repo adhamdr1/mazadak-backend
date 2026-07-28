@@ -6,19 +6,29 @@ import { CreateInAppNotificationDto } from './dto/create-in-app-notification.dto
 import { InAppNotificationsPage } from './dto/in-app-notifications-page.type';
 import { PaginationInput } from '../../common/dto/pagination.input';
 import { InAppNotificationNotFoundException } from '../exceptions/in-app-notification-not-found.exception';
+import { RealtimeService } from '../../infrastructure/pubsub/realtime.service';
+
+export const NOTIFICATION_ADDED = 'NOTIFICATION_ADDED';
 
 @Injectable()
 export class InAppNotificationsService {
   constructor(
     @Inject('IInAppNotificationRepository')
     private readonly notificationRepository: IInAppNotificationRepository,
+    private readonly realtimeService: RealtimeService,
   ) {}
 
   async create(
     dto: CreateInAppNotificationDto,
     session?: ClientSession,
   ): Promise<InAppNotification> {
-    return await this.notificationRepository.create(dto, session);
+    const notification = await this.notificationRepository.create(dto, session);
+
+    // Publish real-time event after saving (non-blocking, fire-and-forget).
+    // If Redis fails, the notification is already saved in DB — no data loss.
+    void this.realtimeService.publishNotificationAdded(notification);
+
+    return notification;
   }
 
   async getMyNotifications(
