@@ -7,7 +7,8 @@ import {
   Subscription,
 } from '@nestjs/graphql';
 import { Inject, UseGuards } from '@nestjs/common';
-import { AuctionsService, AUCTION_STATUS_CHANGED } from './auctions.service';
+import { AuctionsService } from './auctions.service';
+import { PUB_SUB_EVENTS } from '../infrastructure/pubsub/events.constants';
 import { Auction } from './entities/auction.entity';
 import { CreateAuctionInput } from './dto/create-auction.input';
 import { UpdateAuctionInput } from './dto/update-auction.input';
@@ -137,7 +138,7 @@ export class AuctionsResolver {
     @Args('auctionId', { type: () => ID }) _id: string,
   ) {
     return this.pubSub.asyncIterableIterator(
-      AUCTION_STATUS_CHANGED,
+      PUB_SUB_EVENTS.AUCTION_STATUS_CHANGED,
     ) as AsyncIterable<{ auctionStatusChanged: AuctionStatusChangedPayload }>;
   }
 }

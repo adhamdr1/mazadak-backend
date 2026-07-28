@@ -6,8 +6,7 @@ import { CreateInAppNotificationDto } from './dto/create-in-app-notification.dto
 import { InAppNotificationsPage } from './dto/in-app-notifications-page.type';
 import { PaginationInput } from '../../common/dto/pagination.input';
 import { InAppNotificationNotFoundException } from '../exceptions/in-app-notification-not-found.exception';
-import type { RedisPubSub } from 'graphql-redis-subscriptions';
-import { PUB_SUB } from '../../infrastructure/pubsub/pubsub.provider';
+import { RealtimeService } from '../../infrastructure/pubsub/realtime.service';
 
 export const NOTIFICATION_ADDED = 'NOTIFICATION_ADDED';
 
@@ -16,8 +15,7 @@ export class InAppNotificationsService {
   constructor(
     @Inject('IInAppNotificationRepository')
     private readonly notificationRepository: IInAppNotificationRepository,
-    @Inject(PUB_SUB)
-    private readonly pubSub: RedisPubSub,
+    private readonly realtimeService: RealtimeService,
   ) {}
 
   async create(
@@ -28,11 +26,7 @@ export class InAppNotificationsService {
 
     // Publish real-time event after saving (non-blocking, fire-and-forget).
     // If Redis fails, the notification is already saved in DB — no data loss.
-    void this.pubSub
-      .publish(NOTIFICATION_ADDED, { notificationAdded: notification })
-      .catch(() => {
-        // Intentionally silent — pubsub failure must not affect the caller
-      });
+    void this.realtimeService.publishNotificationAdded(notification);
 
     return notification;
   }

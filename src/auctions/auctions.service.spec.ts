@@ -19,6 +19,8 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from '../users/users.service';
 import { WalletService } from '../wallet/wallet.service';
 
+import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
+
 const mockWalletService = {
   release: jest.fn(),
 };
@@ -71,10 +73,11 @@ describe('AuctionsService', () => {
         { provide: UsersService, useValue: mockUsersService },
         { provide: WalletService, useValue: mockWalletService },
         {
-          provide: 'PUB_SUB',
+          provide: RealtimeService,
           useValue: {
-            publish: jest.fn().mockResolvedValue(undefined),
-            asyncIterableIterator: jest.fn(),
+            publishBidAdded: jest.fn().mockResolvedValue(undefined),
+            publishNotificationAdded: jest.fn().mockResolvedValue(undefined),
+            publishAuctionStatusChanged: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],

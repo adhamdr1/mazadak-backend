@@ -6,13 +6,10 @@ import {
   ID,
   Int,
   Subscription,
-  Context,
 } from '@nestjs/graphql';
 import { Inject, UnauthorizedException, UseGuards } from '@nestjs/common';
-import {
-  InAppNotificationsService,
-  NOTIFICATION_ADDED,
-} from './in-app-notifications.service';
+import { InAppNotificationsService } from './in-app-notifications.service';
+import { PUB_SUB_EVENTS } from '../../infrastructure/pubsub/events.constants';
 import { InAppNotification } from './entities/in-app-notification.entity';
 import { InAppNotificationsPage } from './dto/in-app-notifications-page.type';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -85,15 +82,15 @@ export class InAppNotificationsResolver {
       return payload.notificationAdded.userId.toString() === context.user.sub;
     },
   })
-  notificationAdded(@Context() context: { user?: JwtPayload }) {
+  notificationAdded(@CurrentUser() user: JwtPayload) {
     // Explicit auth check: throw before subscribing if not authenticated
-    if (!context.user) {
+    if (!user) {
       throw new UnauthorizedException(
         'Authentication required to subscribe to notifications',
       );
     }
     return this.pubSub.asyncIterableIterator(
-      NOTIFICATION_ADDED,
+      PUB_SUB_EVENTS.NOTIFICATION_ADDED,
     ) as AsyncIterable<{ notificationAdded: InAppNotification }>;
   }
 }

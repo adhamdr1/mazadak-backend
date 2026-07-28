@@ -11,7 +11,8 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { Public } from '../common/decorators/public.decorator';
-import { BidsService, BID_ADDED } from './bids.service';
+import { BidsService } from './bids.service';
+import { PUB_SUB_EVENTS } from '../infrastructure/pubsub/events.constants';
 import { Bid } from './entities/bid.entity';
 import { PlaceBidInput } from './dto/place-bid.input';
 import { BidsFilterInput } from './dto/bids-filter.input';
@@ -88,7 +89,9 @@ export class BidsResolver {
   bidAdded(@Args('auctionId', { type: () => ID }) _auctionId: string) {
     // asyncIterableIterator is typed as `any` in graphql-redis-subscriptions;
     // the cast to AsyncIterable is safe because RedisPubSub conforms to the interface.
-    return this.pubSub.asyncIterableIterator(BID_ADDED) as AsyncIterable<{
+    return this.pubSub.asyncIterableIterator(
+      PUB_SUB_EVENTS.BID_ADDED,
+    ) as AsyncIterable<{
       bidAdded: BidAddedPayload;
     }>;
   }

@@ -14,6 +14,8 @@ import { BidAmountTooLowException } from './exceptions/bid-amount-too-low.except
 import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from '../users/users.service';
 
+import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
+
 const mockSession = {
   startTransaction: jest.fn(),
   commitTransaction: jest.fn(),
@@ -82,10 +84,11 @@ describe('BidsService', () => {
         { provide: NotificationsService, useValue: mockNotificationsService },
         { provide: UsersService, useValue: mockUsersService },
         {
-          provide: 'PUB_SUB',
+          provide: RealtimeService,
           useValue: {
-            publish: jest.fn().mockResolvedValue(undefined),
-            asyncIterableIterator: jest.fn(),
+            publishBidAdded: jest.fn().mockResolvedValue(undefined),
+            publishNotificationAdded: jest.fn().mockResolvedValue(undefined),
+            publishAuctionStatusChanged: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],

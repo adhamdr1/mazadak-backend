@@ -20,8 +20,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from '../users/users.service';
 import { InAppNotificationType } from '../notifications/in-app/enums/in-app-notification-type.enum';
 import { NotificationReferenceType } from '../notifications/in-app/enums/notification-reference-type.enum';
-import type { RedisPubSub } from 'graphql-redis-subscriptions';
-import { PUB_SUB } from '../infrastructure/pubsub/pubsub.provider';
+import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
 
 export const BID_ADDED = 'BID_ADDED';
 
@@ -37,8 +36,7 @@ export class BidsService {
     private readonly walletService: WalletService,
     private readonly notificationsService: NotificationsService,
     private readonly usersService: UsersService,
-    @Inject(PUB_SUB)
-    private readonly pubSub: RedisPubSub,
+    private readonly realtimeService: RealtimeService,
   ) {}
 
   async placeBid(userId: string, input: PlaceBidInput): Promise<Bid> {
@@ -154,18 +152,16 @@ export class BidsService {
       this.bidRepository
         .countByAuctionId(input.auctionId)
         .then((bidCount) => {
-          void this.pubSub.publish(BID_ADDED, {
-            bidAdded: {
-              bid,
-              currentPrice: input.amount,
-              leadingBidderId: userId,
-              bidCount,
-            },
+          void this.realtimeService.publishBidAdded({
+            bid,
+            currentPrice: input.amount,
+            leadingBidderId: userId,
+            bidCount,
           });
         })
         .catch((err: Error) => {
           this.logger.error(
-            `Failed to publish BID_ADDED event: ${err.message}`,
+            `Failed to fetch bid count for publish: ${err.message}`,
           );
         });
 

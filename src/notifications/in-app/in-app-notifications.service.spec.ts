@@ -5,6 +5,8 @@ import { NotificationReferenceType } from './enums/notification-reference-type.e
 import { InAppNotificationNotFoundException } from '../exceptions/in-app-notification-not-found.exception';
 import { Types } from 'mongoose';
 
+import { RealtimeService } from '../../infrastructure/pubsub/realtime.service';
+
 const mockNotificationRepository = {
   create: jest.fn(),
   findByUserId: jest.fn(),
@@ -26,10 +28,11 @@ describe('InAppNotificationsService', () => {
           useValue: mockNotificationRepository,
         },
         {
-          provide: 'PUB_SUB',
+          provide: RealtimeService,
           useValue: {
-            publish: jest.fn().mockResolvedValue(undefined),
-            asyncIterableIterator: jest.fn(),
+            publishBidAdded: jest.fn().mockResolvedValue(undefined),
+            publishNotificationAdded: jest.fn().mockResolvedValue(undefined),
+            publishAuctionStatusChanged: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],
