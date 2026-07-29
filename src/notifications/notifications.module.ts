@@ -13,6 +13,10 @@ import {
 import { InAppNotificationsService } from './in-app/in-app-notifications.service';
 import { InAppNotificationsResolver } from './in-app/in-app-notifications.resolver';
 import { MongoInAppNotificationRepository } from './in-app/repositories/mongo.in-app-notification.repository';
+import { RabbitMQModule } from '../infrastructure/rabbitmq/rabbitmq.module';
+import { RedisModule as AppRedisModule } from '../infrastructure/redis/redis.module';
+import { UsersModule } from '../users/users.module';
+import { NotificationsConsumer } from './notifications.consumer';
 
 @Module({
   imports: [
@@ -44,6 +48,9 @@ import { MongoInAppNotificationRepository } from './in-app/repositories/mongo.in
         },
       }),
     }),
+    RabbitMQModule,
+    AppRedisModule,
+    UsersModule,
   ],
   providers: [
     EmailService,
@@ -54,6 +61,7 @@ import { MongoInAppNotificationRepository } from './in-app/repositories/mongo.in
       provide: 'IInAppNotificationRepository',
       useClass: MongoInAppNotificationRepository,
     },
+    NotificationsConsumer,
   ],
   exports: [EmailService, NotificationsService, InAppNotificationsService],
 })

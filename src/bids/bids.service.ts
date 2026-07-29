@@ -22,6 +22,8 @@ import { InAppNotificationType } from '../notifications/in-app/enums/in-app-noti
 import { NotificationReferenceType } from '../notifications/in-app/enums/notification-reference-type.enum';
 import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
 import { RedisService } from '../infrastructure/redis/redis.service';
+import { OutboxService } from '../infrastructure/outbox/outbox.service';
+import { RabbitMQEvent } from '../infrastructure/rabbitmq/rabbitmq-event.types';
 
 const ACTIVE_AUCTIONS_PATTERN = 'auction:active:*';
 
@@ -41,6 +43,7 @@ export class BidsService {
     private readonly usersService: UsersService,
     private readonly realtimeService: RealtimeService,
     private readonly redisService: RedisService,
+    private readonly outboxService: OutboxService,
   ) {}
 
   async placeBid(userId: string, input: PlaceBidInput): Promise<Bid> {
@@ -149,12 +152,27 @@ export class BidsService {
         session,
       );
 
+      // 7. Publish Event to Outbox (Transactional)
+      await this.outboxService.saveEvent(
+        RabbitMQEvent.BidPlaced,
+        {
+          bidId: bid._id.toString(),
+          auctionId: input.auctionId,
+          auctionTitle: auction.title,
+          bidderId: userId,
+          amount: input.amount,
+          outbidUserId: currentWinner?.bidderId.toString(),
+          outbidTransactionId,
+        },
+        session,
+      );
+
       await session.commitTransaction();
 
       // Invalidate active auctions cache (currentPrice changed)
       void this.redisService.invalidatePattern(ACTIVE_AUCTIONS_PATTERN);
 
-      // 7. Publish real-time event (post-commit, non-blocking)
+      // 8. Publish real-time event (post-commit, non-blocking)
       // bidCount is fetched after commit to get the accurate total
       this.bidRepository
         .countByAuctionId(input.auctionId)
@@ -172,21 +190,6 @@ export class BidsService {
           );
         });
 
-      // 8. Send Outbid Email (Post-commit, non-blocking)
-      if (currentWinner) {
-        this.sendOutbidEmail(
-          currentWinner.bidderId.toString(),
-          auction.title,
-          input.amount,
-          input.auctionId,
-          outbidTransactionId,
-        ).catch((err) => {
-          this.logger.error(
-            `Failed to send outbid email: ${err instanceof Error ? err.message : String(err)}`,
-          );
-        });
-      }
-
       return bid;
     } catch (error) {
       await session.abortTransaction();
@@ -194,31 +197,6 @@ export class BidsService {
     } finally {
       await session.endSession();
     }
-  }
-
-  private async sendOutbidEmail(
-    previousBidderId: string,
-    auctionTitle: string,
-    newAmount: number,
-    auctionId: string,
-    transactionId?: string,
-  ): Promise<void> {
-    const previousBidder = await this.usersService.findById(previousBidderId);
-    if (!previousBidder) return;
-
-    const name =
-      [previousBidder.firstName, previousBidder.lastName]
-        .filter(Boolean)
-        .join(' ') || 'User';
-
-    await this.notificationsService.sendOutbidEmail(
-      previousBidder.email,
-      name,
-      auctionTitle,
-      newAmount,
-      auctionId,
-      transactionId,
-    );
   }
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -262,21 +240,19 @@ export class BidsService {
             session,
           );
 
-          await session.commitTransaction();
+          // Send Outbox Event
+          await this.outboxService.saveEvent(
+            RabbitMQEvent.AuctionEnded,
+            {
+              auctionId,
+              auctionTitle: auction.title,
+              sellerId: auction.sellerId.toString(),
+              finalPrice: auction.currentPrice,
+            },
+            session,
+          );
 
-          // Send Email to seller (Post-commit)
-          this.sendAuctionEndedSellerEmail(
-            auction.sellerId.toString(),
-            auction.title,
-            auction.currentPrice,
-            null,
-            auctionId,
-            undefined,
-          ).catch((err) => {
-            this.logger.error(
-              `Failed to send auction ended email (no winner) for ${auctionId}: ${err instanceof Error ? err.message : String(err)}`,
-            );
-          });
+          await session.commitTransaction();
           continue;
         }
 
@@ -348,34 +324,23 @@ export class BidsService {
           session,
         );
 
+        // Send Outbox Event
+        await this.outboxService.saveEvent(
+          RabbitMQEvent.AuctionEnded,
+          {
+            auctionId,
+            auctionTitle: auction.title,
+            sellerId,
+            finalPrice: auction.currentPrice,
+            winnerId,
+            winnerName: winnerName || undefined,
+            captureTransactionId: captureTransaction._id.toString(),
+            depositTransactionId: depositTransaction._id.toString(),
+          },
+          session,
+        );
+
         await session.commitTransaction();
-
-        // 6. Send AUCTION_WON Email to winner (Post-commit)
-        this.sendAuctionWonEmail(
-          winnerId,
-          auction.title,
-          winningBid.amount,
-          auctionId,
-          captureTransaction._id.toString(),
-        ).catch((err) => {
-          this.logger.error(
-            `Failed to send auction won email for ${auctionId}: ${err instanceof Error ? err.message : String(err)}`,
-          );
-        });
-
-        // 7. Send AUCTION_ENDED_SELLER Email to seller (Post-commit)
-        this.sendAuctionEndedSellerEmail(
-          sellerId,
-          auction.title,
-          auction.currentPrice,
-          winnerName, // pass the fetched name so we don't fetch again
-          auctionId,
-          depositTransaction._id.toString(),
-        ).catch((err) => {
-          this.logger.error(
-            `Failed to send auction ended email to seller for ${auctionId}: ${err instanceof Error ? err.message : String(err)}`,
-          );
-        });
 
         this.logger.log(
           `Successfully finalized auction ${auctionId}. Winner: ${winnerId}, Seller: ${sellerId}, Amount: ${winningBid.amount}`,
@@ -389,54 +354,6 @@ export class BidsService {
         await session.endSession();
       }
     }
-  }
-
-  private async sendAuctionWonEmail(
-    winnerId: string,
-    auctionTitle: string,
-    winningAmount: number,
-    auctionId: string,
-    transactionId?: string,
-  ): Promise<void> {
-    const winner = await this.usersService.findById(winnerId);
-    if (!winner) return;
-
-    const name =
-      [winner.firstName, winner.lastName].filter(Boolean).join(' ') || 'User';
-
-    await this.notificationsService.sendAuctionWonEmail(
-      winner.email,
-      name,
-      auctionTitle,
-      winningAmount,
-      auctionId,
-      transactionId,
-    );
-  }
-
-  private async sendAuctionEndedSellerEmail(
-    sellerId: string,
-    auctionTitle: string,
-    currentPrice: number,
-    winnerName: string | null,
-    auctionId: string,
-    transactionId?: string,
-  ): Promise<void> {
-    const seller = await this.usersService.findById(sellerId);
-    if (!seller) return;
-
-    const name =
-      [seller.firstName, seller.lastName].filter(Boolean).join(' ') || 'User';
-
-    await this.notificationsService.sendAuctionEndedSellerEmail(
-      seller.email,
-      name,
-      auctionTitle,
-      currentPrice,
-      winnerName,
-      auctionId,
-      transactionId,
-    );
   }
 
   async adminGetAllBids(

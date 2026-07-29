@@ -1,0 +1,17 @@
+﻿import { Global, Module } from '@nestjs/common';
+import { MongooseModule } from '@nestjs/mongoose';
+import { OutboxEvent, OutboxEventSchema } from './outbox-event.schema';
+import { OutboxService } from './outbox.service';
+import { OutboxWorkerService } from './outbox-worker.service';
+
+@Global()
+@Module({
+  imports: [
+    MongooseModule.forFeature([
+      { name: OutboxEvent.name, schema: OutboxEventSchema },
+    ]),
+  ],
+  providers: [OutboxService, OutboxWorkerService],
+  exports: [OutboxService],
+})
+export class OutboxModule {}
