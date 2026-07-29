@@ -15,6 +15,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from '../users/users.service';
 
 import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
+import { RedisService } from '../infrastructure/redis/redis.service';
 
 const mockSession = {
   startTransaction: jest.fn(),
@@ -71,6 +72,10 @@ const mockUsersService = {
   findById: jest.fn(),
 };
 
+const mockRedisService = {
+  invalidatePattern: jest.fn().mockResolvedValue(undefined),
+};
+
 describe('BidsService', () => {
   let service: BidsService;
 
@@ -91,6 +96,7 @@ describe('BidsService', () => {
             publishAuctionStatusChanged: jest.fn().mockResolvedValue(undefined),
           },
         },
+        { provide: RedisService, useValue: mockRedisService },
       ],
     }).compile();
 

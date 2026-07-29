@@ -23,10 +23,16 @@ import { WalletService } from '../wallet/wallet.service';
 import { InAppNotificationType } from '../notifications/in-app/enums/in-app-notification-type.enum';
 import { NotificationReferenceType } from '../notifications/in-app/enums/notification-reference-type.enum';
 import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
+import { RedisService } from '../infrastructure/redis/redis.service';
 
 export const AUCTION_STATUS_CHANGED = 'AUCTION_STATUS_CHANGED';
 
 const MIN_START_TIME_MS = 15 * 60 * 1000; // 15 minutes
+
+// Cache constants for active auctions
+const ACTIVE_AUCTIONS_PATTERN = 'auction:active:*';
+const ACTIVE_AUCTIONS_SOFT_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const ACTIVE_AUCTIONS_HARD_TTL_S = 60 * 60; // 1 hour
 
 @Injectable()
 export class AuctionsService {
@@ -40,6 +46,7 @@ export class AuctionsService {
     private readonly usersService: UsersService,
     private readonly walletService: WalletService,
     private readonly realtimeService: RealtimeService,
+    private readonly redisService: RedisService,
   ) {}
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -93,7 +100,7 @@ export class AuctionsService {
   ): Promise<Auction> {
     this.validateTimes(input.startTime, input.endTime);
 
-    return this.auctionRepository.create({
+    const auction = await this.auctionRepository.create({
       sellerId: new Types.ObjectId(sellerId),
       title: input.title,
       description: input.description,
@@ -104,12 +111,40 @@ export class AuctionsService {
       startTime: input.startTime,
       endTime: input.endTime,
     });
+
+    // Invalidate active auctions cache (new auction may become active soon)
+    void this.redisService.invalidatePattern(ACTIVE_AUCTIONS_PATTERN);
+
+    return auction;
   }
 
   async findAuctions(
     input: PaginationInput,
     filter: AuctionsFilterInput,
   ): Promise<AuctionsPage> {
+    // Cache only ACTIVE auctions queries (highest traffic, rarely mutated)
+    if (filter.status === AuctionStatus.ACTIVE) {
+      const cacheKey =
+        `auction:active:cat:${filter.category ?? 'none'}` +
+        `:search:${filter.search ?? 'none'}` +
+        `:p:${input.page}:l:${input.limit}`;
+
+      return this.redisService.getOrSetSWR(
+        cacheKey,
+        ACTIVE_AUCTIONS_SOFT_TTL_MS,
+        ACTIVE_AUCTIONS_HARD_TTL_S,
+        async () => {
+          const { items, total } = await this.auctionRepository.findAll(
+            input.page,
+            input.limit,
+            filter,
+            [AuctionStatus.CANCELLED],
+          );
+          return this.buildPage(items, total, input);
+        },
+      );
+    }
+
     const { items, total } = await this.auctionRepository.findAll(
       input.page,
       input.limit,
@@ -189,7 +224,10 @@ export class AuctionsService {
     const updated = await this.auctionRepository.update(auctionId, input);
     if (!updated) throw new AuctionNotFoundException();
 
-    // 2. If DB update succeeds, clean up deleted images from Cloudinary (Fire & Forget)
+    // 2. Invalidate active auctions cache (title, category, images may have changed)
+    void this.redisService.invalidatePattern(ACTIVE_AUCTIONS_PATTERN);
+
+    // 3. If DB update succeeds, clean up deleted images from Cloudinary (Fire & Forget)
     if (deletedImages.length > 0) {
       Promise.allSettled(
         deletedImages.map((url) =>
@@ -283,6 +321,9 @@ export class AuctionsService {
         auction: { ...auction, status: AuctionStatus.CANCELLED },
       });
 
+      // Invalidate active auctions cache (cancelled auction must leave the list)
+      void this.redisService.invalidatePattern(ACTIVE_AUCTIONS_PATTERN);
+
       return true;
     } catch (error) {
       await session.abortTransaction();
@@ -303,6 +344,9 @@ export class AuctionsService {
     const ids = auctions.map((a) => a._id);
     await this.auctionRepository.updateManyStatus(ids, AuctionStatus.ACTIVE);
     this.logger.log(`Activated ${ids.length} auction(s)`);
+
+    // Invalidate active auctions cache (new auctions are now active)
+    void this.redisService.invalidatePattern(ACTIVE_AUCTIONS_PATTERN);
 
     for (const auction of auctions) {
       // Notify seller via email/in-app
@@ -327,6 +371,9 @@ export class AuctionsService {
     const ids = auctions.map((a) => a._id);
     await this.auctionRepository.updateManyStatus(ids, AuctionStatus.ENDED);
     this.logger.log(`Ended ${ids.length} auction(s)`);
+
+    // Invalidate active auctions cache (ended auctions must leave the list)
+    void this.redisService.invalidatePattern(ACTIVE_AUCTIONS_PATTERN);
 
     // Publish real-time status change for each ended auction (non-blocking)
     for (const auction of auctions) {
