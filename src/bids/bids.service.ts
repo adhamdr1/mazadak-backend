@@ -21,6 +21,9 @@ import { UsersService } from '../users/users.service';
 import { InAppNotificationType } from '../notifications/in-app/enums/in-app-notification-type.enum';
 import { NotificationReferenceType } from '../notifications/in-app/enums/notification-reference-type.enum';
 import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
+import { RedisService } from '../infrastructure/redis/redis.service';
+
+const ACTIVE_AUCTIONS_PATTERN = 'auction:active:*';
 
 export const BID_ADDED = 'BID_ADDED';
 
@@ -37,6 +40,7 @@ export class BidsService {
     private readonly notificationsService: NotificationsService,
     private readonly usersService: UsersService,
     private readonly realtimeService: RealtimeService,
+    private readonly redisService: RedisService,
   ) {}
 
   async placeBid(userId: string, input: PlaceBidInput): Promise<Bid> {
@@ -146,6 +150,9 @@ export class BidsService {
       );
 
       await session.commitTransaction();
+
+      // Invalidate active auctions cache (currentPrice changed)
+      void this.redisService.invalidatePattern(ACTIVE_AUCTIONS_PATTERN);
 
       // 7. Publish real-time event (post-commit, non-blocking)
       // bidCount is fetched after commit to get the accurate total

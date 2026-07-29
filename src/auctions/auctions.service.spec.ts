@@ -20,9 +20,24 @@ import { UsersService } from '../users/users.service';
 import { WalletService } from '../wallet/wallet.service';
 
 import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
+import { RedisService } from '../infrastructure/redis/redis.service';
 
 const mockWalletService = {
   release: jest.fn(),
+};
+
+const mockRedisService = {
+  getOrSetSWR: jest
+    .fn()
+    .mockImplementation(
+      <T>(
+        _key: string,
+        _soft: number,
+        _hard: number,
+        fetcher: () => Promise<T>,
+      ) => fetcher(),
+    ),
+  invalidatePattern: jest.fn().mockResolvedValue(undefined),
 };
 
 const mockSession = {
@@ -80,6 +95,7 @@ describe('AuctionsService', () => {
             publishAuctionStatusChanged: jest.fn().mockResolvedValue(undefined),
           },
         },
+        { provide: RedisService, useValue: mockRedisService },
       ],
     }).compile();
 
