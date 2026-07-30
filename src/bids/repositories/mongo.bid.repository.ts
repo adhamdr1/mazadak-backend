@@ -8,6 +8,7 @@ import {
   IBidRepository,
   CreateBidData,
 } from '../interfaces/bid-repository.interface';
+import { SortOrder } from '../../common/enums/sort-order.enum';
 
 @Injectable()
 export class MongoBidRepository implements IBidRepository {
@@ -48,12 +49,20 @@ export class MongoBidRepository implements IBidRepository {
     filter: BidsFilterInput,
   ): Promise<{ items: Bid[]; total: number }> {
     const skip = (page - 1) * limit;
-    const query = filter.status ? { status: filter.status } : {};
+    const query = filter?.status ? { status: filter.status } : {};
+
+    const sortParams: Record<string, 1 | -1> = {};
+    if (filter?.sort) {
+      sortParams[filter.sort.field] =
+        filter.sort.order === SortOrder.ASC ? 1 : -1;
+    } else {
+      sortParams['createdAt'] = -1;
+    }
 
     const [items, total] = await Promise.all([
       this.bidModel
         .find(query)
-        .sort({ createdAt: -1 })
+        .sort(sortParams)
         .skip(skip)
         .limit(limit)
         .lean()
@@ -74,14 +83,23 @@ export class MongoBidRepository implements IBidRepository {
     const query: Record<string, any> = {
       auctionId: new Types.ObjectId(auctionId),
     };
-    if (filter.status) {
+    if (filter?.status) {
       query.status = filter.status;
+    }
+
+    const sortParams: Record<string, 1 | -1> = {};
+    if (filter?.sort) {
+      sortParams[filter.sort.field] =
+        filter.sort.order === SortOrder.ASC ? 1 : -1;
+    } else {
+      sortParams['amount'] = -1;
+      sortParams['createdAt'] = -1; // Highest bids first
     }
 
     const [items, total] = await Promise.all([
       this.bidModel
         .find(query)
-        .sort({ amount: -1, createdAt: -1 }) // Highest bids first
+        .sort(sortParams)
         .skip(skip)
         .limit(limit)
         .lean()
@@ -102,14 +120,22 @@ export class MongoBidRepository implements IBidRepository {
     const query: Record<string, any> = {
       bidderId: new Types.ObjectId(bidderId),
     };
-    if (filter.status) {
+    if (filter?.status) {
       query.status = filter.status;
+    }
+
+    const sortParams: Record<string, 1 | -1> = {};
+    if (filter?.sort) {
+      sortParams[filter.sort.field] =
+        filter.sort.order === SortOrder.ASC ? 1 : -1;
+    } else {
+      sortParams['createdAt'] = -1;
     }
 
     const [items, total] = await Promise.all([
       this.bidModel
         .find(query)
-        .sort({ createdAt: -1 })
+        .sort(sortParams)
         .skip(skip)
         .limit(limit)
         .lean()

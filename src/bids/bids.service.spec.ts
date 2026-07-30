@@ -13,6 +13,7 @@ import { AlreadyHighestBidderException } from './exceptions/already-highest-bidd
 import { BidAmountTooLowException } from './exceptions/bid-amount-too-low.exception';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from '../users/users.service';
+import { OutboxService } from '../infrastructure/outbox/outbox.service';
 
 import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
 import { RedisService } from '../infrastructure/redis/redis.service';
@@ -72,6 +73,10 @@ const mockUsersService = {
   findById: jest.fn(),
 };
 
+const mockOutboxService = {
+  saveEvent: jest.fn().mockResolvedValue(undefined),
+};
+
 const mockRedisService = {
   invalidatePattern: jest.fn().mockResolvedValue(undefined),
 };
@@ -88,6 +93,7 @@ describe('BidsService', () => {
         { provide: WalletService, useValue: mockWalletService },
         { provide: NotificationsService, useValue: mockNotificationsService },
         { provide: UsersService, useValue: mockUsersService },
+        { provide: OutboxService, useValue: mockOutboxService },
         {
           provide: RealtimeService,
           useValue: {
