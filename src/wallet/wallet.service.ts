@@ -11,10 +11,9 @@ import { TransactionStatus } from '../transaction/enums/transaction-status.enum'
 import { Transaction } from '../transaction/entities/transaction.entity';
 import { WalletsPage } from './dto/wallets-page.type';
 import { PaginationInput } from '../common/dto/pagination.input';
-import { NotificationsService } from '../notifications/notifications.service';
+import { RabbitMQService } from '../infrastructure/rabbitmq/rabbitmq.service';
+import { RabbitMQEvent } from '../infrastructure/rabbitmq/rabbitmq-event.types';
 import { UsersService } from '../users/users.service';
-import { InAppNotificationType } from '../notifications/in-app/enums/in-app-notification-type.enum';
-import { NotificationReferenceType } from '../notifications/in-app/enums/notification-reference-type.enum';
 
 @Injectable()
 export class WalletService {
@@ -24,7 +23,7 @@ export class WalletService {
     @Inject('IWalletRepository')
     private readonly walletRepository: IWalletRepository,
     private readonly transactionService: TransactionService,
-    private readonly notificationsService: NotificationsService,
+    private readonly rabbitMQService: RabbitMQService,
     private readonly usersService: UsersService,
   ) {}
 
@@ -212,20 +211,12 @@ export class WalletService {
     const name =
       [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
 
-    await this.notificationsService.sendDepositSuccessfulEmail(
-      user.email,
+    await this.rabbitMQService.publish(RabbitMQEvent.WalletDeposited, {
+      userId,
+      email: user.email,
       name,
       amount,
-      transactionId,
-    );
-
-    await this.notificationsService.createInAppNotification({
-      userId,
-      type: InAppNotificationType.DEPOSIT_SUCCESSFUL,
-      title: 'Deposit Successful 💰',
-      body: `An amount of ${amount} EGP has been credited to your wallet. Ref: ${transactionId || 'N/A'}.`,
-      referenceId: transactionId,
-      referenceType: NotificationReferenceType.TRANSACTION,
+      transactionId: transactionId || 'N/A',
     });
   }
 
@@ -240,20 +231,12 @@ export class WalletService {
     const name =
       [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
 
-    await this.notificationsService.sendWithdrawalCompletedEmail(
-      user.email,
+    await this.rabbitMQService.publish(RabbitMQEvent.WithdrawalCompleted, {
+      userId,
+      email: user.email,
       name,
       amount,
-      transactionId,
-    );
-
-    await this.notificationsService.createInAppNotification({
-      userId,
-      type: InAppNotificationType.WITHDRAWAL_COMPLETED,
-      title: 'Withdrawal Completed 💸',
-      body: `An amount of ${amount} EGP has been withdrawn from your wallet. Ref: ${transactionId || 'N/A'}.`,
-      referenceId: transactionId,
-      referenceType: NotificationReferenceType.TRANSACTION,
+      transactionId: transactionId || 'N/A',
     });
   }
 

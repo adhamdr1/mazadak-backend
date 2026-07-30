@@ -11,6 +11,7 @@ export enum EmailTemplates {
   DEPOSIT_SUCCESSFUL = 'deposit-successful',
   WITHDRAWAL_COMPLETED = 'withdrawal-completed',
   AUCTION_CANCELLED_BY_ADMIN = 'auction-cancelled-by-admin',
+  AUCTION_CANCELLED = 'auction-cancelled',
 }
 
 export enum EmailSubjects {
@@ -25,4 +26,5 @@ export enum EmailSubjects {
   DEPOSIT_SUCCESSFUL = 'Wallet Deposit Successful - Mazadak',
   WITHDRAWAL_COMPLETED = 'Wallet Withdrawal Completed - Mazadak',
   AUCTION_CANCELLED_BY_ADMIN = 'Notice: Your auction has been cancelled by an Admin',
+  AUCTION_CANCELLED = 'Your auction has been cancelled on Mazadak',
 }

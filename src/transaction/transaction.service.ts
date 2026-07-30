@@ -1,6 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { ITransactionRepository } from './interfaces/transaction.repository.interface';
-import type { CreateTransactionData } from './interfaces/transaction.repository.interface';
+import {
+  type ITransactionRepository,
+  type CreateTransactionData,
+} from './interfaces/transaction.repository.interface';
 import { Transaction } from './entities/transaction.entity';
 import { TransactionsPage } from './dto/transactions-page.type';
 import { TransactionsFilterInput } from './dto/transactions-filter.input';

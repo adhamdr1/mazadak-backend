@@ -21,7 +21,6 @@ import { createHash, randomBytes } from 'crypto';
 import { StringValue } from 'ms';
 import { LoginInput } from './dto/login.input';
 import { NotificationsService } from '../notifications/notifications.service';
-import { InAppNotificationType } from '../notifications/in-app/enums/in-app-notification-type.enum';
 import { OAuth2Client } from 'google-auth-library';
 import { RegistrationRequiredException } from './exceptions/registration-required.exception';
 import { User } from '../users/entities/user.entity';
@@ -246,15 +245,6 @@ export class AuthService {
           `Failed to publish EmailVerified event: ${err instanceof Error ? err.message : String(err)}`,
         );
       });
-
-    this.notificationsService
-      .createInAppNotification({
-        userId,
-        type: InAppNotificationType.WELCOME,
-        title: 'Welcome to Mazadak! 🌟',
-        body: 'Your account is now fully verified. Happy bidding!',
-      })
-      .catch(() => {});
 
     return true;
   }

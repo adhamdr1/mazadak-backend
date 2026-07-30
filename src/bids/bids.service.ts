@@ -19,8 +19,6 @@ import { InvalidAuctionIdException } from './exceptions/invalid-auction-id.excep
 import { AuctionNotFoundException } from '../auctions/exceptions/auction-not-found.exception';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from '../users/users.service';
-import { InAppNotificationType } from '../notifications/in-app/enums/in-app-notification-type.enum';
-import { NotificationReferenceType } from '../notifications/in-app/enums/notification-reference-type.enum';
 import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
 import { RedisService } from '../infrastructure/redis/redis.service';
 import { OutboxService } from '../infrastructure/outbox/outbox.service';
@@ -125,34 +123,6 @@ export class BidsService {
         session,
       );
 
-      // 5. Send Outbid In-App Notification (Transactional)
-      if (currentWinner) {
-        await this.notificationsService.createInAppNotification(
-          {
-            userId: currentWinner.bidderId.toString(),
-            type: InAppNotificationType.OUTBID,
-            title: 'You have been outbid! ⚠️',
-            body: `Someone placed a higher bid of ${input.amount} EGP on the auction "${auction.title}".`,
-            referenceId: input.auctionId,
-            referenceType: NotificationReferenceType.AUCTION,
-          },
-          session,
-        );
-      }
-
-      // 6. Send New Bid In-App Notification to seller (Transactional)
-      await this.notificationsService.createInAppNotification(
-        {
-          userId: auction.sellerId.toString(),
-          type: InAppNotificationType.NEW_BID,
-          title: 'New bid placed! 📈',
-          body: `Someone placed a bid of ${input.amount} EGP on your auction "${auction.title}".`,
-          referenceId: input.auctionId,
-          referenceType: NotificationReferenceType.AUCTION,
-        },
-        session,
-      );
-
       // 7. Publish Event to Outbox (Transactional)
       await this.outboxService.saveEvent(
         RabbitMQEvent.BidPlaced,
@@ -160,6 +130,7 @@ export class BidsService {
           bidId: bid._id.toString(),
           auctionId: input.auctionId,
           auctionTitle: auction.title,
+          sellerId: auction.sellerId.toString(),
           bidderId: userId,
           amount: input.amount,
           outbidUserId: currentWinner?.bidderId.toString(),
@@ -228,18 +199,6 @@ export class BidsService {
             undefined,
             session,
           );
-          // Send In-App notification (Transactional)
-          await this.notificationsService.createInAppNotification(
-            {
-              userId: auction.sellerId.toString(),
-              type: InAppNotificationType.AUCTION_ENDED_SELLER,
-              title: 'Your auction has ended 🏁',
-              body: `Your auction "${auction.title}" has ended with no bids.`,
-              referenceId: auctionId,
-              referenceType: NotificationReferenceType.AUCTION,
-            },
-            session,
-          );
 
           // Send Outbox Event
           await this.outboxService.saveEvent(
@@ -285,19 +244,6 @@ export class BidsService {
           session,
         );
 
-        // 4. Send AUCTION_WON In-App Notification to winner
-        await this.notificationsService.createInAppNotification(
-          {
-            userId: winnerId,
-            type: InAppNotificationType.AUCTION_WON,
-            title: 'Congratulations! You won! 🎉',
-            body: `You won the auction "${auction.title}" with a final bid of ${winningBid.amount} EGP.`,
-            referenceId: auctionId,
-            referenceType: NotificationReferenceType.AUCTION,
-          },
-          session,
-        );
-
         // Fetch winner name for seller's notification
         let winnerName: string | null = null;
         try {
@@ -311,19 +257,6 @@ export class BidsService {
         } catch {
           winnerName = 'Winning Bidder';
         }
-
-        // 5. Send AUCTION_ENDED_SELLER In-App Notification to seller
-        await this.notificationsService.createInAppNotification(
-          {
-            userId: sellerId,
-            type: InAppNotificationType.AUCTION_ENDED_SELLER,
-            title: 'Your auction has ended 🏁',
-            body: `Your auction "${auction.title}" has successfully ended. Sold for ${auction.currentPrice} EGP to ${winnerName || 'Winning Bidder'}.`,
-            referenceId: auctionId,
-            referenceType: NotificationReferenceType.AUCTION,
-          },
-          session,
-        );
 
         // Send Outbox Event
         await this.outboxService.saveEvent(

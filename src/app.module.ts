@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { UsersModule } from './users/users.module';
@@ -18,7 +18,6 @@ import { RedisModule as AppRedisModule } from './infrastructure/redis/redis.modu
 import { RabbitMQModule } from './infrastructure/rabbitmq/rabbitmq.module';
 import { OutboxModule } from './infrastructure/outbox/outbox.module';
 import { IpBlacklistMiddleware } from './common/middleware/ip-blacklist.middleware';
-import { MiddlewareConsumer, NestModule } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { WalletModule } from './wallet/wallet.module';
 import { TransactionModule } from './transaction/transaction.module';

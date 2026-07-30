@@ -170,6 +170,24 @@ export class NotificationsService {
     );
   }
 
+  async sendAuctionCancelledEmail(
+    email: string,
+    name: string,
+    auctionTitle: string,
+    auctionId: string,
+  ): Promise<void> {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'https://mazadak.com';
+    const auctionLink = `${frontendUrl}/auctions/${auctionId}`;
+
+    await this.emailService.send(
+      email,
+      EmailSubjects.AUCTION_CANCELLED,
+      EmailTemplates.AUCTION_CANCELLED,
+      { name, auctionTitle, auctionLink, role: 'seller' },
+    );
+  }
+
   async sendAuctionCancelledByAdminEmail(
     email: string,
     name: string,
