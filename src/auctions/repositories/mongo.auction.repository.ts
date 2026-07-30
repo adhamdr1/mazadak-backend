@@ -44,7 +44,8 @@ export class MongoAuctionRepository implements IAuctionRepository {
     excludeStatuses?: AuctionStatus[],
   ): Promise<{ items: Auction[]; total: number }> {
     const query = this.buildQuery(filter, excludeStatuses);
-    return this.executePaginatedQuery(query, page, limit);
+    const sort = this.buildSort(filter);
+    return this.executePaginatedQuery(query, page, limit, sort);
   }
 
   async findBySellerId(
@@ -57,7 +58,8 @@ export class MongoAuctionRepository implements IAuctionRepository {
       ...this.buildQuery(filter),
       sellerId: new Types.ObjectId(sellerId),
     };
-    return this.executePaginatedQuery(query, page, limit);
+    const sort = this.buildSort(filter);
+    return this.executePaginatedQuery(query, page, limit, sort);
   }
 
   async findByWinnerId(
@@ -70,7 +72,8 @@ export class MongoAuctionRepository implements IAuctionRepository {
       ...this.buildQuery(filter),
       winnerId: new Types.ObjectId(winnerId),
     };
-    return this.executePaginatedQuery(query, page, limit);
+    const sort = this.buildSort(filter);
+    return this.executePaginatedQuery(query, page, limit, sort);
   }
 
   async update(id: string, data: UpdateAuctionData): Promise<Auction | null> {
@@ -181,26 +184,34 @@ export class MongoAuctionRepository implements IAuctionRepository {
     }
 
     if (filter.search) {
-      query.title = { $regex: filter.search, $options: 'i' };
+      query.$text = { $search: filter.search };
     }
 
     return query;
+  }
+
+  private buildSort(filter: AuctionsFilter): Record<string, 1 | -1> {
+    const sortParams: Record<string, 1 | -1> = {};
+    if (filter.sort) {
+      sortParams[filter.sort.field] = filter.sort.order === 'ASC' ? 1 : -1;
+    } else {
+      sortParams['createdAt'] = -1; // Default
+    }
+
+    // If text search is used, we might want to sort by text score, but for now we keep the requested sort or default.
+    return sortParams;
   }
 
   private async executePaginatedQuery(
     query: Record<string, unknown>,
     page: number,
     limit: number,
+    sort: Record<string, 1 | -1>,
   ): Promise<{ items: Auction[]; total: number }> {
     const skip = (page - 1) * limit;
 
     const [items, total] = await Promise.all([
-      this.auctionModel
-        .find(query)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .exec(),
+      this.auctionModel.find(query).sort(sort).skip(skip).limit(limit).exec(),
       this.auctionModel.countDocuments(query).exec(),
     ]);
 

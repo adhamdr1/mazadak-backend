@@ -18,9 +18,10 @@ import { PaginationInput } from '../common/dto/pagination.input';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from '../users/users.service';
 import { WalletService } from '../wallet/wallet.service';
-
 import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
 import { RedisService } from '../infrastructure/redis/redis.service';
+import { RabbitMQService } from '../infrastructure/rabbitmq/rabbitmq.service';
+import { OutboxService } from '../infrastructure/outbox/outbox.service';
 
 const mockWalletService = {
   release: jest.fn(),
@@ -96,6 +97,14 @@ describe('AuctionsService', () => {
           },
         },
         { provide: RedisService, useValue: mockRedisService },
+        {
+          provide: RabbitMQService,
+          useValue: { publishToQueue: jest.fn().mockResolvedValue(undefined) },
+        },
+        {
+          provide: OutboxService,
+          useValue: { saveEvent: jest.fn().mockResolvedValue(undefined) },
+        },
       ],
     }).compile();
 
