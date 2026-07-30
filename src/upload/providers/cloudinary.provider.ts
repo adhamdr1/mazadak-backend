@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { v2 as cloudinary } from 'cloudinary';
-import { IStorageProvider } from '../interfaces/storage-provider.interface';
+import {
+  IStorageProvider,
+  UploadSignature,
+} from '../interfaces/storage-provider.interface';
 import { ImageUploadFailedException } from '../exceptions/image-upload-failed.exception';
 import { InvalidImageFormatException } from '../exceptions/invalid-image-format.exception';
 import { ImageTooLargeException } from '../exceptions/image-too-large.exception';
@@ -109,5 +112,31 @@ export class CloudinaryProvider implements IStorageProvider {
     } catch {
       return null;
     }
+  }
+
+  generateUploadSignature(
+    folder: string = 'general',
+  ): Promise<UploadSignature> {
+    const timestamp = Math.round(new Date().getTime() / 1000);
+    const apiSecret = this.configService.getOrThrow<string>(
+      'CLOUDINARY_API_SECRET',
+    );
+
+    // Cloudinary signature requires the payload to be verified (e.g. timestamp and folder).
+    const signature = cloudinary.utils.api_sign_request(
+      {
+        timestamp,
+        folder,
+      },
+      apiSecret,
+    );
+
+    return Promise.resolve({
+      signature,
+      timestamp,
+      apiKey: this.configService.getOrThrow<string>('CLOUDINARY_API_KEY'),
+      cloudName: this.configService.getOrThrow<string>('CLOUDINARY_CLOUD_NAME'),
+      folder,
+    });
   }
 }

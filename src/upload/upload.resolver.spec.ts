@@ -8,6 +8,7 @@ import { UserRole } from '../users/enums/user-role.enum';
 const mockUploadService = {
   uploadImage: jest.fn(),
   deleteImage: jest.fn(),
+  generateUploadSignature: jest.fn(),
 };
 
 describe('UploadResolver', () => {
@@ -79,6 +80,36 @@ describe('UploadResolver', () => {
         url,
       );
       expect(result).toBe(true);
+    });
+  });
+
+  describe('generateUploadSignature', () => {
+    it('should call uploadService.generateUploadSignature and return signature', async () => {
+      const mockUser: JwtPayload = {
+        sub: 'user123',
+        email: 'test@test.com',
+        role: UserRole.USER,
+      };
+      const folder = 'avatars';
+      const mockSignature = {
+        signature: 'mock',
+        timestamp: 123,
+        apiKey: 'key',
+        cloudName: 'cloud',
+        folder: 'users/user123/avatars',
+      };
+
+      mockUploadService.generateUploadSignature.mockResolvedValue(
+        mockSignature,
+      );
+
+      const result = await resolver.generateUploadSignature(mockUser, folder);
+
+      expect(mockUploadService.generateUploadSignature).toHaveBeenCalledWith(
+        mockUser.sub,
+        folder,
+      );
+      expect(result).toEqual(mockSignature);
     });
   });
 });

@@ -5,6 +5,7 @@ import { ForbiddenException } from '@nestjs/common';
 const mockStorageProvider = {
   uploadImage: jest.fn(),
   deleteImage: jest.fn(),
+  generateUploadSignature: jest.fn(),
 };
 
 describe('UploadService', () => {
@@ -87,6 +88,53 @@ describe('UploadService', () => {
         ForbiddenException,
       );
       expect(mockStorageProvider.deleteImage).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('generateUploadSignature', () => {
+    it('should generate signature with specific folder', async () => {
+      const userId = 'user123';
+      const folderName = 'avatars';
+      const mockSignature = {
+        signature: 'mock',
+        timestamp: 123,
+        apiKey: 'key',
+        cloudName: 'cloud',
+        folder: `users/${userId}/${folderName}`,
+      };
+
+      mockStorageProvider.generateUploadSignature.mockResolvedValue(
+        mockSignature,
+      );
+
+      const result = await service.generateUploadSignature(userId, folderName);
+
+      expect(mockStorageProvider.generateUploadSignature).toHaveBeenCalledWith(
+        `users/${userId}/${folderName}`,
+      );
+      expect(result).toEqual(mockSignature);
+    });
+
+    it('should generate signature with general folder if no folder provided', async () => {
+      const userId = 'user123';
+      const mockSignature = {
+        signature: 'mock',
+        timestamp: 123,
+        apiKey: 'key',
+        cloudName: 'cloud',
+        folder: `users/${userId}/general`,
+      };
+
+      mockStorageProvider.generateUploadSignature.mockResolvedValue(
+        mockSignature,
+      );
+
+      const result = await service.generateUploadSignature(userId);
+
+      expect(mockStorageProvider.generateUploadSignature).toHaveBeenCalledWith(
+        `users/${userId}/general`,
+      );
+      expect(result).toEqual(mockSignature);
     });
   });
 });

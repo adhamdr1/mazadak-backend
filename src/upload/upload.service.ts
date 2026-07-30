@@ -1,5 +1,8 @@
 import { Injectable, Inject, ForbiddenException } from '@nestjs/common';
-import type { IStorageProvider } from './interfaces/storage-provider.interface';
+import type {
+  IStorageProvider,
+  UploadSignature,
+} from './interfaces/storage-provider.interface';
 
 @Injectable()
 export class UploadService {
@@ -27,5 +30,16 @@ export class UploadService {
     }
 
     return this.storageProvider.deleteImage(url);
+  }
+
+  generateUploadSignature(
+    userId: string,
+    folderName?: string,
+  ): Promise<UploadSignature> {
+    const folderPath = folderName
+      ? `users/${userId}/${folderName}`
+      : `users/${userId}/general`;
+
+    return this.storageProvider.generateUploadSignature(folderPath);
   }
 }

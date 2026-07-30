@@ -13,6 +13,9 @@ jest.mock('cloudinary', () => ({
       upload: jest.fn(),
       destroy: jest.fn(),
     },
+    utils: {
+      api_sign_request: jest.fn(),
+    },
   },
 }));
 
@@ -187,6 +190,54 @@ describe('CloudinaryProvider', () => {
       expect(cloudinary.uploader.destroy).toHaveBeenCalledWith(
         'avatars/user123',
       );
+    });
+  });
+
+  describe('generateUploadSignature', () => {
+    it('should generate signature successfully with default folder', async () => {
+      (cloudinary.utils.api_sign_request as jest.Mock).mockReturnValue(
+        'mock-signature',
+      );
+
+      const result = await provider.generateUploadSignature();
+
+      expect(cloudinary.utils.api_sign_request).toHaveBeenCalledWith(
+        {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          timestamp: expect.any(Number),
+          folder: 'general',
+        },
+        'test_secret',
+      );
+
+      expect(result).toEqual({
+        signature: 'mock-signature',
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        timestamp: expect.any(Number),
+        apiKey: 'test_key',
+        cloudName: 'test_cloud',
+        folder: 'general',
+      });
+    });
+
+    it('should generate signature successfully with custom folder', async () => {
+      (cloudinary.utils.api_sign_request as jest.Mock).mockReturnValue(
+        'mock-signature-custom',
+      );
+
+      const result = await provider.generateUploadSignature('custom-folder');
+
+      expect(cloudinary.utils.api_sign_request).toHaveBeenCalledWith(
+        {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          timestamp: expect.any(Number),
+          folder: 'custom-folder',
+        },
+        'test_secret',
+      );
+
+      expect(result.signature).toBe('mock-signature-custom');
+      expect(result.folder).toBe('custom-folder');
     });
   });
 });
