@@ -199,4 +199,15 @@ export class UsersService {
     });
     if (!updated) throw new UserNotFoundException();
   }
+
+  async toggleBan(userId: string): Promise<User> {
+    const user = await this.findById(userId);
+    return (await this.userRepository.update(userId, {
+      isBanned: !user.isBanned,
+    })) as User;
+  }
+
+  async countVerifiedUsers(): Promise<number> {
+    return this.userRepository.countVerified();
+  }
 }

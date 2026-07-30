@@ -72,6 +72,10 @@ export class Auction {
   @Prop({ default: false })
   isFinalized!: boolean;
 
+  @Field({ nullable: true })
+  @Prop({ type: String, default: null })
+  adminActionReason?: string;
+
   @Field()
   readonly createdAt!: Date;
 

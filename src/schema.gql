@@ -19,6 +19,7 @@ type User {
   dateOfBirth: DateTime!
   address: Address!
   isEmailVerified: Boolean!
+  isBanned: Boolean!
   deletedAt: DateTime
   createdAt: DateTime!
   updatedAt: DateTime!
@@ -74,6 +75,7 @@ enum InAppNotificationType {
   WELCOME
   NEW_BID
   AUCTION_CANCELLED
+  AUCTION_CANCELLED_BY_ADMIN
 }
 
 enum NotificationReferenceType {
@@ -151,6 +153,7 @@ type Auction {
   endTime: DateTime!
   winnerId: ID
   isFinalized: Boolean!
+  adminActionReason: String
   createdAt: DateTime!
   updatedAt: DateTime!
 }
@@ -234,6 +237,24 @@ type BidAddedPayload {
   bidCount: Int!
 }
 
+type AdminUserDetails {
+  user: User!
+  wallet: Wallet
+  recentAuctions: AuctionsPage
+  recentTransactions: TransactionsPage
+}
+
+type DashboardStats {
+  totalUsers: Int!
+  verifiedUsers: Int!
+  activeAuctions: Int!
+  completedAuctions: Int!
+  cancelledAuctions: Int!
+  totalWalletBalance: Float!
+  todaysRevenue: Float!
+  totalTransactions: Int!
+}
+
 type Query {
   me: User!
   findUser(input: FindUserInput!): User!
@@ -254,6 +275,11 @@ type Query {
   auctionBids(auctionId: String!, input: PaginationInput!, filter: BidsFilterInput): BidsPage!
   adminBids(input: PaginationInput!, filter: BidsFilterInput): BidsPage!
   myBids(input: PaginationInput!, filter: BidsFilterInput): BidsPage!
+  adminGetUsers(input: PaginationInput!, filter: UsersFilterInput): UsersPage!
+  adminGetUserDetails(userId: ID!): AdminUserDetails!
+  adminGetAuctions(input: PaginationInput!, filter: AuctionsFilterInput): AuctionsPage!
+  adminGetTransactions(input: PaginationInput!, filter: TransactionsFilterInput): TransactionsPage!
+  adminGetDashboardStats: DashboardStats!
 }
 
 input FindUserInput {
@@ -372,6 +398,8 @@ type Mutation {
   uploadImage(input: UploadImageInput!): UploadImageResponse!
   deleteImage(url: String!): Boolean!
   placeBid(input: PlaceBidInput!): Bid!
+  adminToggleUserBan(userId: ID!): User!
+  adminCancelAuction(auctionId: ID!, reason: String!): Boolean!
 }
 
 input RegisterInput {

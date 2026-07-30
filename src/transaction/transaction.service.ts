@@ -1,6 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { ITransactionRepository } from './interfaces/transaction.repository.interface';
-import type { CreateTransactionData } from './interfaces/transaction.repository.interface';
+import {
+  type ITransactionRepository,
+  type CreateTransactionData,
+} from './interfaces/transaction.repository.interface';
 import { Transaction } from './entities/transaction.entity';
 import { TransactionsPage } from './dto/transactions-page.type';
 import { TransactionsFilterInput } from './dto/transactions-filter.input';
@@ -57,19 +59,21 @@ export class TransactionService {
     filter?: TransactionsFilterInput,
   ): Promise<TransactionsPage> {
     const { page, limit } = input;
-
     const [items, total] = await Promise.all([
       this.transactionRepository.findAll(page, limit, filter),
       this.transactionRepository.countAll(filter),
     ]);
 
     const totalPages = Math.ceil(total / limit);
-
     return {
       items,
       total,
       totalPages,
       hasNextPage: page < totalPages,
     };
+  }
+
+  async sumTodayRevenue(): Promise<number> {
+    return this.transactionRepository.sumTodayRevenue();
   }
 }

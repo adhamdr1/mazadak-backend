@@ -1,10 +1,15 @@
 import { Field, InputType } from '@nestjs/graphql';
-import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsEnum,
+  IsOptional,
+  IsString,
+  MaxLength,
+  ValidateNested,
+} from 'class-validator';
 import { AuctionCategory } from '../enums/auction-category.enum';
 import { AuctionStatus } from '../enums/auction-status.enum';
 import { AuctionsSortInput } from './auctions-sort.input';
 import { Type } from 'class-transformer';
-import { ValidateNested } from 'class-validator';
 
 @InputType()
 export class AuctionsFilterInput {

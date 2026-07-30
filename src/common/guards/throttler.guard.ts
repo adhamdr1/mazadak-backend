@@ -4,12 +4,11 @@ import {
   ThrottlerException,
   InjectThrottlerOptions,
   InjectThrottlerStorage,
+  type ThrottlerModuleOptions,
+  type ThrottlerStorage,
+  type ThrottlerRequest,
 } from '@nestjs/throttler';
-import type {
-  ThrottlerModuleOptions,
-  ThrottlerStorage,
-  ThrottlerRequest,
-} from '@nestjs/throttler';
+
 import { GqlExecutionContext } from '@nestjs/graphql';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';

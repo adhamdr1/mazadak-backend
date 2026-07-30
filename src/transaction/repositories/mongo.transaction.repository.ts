@@ -11,6 +11,8 @@ import {
 } from '../entities/transaction.entity';
 import { TransactionsFilterInput } from '../dto/transactions-filter.input';
 import { SortOrder } from '../../common/enums/sort-order.enum';
+import { TransactionType } from '../enums/transaction-type.enum';
+import { TransactionStatus } from '../enums/transaction-status.enum';
 
 @Injectable()
 export class MongoTransactionRepository implements ITransactionRepository {
@@ -117,6 +119,34 @@ export class MongoTransactionRepository implements ITransactionRepository {
 
   async countAll(filter?: TransactionsFilterInput): Promise<number> {
     const query = this.buildFilterQuery({}, filter);
-    return this.transactionModel.countDocuments(query).exec();
+    return await this.transactionModel.countDocuments(query).exec();
+  }
+
+  async sumTodayRevenue(): Promise<number> {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const result = await this.transactionModel.aggregate<{
+      totalRevenue: number;
+    }>([
+      {
+        $match: {
+          type: TransactionType.DEPOSIT,
+          status: TransactionStatus.SUCCESS,
+          createdAt: { $gte: startOfDay, $lte: endOfDay },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalRevenue: { $sum: '$amount' },
+        },
+      },
+    ]);
+
+    return result.length > 0 ? Number(result[0].totalRevenue) : 0;
   }
 }

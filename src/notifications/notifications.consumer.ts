@@ -27,7 +27,13 @@ import {
   EmailVerifiedPayload,
   PasswordResetPayload,
   PasswordChangedPayload,
+  AuctionCancelledByAdminPayload,
+  AuctionCancelledPayload,
+  WalletDepositedPayload,
+  WithdrawalCompletedPayload,
 } from '../infrastructure/rabbitmq/rabbitmq-event.types';
+import { InAppNotificationType } from './in-app/enums/in-app-notification-type.enum';
+import { NotificationReferenceType } from './in-app/enums/notification-reference-type.enum';
 
 @Injectable()
 export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
@@ -139,6 +145,9 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
         case RabbitMQEvent.BidPlaced:
           await this.handleBidPlaced(parsed.payload);
           break;
+        case RabbitMQEvent.AuctionCancelledByAdmin:
+          await this.handleAuctionCancelledByAdmin(parsed.payload);
+          break;
         case RabbitMQEvent.UserRegistered:
           await this.handleUserRegistered(parsed.payload);
           break;
@@ -152,9 +161,13 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
           await this.handlePasswordChanged(parsed.payload);
           break;
         case RabbitMQEvent.WalletDeposited:
+          await this.handleWalletDeposited(parsed.payload);
+          break;
         case RabbitMQEvent.WithdrawalCompleted:
+          await this.handleWithdrawalCompleted(parsed.payload);
+          break;
         case RabbitMQEvent.AuctionCancelled:
-          // Currently no email side-effect for these
+          await this.handleAuctionCancelled(parsed.payload);
           break;
         default: {
           const unknownEvent = (parsed as { eventType?: string }).eventType;
@@ -190,12 +203,137 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
 
     const name =
       [seller.firstName, seller.lastName].filter(Boolean).join(' ') || 'User';
+
+    // Email
     await this.notificationsService.sendAuctionStartedSellerEmail(
       seller.email,
       name,
       payload.auctionTitle,
       payload.auctionId,
     );
+
+    // In-App Notification
+    await this.notificationsService.createInAppNotification({
+      userId: payload.sellerId,
+      type: InAppNotificationType.AUCTION_STARTED,
+      title: 'Your auction is now LIVE! 🚀',
+      body: `Your auction "${payload.auctionTitle}" is now live and accepting bids.`,
+      referenceId: payload.auctionId,
+      referenceType: NotificationReferenceType.AUCTION,
+    });
+  }
+
+  private async handleAuctionCancelled(payload: AuctionCancelledPayload) {
+    const seller = await this.usersService.findById(payload.sellerId);
+    if (seller) {
+      const name =
+        [seller.firstName, seller.lastName].filter(Boolean).join(' ') || 'User';
+      // Email for seller
+      await this.notificationsService.sendAuctionCancelledEmail(
+        seller.email,
+        name,
+        payload.auctionTitle,
+        payload.auctionId,
+      );
+
+      // In-app Notification for Seller
+      await this.notificationsService.createInAppNotification({
+        userId: payload.sellerId,
+        type: InAppNotificationType.AUCTION_CANCELLED,
+        title: 'Auction Cancelled ❌',
+        body: `You have successfully cancelled your auction "${payload.auctionTitle}".`,
+        referenceId: payload.auctionId,
+        referenceType: NotificationReferenceType.AUCTION,
+      });
+    }
+
+    // Notify highest bidder if any
+    if (payload.highestBidderId && payload.refundAmount !== undefined) {
+      const bidder = await this.usersService.findById(payload.highestBidderId);
+      if (bidder) {
+        const bidderName =
+          [bidder.firstName, bidder.lastName].filter(Boolean).join(' ') ||
+          'User';
+
+        // Email for highest bidder
+        await this.notificationsService.sendAuctionCancelledToBidderEmail(
+          bidder.email,
+          bidderName,
+          payload.auctionTitle,
+          payload.auctionId,
+          'The seller cancelled the auction.',
+          payload.refundAmount,
+        );
+
+        // In-app Notification for highest bidder
+        await this.notificationsService.createInAppNotification({
+          userId: payload.highestBidderId,
+          type: InAppNotificationType.AUCTION_CANCELLED,
+          title: 'Auction Cancelled ❌',
+          body: `The auction "${payload.auctionTitle}" has been cancelled and your held funds of ${payload.refundAmount} EGP have been released.`,
+          referenceId: payload.auctionId,
+          referenceType: NotificationReferenceType.AUCTION,
+        });
+      }
+    }
+  }
+
+  private async handleAuctionCancelledByAdmin(
+    payload: AuctionCancelledByAdminPayload,
+  ) {
+    const seller = await this.usersService.findById(payload.sellerId);
+    if (seller) {
+      const name =
+        [seller.firstName, seller.lastName].filter(Boolean).join(' ') || 'User';
+      // Email for seller
+      await this.notificationsService.sendAuctionCancelledByAdminEmail(
+        seller.email,
+        name,
+        payload.auctionTitle,
+        payload.auctionId,
+        payload.adminActionReason,
+      );
+
+      // In-app Notification for Seller
+      await this.notificationsService.createInAppNotification({
+        userId: payload.sellerId,
+        type: InAppNotificationType.AUCTION_CANCELLED_BY_ADMIN,
+        title: 'Auction Cancelled by Admin ❌',
+        body: `Your auction "${payload.auctionTitle}" was cancelled by an admin. Reason: ${payload.adminActionReason}`,
+        referenceId: payload.auctionId,
+        referenceType: NotificationReferenceType.AUCTION,
+      });
+    }
+
+    // Notify highest bidder if any
+    if (payload.highestBidderId && payload.refundAmount !== undefined) {
+      const bidder = await this.usersService.findById(payload.highestBidderId);
+      if (bidder) {
+        const bidderName =
+          [bidder.firstName, bidder.lastName].filter(Boolean).join(' ') ||
+          'User';
+
+        // Email for highest bidder
+        await this.notificationsService.sendAuctionCancelledToBidderEmail(
+          bidder.email,
+          bidderName,
+          payload.auctionTitle,
+          payload.auctionId,
+          payload.adminActionReason,
+          payload.refundAmount,
+        );
+
+        // In-app Notification for highest bidder
+        await this.notificationsService.createInAppNotification({
+          userId: payload.highestBidderId,
+          type: InAppNotificationType.AUCTION_CANCELLED_BY_ADMIN,
+          title: 'Auction Cancelled by Admin ❌',
+          body: `The auction "${payload.auctionTitle}" has been cancelled by an Admin and your held funds of ${payload.refundAmount} EGP have been released. Reason: ${payload.adminActionReason}`,
+          referenceId: payload.auctionId,
+          referenceType: NotificationReferenceType.AUCTION,
+        });
+      }
+    }
   }
 
   private async handleAuctionEnded(payload: AuctionEndedPayload) {
@@ -203,6 +341,7 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
     if (seller) {
       const sellerName =
         [seller.firstName, seller.lastName].filter(Boolean).join(' ') || 'User';
+      // Email
       await this.notificationsService.sendAuctionEndedSellerEmail(
         seller.email,
         sellerName,
@@ -212,6 +351,18 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
         payload.auctionId,
         payload.depositTransactionId,
       );
+
+      // In-App Notification
+      await this.notificationsService.createInAppNotification({
+        userId: payload.sellerId,
+        type: InAppNotificationType.AUCTION_ENDED_SELLER,
+        title: 'Your auction has ended 🏁',
+        body: payload.winnerId
+          ? `Your auction "${payload.auctionTitle}" has successfully ended. Sold for ${payload.finalPrice} EGP to ${payload.winnerName || 'Winning Bidder'}.`
+          : `Your auction "${payload.auctionTitle}" has ended with no bids.`,
+        referenceId: payload.auctionId,
+        referenceType: NotificationReferenceType.AUCTION,
+      });
     }
 
     if (payload.winnerId) {
@@ -220,6 +371,8 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
         const winnerName =
           [winner.firstName, winner.lastName].filter(Boolean).join(' ') ||
           'User';
+
+        // Email
         await this.notificationsService.sendAuctionWonEmail(
           winner.email,
           winnerName,
@@ -228,11 +381,32 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
           payload.auctionId,
           payload.captureTransactionId,
         );
+
+        // In-App Notification
+        await this.notificationsService.createInAppNotification({
+          userId: payload.winnerId,
+          type: InAppNotificationType.AUCTION_WON,
+          title: 'Congratulations! You won! 🎉',
+          body: `You won the auction "${payload.auctionTitle}" with a final bid of ${payload.finalPrice} EGP.`,
+          referenceId: payload.auctionId,
+          referenceType: NotificationReferenceType.AUCTION,
+        });
       }
     }
   }
 
   private async handleBidPlaced(payload: BidPlacedPayload) {
+    // 1. Notify Seller about the new bid (In-App only)
+    await this.notificationsService.createInAppNotification({
+      userId: payload.sellerId,
+      type: InAppNotificationType.NEW_BID,
+      title: 'New bid placed! 📈',
+      body: `Someone placed a bid of ${payload.amount} EGP on your auction "${payload.auctionTitle}".`,
+      referenceId: payload.auctionId,
+      referenceType: NotificationReferenceType.AUCTION,
+    });
+
+    // 2. Notify previous winner (if any) that they were outbid
     if (!payload.outbidUserId) return;
 
     const previousBidder = await this.usersService.findById(
@@ -244,6 +418,8 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
       [previousBidder.firstName, previousBidder.lastName]
         .filter(Boolean)
         .join(' ') || 'User';
+
+    // Email
     await this.notificationsService.sendOutbidEmail(
       previousBidder.email,
       name,
@@ -252,6 +428,16 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
       payload.auctionId,
       payload.outbidTransactionId,
     );
+
+    // In-App Notification
+    await this.notificationsService.createInAppNotification({
+      userId: payload.outbidUserId,
+      type: InAppNotificationType.OUTBID,
+      title: 'You have been outbid! ⚠️',
+      body: `Someone placed a higher bid of ${payload.amount} EGP on the auction "${payload.auctionTitle}".`,
+      referenceId: payload.auctionId,
+      referenceType: NotificationReferenceType.AUCTION,
+    });
   }
 
   private async handleUserRegistered(payload: UserRegisteredPayload) {
@@ -268,6 +454,13 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
       payload.email,
       payload.name,
     );
+
+    await this.notificationsService.createInAppNotification({
+      userId: payload.userId,
+      type: InAppNotificationType.WELCOME,
+      title: 'Welcome to Mazadak! 🌟',
+      body: 'Your account is now fully verified. Happy bidding!',
+    });
   }
 
   private async handlePasswordReset(payload: PasswordResetPayload) {
@@ -286,5 +479,41 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
       payload.name,
       payload.date,
     );
+  }
+
+  private async handleWalletDeposited(payload: WalletDepositedPayload) {
+    await this.notificationsService.sendDepositSuccessfulEmail(
+      payload.email,
+      payload.name,
+      payload.amount,
+      payload.transactionId,
+    );
+
+    await this.notificationsService.createInAppNotification({
+      userId: payload.userId,
+      type: InAppNotificationType.DEPOSIT_SUCCESSFUL,
+      title: 'Deposit Successful 💰',
+      body: `An amount of ${payload.amount} EGP has been credited to your wallet. Ref: ${payload.transactionId}.`,
+      referenceId: payload.transactionId,
+      referenceType: NotificationReferenceType.TRANSACTION,
+    });
+  }
+
+  private async handleWithdrawalCompleted(payload: WithdrawalCompletedPayload) {
+    await this.notificationsService.sendWithdrawalCompletedEmail(
+      payload.email,
+      payload.name,
+      payload.amount,
+      payload.transactionId,
+    );
+
+    await this.notificationsService.createInAppNotification({
+      userId: payload.userId,
+      type: InAppNotificationType.WITHDRAWAL_COMPLETED,
+      title: 'Withdrawal Completed 💸',
+      body: `An amount of ${payload.amount} EGP has been withdrawn from your wallet. Ref: ${payload.transactionId}.`,
+      referenceId: payload.transactionId,
+      referenceType: NotificationReferenceType.TRANSACTION,
+    });
   }
 }

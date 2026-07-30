@@ -170,6 +170,70 @@ export class NotificationsService {
     );
   }
 
+  async sendAuctionCancelledEmail(
+    email: string,
+    name: string,
+    auctionTitle: string,
+    auctionId: string,
+  ): Promise<void> {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'https://mazadak.com';
+    const auctionLink = `${frontendUrl}/auctions/${auctionId}`;
+
+    await this.emailService.send(
+      email,
+      EmailSubjects.AUCTION_CANCELLED,
+      EmailTemplates.AUCTION_CANCELLED,
+      { name, auctionTitle, auctionLink, role: 'seller' },
+    );
+  }
+
+  async sendAuctionCancelledByAdminEmail(
+    email: string,
+    name: string,
+    auctionTitle: string,
+    auctionId: string,
+    adminActionReason: string,
+  ): Promise<void> {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'https://mazadak.com';
+    const auctionLink = `${frontendUrl}/auctions/${auctionId}`;
+
+    await this.emailService.send(
+      email,
+      EmailSubjects.AUCTION_CANCELLED_BY_ADMIN,
+      EmailTemplates.AUCTION_CANCELLED_BY_ADMIN, // Assuming the template handles both cases, or we can use the same
+      { name, auctionTitle, auctionLink, adminActionReason, role: 'seller' },
+    );
+  }
+
+  async sendAuctionCancelledToBidderEmail(
+    email: string,
+    name: string,
+    auctionTitle: string,
+    auctionId: string,
+    adminActionReason: string,
+    refundAmount: number,
+  ): Promise<void> {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'https://mazadak.com';
+    const auctionLink = `${frontendUrl}/auctions/${auctionId}`;
+
+    await this.emailService.send(
+      email,
+      EmailSubjects.AUCTION_CANCELLED_BY_ADMIN,
+      EmailTemplates.AUCTION_CANCELLED_BY_ADMIN,
+      {
+        name,
+        auctionTitle,
+        auctionLink,
+        adminActionReason,
+        refundAmount,
+        role: 'bidder',
+      },
+    );
+  }
+
   async sendAuctionEndedSellerEmail(
     email: string,
     name: string,

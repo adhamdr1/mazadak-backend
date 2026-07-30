@@ -130,6 +130,15 @@ export class MongoUserRepository implements IUserRepository {
     return { items, total };
   }
 
+  async countVerified(): Promise<number> {
+    return await this.userModel
+      .countDocuments({
+        isEmailVerified: true,
+        deletedAt: null,
+      })
+      .exec();
+  }
+
   async softDelete(id: string): Promise<void> {
     await this.userModel
       .findOneAndUpdate(

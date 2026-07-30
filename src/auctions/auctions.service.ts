@@ -20,8 +20,6 @@ import { UploadService } from '../upload/upload.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from '../users/users.service';
 import { WalletService } from '../wallet/wallet.service';
-import { InAppNotificationType } from '../notifications/in-app/enums/in-app-notification-type.enum';
-import { NotificationReferenceType } from '../notifications/in-app/enums/notification-reference-type.enum';
 import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
 import { RedisService } from '../infrastructure/redis/redis.service';
 import { RabbitMQService } from '../infrastructure/rabbitmq/rabbitmq.service';
@@ -290,25 +288,6 @@ export class AuctionsService {
             auctionId,
             session,
           );
-
-          // Send in-app notification to the bidder (transactional)
-          this.notificationsService
-            .createInAppNotification(
-              {
-                userId: bidderId,
-                type: InAppNotificationType.AUCTION_CANCELLED,
-                title: 'Auction Cancelled ❌',
-                body: `The auction "${auction.title}" has been cancelled and your held funds of ${winningBid.amount} EGP have been released.`,
-                referenceId: auctionId,
-                referenceType: NotificationReferenceType.AUCTION,
-              },
-              session,
-            )
-            .catch((err) => {
-              this.logger.error(
-                `Failed to send auction cancelled in-app notification to bidder ${bidderId}: ${err instanceof Error ? err.message : String(err)}`,
-              );
-            });
         }
       }
 
@@ -319,6 +298,22 @@ export class AuctionsService {
         session,
       );
 
+      // Fetch winning bid again if needed, or pass from above
+      let highestBidderId: string | undefined;
+      let refundAmount: number | undefined;
+
+      if (auction.status === AuctionStatus.ACTIVE) {
+        const winningBid =
+          await this.auctionRepository.findWinningBidByAuctionId(
+            auctionId,
+            session,
+          );
+        if (winningBid) {
+          highestBidderId = winningBid.bidderId;
+          refundAmount = winningBid.amount;
+        }
+      }
+
       // 3. Publish Event to Outbox (Transactional)
       await this.outboxService.saveEvent(
         RabbitMQEvent.AuctionCancelled,
@@ -326,6 +321,8 @@ export class AuctionsService {
           auctionId,
           auctionTitle: auction.title,
           sellerId: auction.sellerId.toString(),
+          highestBidderId,
+          refundAmount,
         },
         session,
       );
@@ -345,6 +342,101 @@ export class AuctionsService {
       await session.abortTransaction();
       this.logger.error(
         `Transaction aborted during cancelAuction for ${auctionId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw error;
+    } finally {
+      await session.endSession();
+    }
+  }
+
+  async adminCancelAuction(
+    auctionId: string,
+    reason: string,
+  ): Promise<boolean> {
+    const auction = await this.getAuctionOrThrow(auctionId);
+
+    if (
+      auction.status !== AuctionStatus.PENDING &&
+      auction.status !== AuctionStatus.ACTIVE
+    ) {
+      throw new AuctionInvalidStateException();
+    }
+
+    const session = await this.auctionRepository.startSession();
+    session.startTransaction();
+
+    try {
+      if (auction.status === AuctionStatus.ACTIVE) {
+        const winningBid =
+          await this.auctionRepository.findWinningBidByAuctionId(
+            auctionId,
+            session,
+          );
+
+        if (winningBid) {
+          const bidderId = winningBid.bidderId;
+          await this.walletService.release(
+            bidderId,
+            winningBid.amount,
+            auctionId,
+            session,
+          );
+        }
+      }
+
+      await this.auctionRepository.updateStatus(
+        auctionId,
+        AuctionStatus.CANCELLED,
+        session,
+        reason,
+      );
+
+      // Fetch winning bid again if needed, or pass from above
+      let highestBidderId: string | undefined;
+      let refundAmount: number | undefined;
+
+      if (auction.status === AuctionStatus.ACTIVE) {
+        const winningBid =
+          await this.auctionRepository.findWinningBidByAuctionId(
+            auctionId,
+            session,
+          );
+        if (winningBid) {
+          highestBidderId = winningBid.bidderId;
+          refundAmount = winningBid.amount;
+        }
+      }
+
+      await this.outboxService.saveEvent(
+        RabbitMQEvent.AuctionCancelledByAdmin,
+        {
+          auctionId,
+          auctionTitle: auction.title,
+          sellerId: auction.sellerId.toString(),
+          adminActionReason: reason,
+          highestBidderId,
+          refundAmount,
+        },
+        session,
+      );
+
+      await session.commitTransaction();
+
+      void this.realtimeService.publishAuctionStatusChanged({
+        auction: {
+          ...auction,
+          status: AuctionStatus.CANCELLED,
+          adminActionReason: reason,
+        },
+      });
+
+      void this.redisService.invalidatePattern(ACTIVE_AUCTIONS_PATTERN);
+
+      return true;
+    } catch (error) {
+      await session.abortTransaction();
+      this.logger.error(
+        `Transaction aborted during adminCancelAuction for ${auctionId}: ${error instanceof Error ? error.message : String(error)}`,
       );
       throw error;
     } finally {
@@ -406,20 +498,11 @@ export class AuctionsService {
     );
     if (!seller) return;
 
-    // Publish AuctionStarted event (Email will be handled by consumer)
+    // Publish AuctionStarted event (Email and In-App will be handled by consumer)
     await this.rabbitMQService.publish(RabbitMQEvent.AuctionStarted, {
       auctionId: auction._id.toString(),
       auctionTitle: auction.title,
       sellerId: auction.sellerId.toString(),
-    });
-
-    await this.notificationsService.createInAppNotification({
-      userId: auction.sellerId.toString(),
-      type: InAppNotificationType.AUCTION_STARTED,
-      title: 'Your auction is now LIVE! 🚀',
-      body: `Your auction "${auction.title}" is now live and accepting bids.`,
-      referenceId: auction._id.toString(),
-      referenceType: NotificationReferenceType.AUCTION,
     });
   }
 }

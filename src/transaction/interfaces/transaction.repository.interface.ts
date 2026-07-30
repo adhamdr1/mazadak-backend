@@ -33,4 +33,6 @@ export interface ITransactionRepository {
   ): Promise<Transaction[]>;
 
   countAll(filter?: TransactionsFilterInput): Promise<number>;
+
+  sumTodayRevenue(): Promise<number>;
 }

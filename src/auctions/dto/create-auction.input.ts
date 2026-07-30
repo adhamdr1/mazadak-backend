@@ -1,5 +1,5 @@
 import { Field, InputType, Float, GraphQLISODateTime } from '@nestjs/graphql';
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsString,
   IsNotEmpty,
@@ -14,7 +14,6 @@ import {
   IsEnum,
   IsDate,
 } from 'class-validator';
-import { Type } from 'class-transformer';
 import { trim } from '../../common/transformers/string.transformer';
 import { AuctionCategory } from '../enums/auction-category.enum';
 
