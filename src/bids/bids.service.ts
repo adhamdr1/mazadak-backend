@@ -15,6 +15,7 @@ import { AlreadyHighestBidderException } from './exceptions/already-highest-bidd
 import { AuctionNotActiveException } from './exceptions/auction-not-active.exception';
 import { BidAmountTooLowException } from './exceptions/bid-amount-too-low.exception';
 import { BidOnOwnAuctionException } from './exceptions/bid-on-own-auction.exception';
+import { InvalidAuctionIdException } from './exceptions/invalid-auction-id.exception';
 import { AuctionNotFoundException } from '../auctions/exceptions/auction-not-found.exception';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from '../users/users.service';
@@ -380,6 +381,9 @@ export class BidsService {
     input: PaginationInput,
     filter: BidsFilterInput,
   ): Promise<BidsPage> {
+    if (!Types.ObjectId.isValid(auctionId)) {
+      throw new InvalidAuctionIdException();
+    }
     const { items, total } = await this.bidRepository.findByAuctionId(
       auctionId,
       input.page,

@@ -4,6 +4,8 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { UsersService } from '../users/users.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { RabbitMQService } from '../infrastructure/rabbitmq/rabbitmq.service';
+import { RabbitMQEvent } from '../infrastructure/rabbitmq/rabbitmq-event.types';
 import { Types } from 'mongoose';
 import { User } from '../users/entities/user.entity';
 import { UserRole } from '../users/enums/user-role.enum';
@@ -104,6 +106,10 @@ const mockWalletService = {
   createWallet: jest.fn(),
 };
 
+const mockRabbitMQService = {
+  publish: jest.fn().mockResolvedValue(undefined),
+};
+
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 function createMockUser(overrides: Partial<User> = {}): User {
@@ -158,6 +164,7 @@ describe('AuthService', () => {
         { provide: 'IAuthRepository', useValue: mockAuthRepository },
         { provide: getRedisConnectionToken(), useValue: mockRedis },
         { provide: WalletService, useValue: mockWalletService },
+        { provide: RabbitMQService, useValue: mockRabbitMQService },
       ],
     }).compile();
 
@@ -225,7 +232,13 @@ describe('AuthService', () => {
       );
       expect(mockSession.commitTransaction).toHaveBeenCalled();
       expect(mockSession.endSession).toHaveBeenCalled();
-      expect(mockNotificationsService.sendEmailVerification).toHaveBeenCalled();
+      expect(mockRabbitMQService.publish).toHaveBeenCalledWith(
+        RabbitMQEvent.UserRegistered,
+        expect.objectContaining({
+          userId: mockUser._id.toString(),
+          email: mockUser.email,
+        }),
+      );
     });
 
     it('should abort transaction if user creation fails', async () => {
@@ -516,9 +529,7 @@ describe('AuthService', () => {
 
       // Assert — لا نكشف للمهاجم إن الإيميل مش موجود
       expect(result).toBe(true);
-      expect(
-        mockNotificationsService.sendEmailVerification,
-      ).not.toHaveBeenCalled();
+      expect(mockRabbitMQService.publish).not.toHaveBeenCalled();
     });
 
     it('should throw BadRequestException if email is already verified', async () => {
@@ -542,7 +553,13 @@ describe('AuthService', () => {
 
       // Assert
       expect(result).toBe(true);
-      expect(mockNotificationsService.sendEmailVerification).toHaveBeenCalled();
+      expect(mockRabbitMQService.publish).toHaveBeenCalledWith(
+        RabbitMQEvent.UserRegistered,
+        expect.objectContaining({
+          userId: unverifiedUser._id.toString(),
+          email: unverifiedUser.email,
+        }),
+      );
     });
   });
 
@@ -681,9 +698,7 @@ describe('AuthService', () => {
       const result = await service.forgotPassword(forgotInput, ip, browser);
 
       expect(result).toBe(true);
-      expect(
-        mockNotificationsService.sendPasswordResetEmail,
-      ).not.toHaveBeenCalled();
+      expect(mockRabbitMQService.publish).not.toHaveBeenCalled();
     });
 
     it('should throw BadRequestException if account has no password (Google-only)', async () => {
@@ -706,9 +721,7 @@ describe('AuthService', () => {
 
       // Assert — مش بيبعت إيميل تاني
       expect(result).toBe(true);
-      expect(
-        mockNotificationsService.sendPasswordResetEmail,
-      ).not.toHaveBeenCalled();
+      expect(mockRabbitMQService.publish).not.toHaveBeenCalled();
     });
 
     it('should send reset email, set rate limit & token in Redis, then return true', async () => {
@@ -724,13 +737,12 @@ describe('AuthService', () => {
       expect(result).toBe(true);
       // بيعمل set مرتين: rate limit key + reset token key
       expect(mockRedis.set).toHaveBeenCalledTimes(2);
-      expect(
-        mockNotificationsService.sendPasswordResetEmail,
-      ).toHaveBeenCalledWith(
-        mockUser.email,
-        expect.any(String), // rawToken (random)
-        { firstName: mockUser.firstName, lastName: mockUser.lastName },
-        { ip, browser, time: expect.any(String) as string },
+      expect(mockRabbitMQService.publish).toHaveBeenCalledWith(
+        RabbitMQEvent.PasswordReset,
+        expect.objectContaining({
+          email: mockUser.email,
+          resetToken: expect.any(String) as string,
+        }),
       );
     });
   });

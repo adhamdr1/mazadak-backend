@@ -212,6 +212,14 @@ type UploadImageResponse {
   url: String!
 }
 
+type UploadSignatureResponse {
+  signature: String!
+  timestamp: Float!
+  apiKey: String!
+  cloudName: String!
+  folder: String!
+}
+
 type BidsPage {
   items: [Bid!]!
   total: Int!
@@ -242,6 +250,7 @@ type Query {
   auction(id: ID!): Auction!
   myAuctions(input: PaginationInput!, filter: AuctionsFilterInput): AuctionsPage!
   myWonAuctions(input: PaginationInput!, filter: AuctionsFilterInput): AuctionsPage!
+  generateUploadSignature(folder: String): UploadSignatureResponse!
   auctionBids(auctionId: String!, input: PaginationInput!, filter: BidsFilterInput): BidsPage!
   adminBids(input: PaginationInput!, filter: BidsFilterInput): BidsPage!
   myBids(input: PaginationInput!, filter: BidsFilterInput): BidsPage!
@@ -258,6 +267,25 @@ input PaginationInput {
 
 input UsersFilterInput {
   search: String
+  sort: UsersSortInput
+}
+
+input UsersSortInput {
+  field: UsersSortField! = CREATED_AT
+  order: SortOrder! = DESC
+}
+
+"""Fields by which users can be sorted"""
+enum UsersSortField {
+  CREATED_AT
+  FIRST_NAME
+  LAST_NAME
+}
+
+"""Sorting order (Ascending or Descending)"""
+enum SortOrder {
+  ASC
+  DESC
 }
 
 input TransactionsFilterInput {
@@ -266,16 +294,55 @@ input TransactionsFilterInput {
   status: TransactionStatus
   startDate: DateTime
   endDate: DateTime
+  sort: TransactionsSortInput
+}
+
+input TransactionsSortInput {
+  field: TransactionsSortField! = CREATED_AT
+  order: SortOrder! = DESC
+}
+
+"""Fields by which transactions can be sorted"""
+enum TransactionsSortField {
+  CREATED_AT
+  AMOUNT
 }
 
 input AuctionsFilterInput {
   category: AuctionCategory
   status: AuctionStatus
   search: String
+  sort: AuctionsSortInput
+}
+
+input AuctionsSortInput {
+  field: AuctionsSortField! = CREATED_AT
+  order: SortOrder! = DESC
+}
+
+"""Fields by which auctions can be sorted"""
+enum AuctionsSortField {
+  CREATED_AT
+  START_TIME
+  END_TIME
+  CURRENT_PRICE
+  TITLE
 }
 
 input BidsFilterInput {
   status: BidStatus
+  sort: BidsSortInput
+}
+
+input BidsSortInput {
+  field: BidsSortField! = CREATED_AT
+  order: SortOrder! = DESC
+}
+
+"""Fields by which bids can be sorted"""
+enum BidsSortField {
+  CREATED_AT
+  AMOUNT
 }
 
 type Mutation {
