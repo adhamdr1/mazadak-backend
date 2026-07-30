@@ -24,6 +24,9 @@ import { InAppNotificationType } from '../notifications/in-app/enums/in-app-noti
 import { NotificationReferenceType } from '../notifications/in-app/enums/notification-reference-type.enum';
 import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
 import { RedisService } from '../infrastructure/redis/redis.service';
+import { RabbitMQService } from '../infrastructure/rabbitmq/rabbitmq.service';
+import { RabbitMQEvent } from '../infrastructure/rabbitmq/rabbitmq-event.types';
+import { OutboxService } from '../infrastructure/outbox/outbox.service';
 
 export const AUCTION_STATUS_CHANGED = 'AUCTION_STATUS_CHANGED';
 
@@ -47,6 +50,8 @@ export class AuctionsService {
     private readonly walletService: WalletService,
     private readonly realtimeService: RealtimeService,
     private readonly redisService: RedisService,
+    private readonly rabbitMQService: RabbitMQService,
+    private readonly outboxService: OutboxService,
   ) {}
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -314,6 +319,17 @@ export class AuctionsService {
         session,
       );
 
+      // 3. Publish Event to Outbox (Transactional)
+      await this.outboxService.saveEvent(
+        RabbitMQEvent.AuctionCancelled,
+        {
+          auctionId,
+          auctionTitle: auction.title,
+          sellerId: auction.sellerId.toString(),
+        },
+        session,
+      );
+
       await session.commitTransaction();
 
       // Publish real-time status change (post-commit, fire-and-forget)
@@ -390,15 +406,12 @@ export class AuctionsService {
     );
     if (!seller) return;
 
-    const name =
-      [seller.firstName, seller.lastName].filter(Boolean).join(' ') || 'User';
-
-    await this.notificationsService.sendAuctionStartedSellerEmail(
-      seller.email,
-      name,
-      auction.title,
-      auction._id.toString(),
-    );
+    // Publish AuctionStarted event (Email will be handled by consumer)
+    await this.rabbitMQService.publish(RabbitMQEvent.AuctionStarted, {
+      auctionId: auction._id.toString(),
+      auctionTitle: auction.title,
+      sellerId: auction.sellerId.toString(),
+    });
 
     await this.notificationsService.createInAppNotification({
       userId: auction.sellerId.toString(),

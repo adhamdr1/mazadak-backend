@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { EmailAlreadyExistsException } from '../users/exceptions/email-already-exists.exception';
 import { EmailAlreadyVerifiedException } from '../users/exceptions/email-already-verified.exception';
 import { UserNotFoundException } from '../users/exceptions/user-not-found.exception';
@@ -35,6 +35,8 @@ import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';
 import { ClientSession } from 'mongoose';
 import { WalletService } from '../wallet/wallet.service';
+import { RabbitMQService } from '../infrastructure/rabbitmq/rabbitmq.service';
+import { RabbitMQEvent } from '../infrastructure/rabbitmq/rabbitmq-event.types';
 
 const SALT_ROUNDS = 12;
 
@@ -48,6 +50,7 @@ interface DecodedJwt {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   private readonly googleClient: OAuth2Client;
 
   constructor(
@@ -59,6 +62,7 @@ export class AuthService {
     private readonly notificationsService: NotificationsService,
     @InjectRedis() private readonly redis: Redis,
     private readonly walletService: WalletService,
+    private readonly rabbitMQService: RabbitMQService,
   ) {
     this.googleClient = new OAuth2Client(
       this.configService.getOrThrow<string>('GOOGLE_CLIENT_ID'),
@@ -102,13 +106,14 @@ export class AuthService {
       user._id.toString(),
     );
 
-    // Send email verification request
-    await this.notificationsService.sendEmailVerification(
-      user.email,
+    // Publish UserRegistered event to RabbitMQ
+    await this.rabbitMQService.publish(RabbitMQEvent.UserRegistered, {
+      userId: user._id.toString(),
+      email: user.email,
+      name: user.firstName,
+      phone: user.phoneNumber,
       verificationToken,
-      user.firstName,
-      user.phoneNumber,
-    );
+    });
 
     return this.issueAuthTokens(user);
   }
@@ -230,9 +235,17 @@ export class AuthService {
     const name =
       [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
 
-    this.notificationsService
-      .sendWelcomeEmail(user.email, name)
-      .catch(() => {});
+    this.rabbitMQService
+      .publish(RabbitMQEvent.EmailVerified, {
+        userId,
+        email: user.email,
+        name,
+      })
+      .catch((err: unknown) => {
+        this.logger?.error(
+          `Failed to publish EmailVerified event: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
 
     this.notificationsService
       .createInAppNotification({
@@ -259,13 +272,14 @@ export class AuthService {
     const verificationToken = this.generateEmailVerificationToken(
       user._id.toString(),
     );
-    // Send email verification request
-    await this.notificationsService.sendEmailVerification(
-      user.email,
+    // Publish UserRegistered event to trigger verification email
+    await this.rabbitMQService.publish(RabbitMQEvent.UserRegistered, {
+      userId: user._id.toString(),
+      email: user.email,
+      name: user.firstName,
+      phone: user.phoneNumber,
       verificationToken,
-      user.firstName,
-      user.phoneNumber,
-    );
+    });
     return true;
   }
 
@@ -341,13 +355,15 @@ export class AuthService {
     const ttlSeconds = 900; // 15 Minutes
     await this.redis.set(redisKey, hashedToken, 'EX', ttlSeconds);
     const time = new Date().toUTCString();
-    // 5. تمرير بيانات اليوزر للـ Notifications Service
-    await this.notificationsService.sendPasswordResetEmail(
-      user.email,
-      rawToken, // بنبعت الـ rawToken في الإيميل
-      { firstName: user.firstName, lastName: user.lastName },
-      { ip, browser, time },
-    );
+    // 5. Publish PasswordReset event
+    const name =
+      [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
+    await this.rabbitMQService.publish(RabbitMQEvent.PasswordReset, {
+      email: user.email,
+      name,
+      resetToken: rawToken,
+      metadata: { ip, browser, time },
+    });
     return true;
   }
 
@@ -375,12 +391,20 @@ export class AuthService {
     // 5. طرد اليوزر من كل الأجهزة
     await this.logoutAll(user._id.toString());
 
-    // 6. إرسال إشعار أمني بتغيير كلمة المرور
+    // 6. Publish PasswordChanged event
     const name =
       [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
-    this.notificationsService
-      .sendPasswordChangedEmail(user.email, name)
-      .catch(() => {});
+    this.rabbitMQService
+      .publish(RabbitMQEvent.PasswordChanged, {
+        email: user.email,
+        name,
+        date: new Date().toUTCString(),
+      })
+      .catch((err: unknown) => {
+        this.logger.error(
+          `Failed to publish PasswordChanged event: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
 
     return true;
   }
@@ -416,9 +440,17 @@ export class AuthService {
     // إرسال إشعار أمني بتغيير كلمة المرور
     const name =
       [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
-    this.notificationsService
-      .sendPasswordChangedEmail(user.email, name)
-      .catch(() => {});
+    this.rabbitMQService
+      .publish(RabbitMQEvent.PasswordChanged, {
+        email: user.email,
+        name,
+        date: new Date().toUTCString(),
+      })
+      .catch((err: unknown) => {
+        this.logger.error(
+          `Failed to publish PasswordChanged event: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
 
     return true;
   }

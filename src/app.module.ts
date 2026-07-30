@@ -15,6 +15,8 @@ import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis'
 import { CustomThrottlerGuard } from './common/guards/throttler.guard';
 import { RedisModule } from '@nestjs-modules/ioredis';
 import { RedisModule as AppRedisModule } from './infrastructure/redis/redis.module';
+import { RabbitMQModule } from './infrastructure/rabbitmq/rabbitmq.module';
+import { OutboxModule } from './infrastructure/outbox/outbox.module';
 import { IpBlacklistMiddleware } from './common/middleware/ip-blacklist.middleware';
 import { MiddlewareConsumer, NestModule } from '@nestjs/common';
 import type { Request, Response } from 'express';
@@ -147,6 +149,8 @@ import type { JwtPayload } from './auth/interfaces/jwt-payload.interface';
 
     PubSubModule,
     AppRedisModule,
+    RabbitMQModule,
+    OutboxModule,
     AuthModule,
     UsersModule,
     NotificationsModule,

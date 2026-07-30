@@ -1,8 +1,9 @@
-import { Resolver, Mutation, Args } from '@nestjs/graphql';
+import { Resolver, Mutation, Query, Args } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
 import { UploadService } from './upload.service';
 import { UploadImageInput } from './dto/upload-image.input';
 import { UploadImageResponse } from './dto/upload-image.response';
+import { UploadSignatureResponse } from './dto/upload-signature.response';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
@@ -34,5 +35,14 @@ export class UploadResolver {
   ): Promise<boolean> {
     await this.uploadService.deleteImage(user.sub, url);
     return true;
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Query(() => UploadSignatureResponse, { name: 'generateUploadSignature' })
+  generateUploadSignature(
+    @CurrentUser() user: JwtPayload,
+    @Args('folder', { nullable: true }) folder?: string,
+  ): Promise<UploadSignatureResponse> {
+    return this.uploadService.generateUploadSignature(user.sub, folder);
   }
 }
