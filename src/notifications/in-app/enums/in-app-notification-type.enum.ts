@@ -10,6 +10,7 @@ export enum InAppNotificationType {
   WELCOME = 'WELCOME',
   NEW_BID = 'NEW_BID',
   AUCTION_CANCELLED = 'AUCTION_CANCELLED',
+  AUCTION_CANCELLED_BY_ADMIN = 'AUCTION_CANCELLED_BY_ADMIN',
 }
 
 registerEnumType(InAppNotificationType, {

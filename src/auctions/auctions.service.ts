@@ -352,6 +352,101 @@ export class AuctionsService {
     }
   }
 
+  async adminCancelAuction(
+    auctionId: string,
+    reason: string,
+  ): Promise<boolean> {
+    const auction = await this.getAuctionOrThrow(auctionId);
+
+    if (
+      auction.status !== AuctionStatus.PENDING &&
+      auction.status !== AuctionStatus.ACTIVE
+    ) {
+      throw new AuctionInvalidStateException();
+    }
+
+    const session = await this.auctionRepository.startSession();
+    session.startTransaction();
+
+    try {
+      if (auction.status === AuctionStatus.ACTIVE) {
+        const winningBid =
+          await this.auctionRepository.findWinningBidByAuctionId(
+            auctionId,
+            session,
+          );
+
+        if (winningBid) {
+          const bidderId = winningBid.bidderId;
+          await this.walletService.release(
+            bidderId,
+            winningBid.amount,
+            auctionId,
+            session,
+          );
+        }
+      }
+
+      await this.auctionRepository.updateStatus(
+        auctionId,
+        AuctionStatus.CANCELLED,
+        session,
+        reason,
+      );
+
+      // Fetch winning bid again if needed, or pass from above
+      let highestBidderId: string | undefined;
+      let refundAmount: number | undefined;
+
+      if (auction.status === AuctionStatus.ACTIVE) {
+        const winningBid =
+          await this.auctionRepository.findWinningBidByAuctionId(
+            auctionId,
+            session,
+          );
+        if (winningBid) {
+          highestBidderId = winningBid.bidderId;
+          refundAmount = winningBid.amount;
+        }
+      }
+
+      await this.outboxService.saveEvent(
+        RabbitMQEvent.AuctionCancelledByAdmin,
+        {
+          auctionId,
+          auctionTitle: auction.title,
+          sellerId: auction.sellerId.toString(),
+          adminActionReason: reason,
+          highestBidderId,
+          refundAmount,
+        },
+        session,
+      );
+
+      await session.commitTransaction();
+
+      void this.realtimeService.publishAuctionStatusChanged({
+        auction: {
+          ...auction,
+          status: AuctionStatus.CANCELLED,
+          adminActionReason: reason,
+        },
+      });
+
+      void this.redisService.invalidatePattern(ACTIVE_AUCTIONS_PATTERN);
+
+      return true;
+    } catch (error) {
+      await session.abortTransaction();
+      this.logger.error(
+        `Transaction aborted during adminCancelAuction for ${auctionId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw error;
+    } finally {
+      await session.endSession();
+    }
+  }
+
   @Cron(CronExpression.EVERY_MINUTE)
   async activatePendingAuctions(): Promise<void> {
     const auctions = await this.auctionRepository.findPendingToActivate();

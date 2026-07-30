@@ -122,6 +122,10 @@ export class WalletService {
     return await this.getWalletOrThrow(userId);
   }
 
+  async sumAllBalances(): Promise<number> {
+    return this.walletRepository.sumAllBalances();
+  }
+
   // ─── User-Facing ─────────────────────────────────────────────────────────────
 
   async getMyWallet(userId: string): Promise<Wallet> {

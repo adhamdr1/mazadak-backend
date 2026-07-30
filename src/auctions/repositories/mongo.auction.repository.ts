@@ -90,11 +90,17 @@ export class MongoAuctionRepository implements IAuctionRepository {
     id: string,
     status: AuctionStatus,
     session?: ClientSession,
+    adminActionReason?: string,
   ): Promise<void> {
+    const updatePayload: Record<string, any> = { status };
+    if (adminActionReason) {
+      updatePayload.adminActionReason = adminActionReason;
+    }
+
     await this.auctionModel
       .findByIdAndUpdate(
         new Types.ObjectId(id),
-        { $set: { status } },
+        { $set: updatePayload },
         { session },
       )
       .exec();

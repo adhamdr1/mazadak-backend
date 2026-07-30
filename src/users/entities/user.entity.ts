@@ -81,6 +81,10 @@ export class User {
   @Prop({ default: false })
   isEmailVerified!: boolean;
 
+  @Field()
+  @Prop({ default: false })
+  isBanned!: boolean;
+
   @Field({ nullable: true })
   @Prop({ default: null, index: true, sparse: true })
   deletedAt?: Date;

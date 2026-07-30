@@ -57,19 +57,21 @@ export class TransactionService {
     filter?: TransactionsFilterInput,
   ): Promise<TransactionsPage> {
     const { page, limit } = input;
-
     const [items, total] = await Promise.all([
       this.transactionRepository.findAll(page, limit, filter),
       this.transactionRepository.countAll(filter),
     ]);
 
     const totalPages = Math.ceil(total / limit);
-
     return {
       items,
       total,
       totalPages,
       hasNextPage: page < totalPages,
     };
+  }
+
+  async sumTodayRevenue(): Promise<number> {
+    return this.transactionRepository.sumTodayRevenue();
   }
 }

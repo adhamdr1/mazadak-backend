@@ -330,6 +330,33 @@ describe('AuctionsService', () => {
     });
   });
 
+  describe('adminCancelAuction', () => {
+    it('should cancel successfully as admin', async () => {
+      mockAuctionRepository.findById.mockResolvedValue(mockAuction);
+      mockAuctionRepository.updateStatus.mockResolvedValue(undefined);
+
+      const result = await service.adminCancelAuction(
+        auctionId,
+        'Violates TOS',
+      );
+      expect(result).toBe(true);
+      expect(mockAuctionRepository.updateStatus).toHaveBeenCalledWith(
+        auctionId,
+        AuctionStatus.CANCELLED,
+        mockSession,
+        'Violates TOS',
+      );
+    });
+
+    it('should throw AuctionInvalidStateException if auction is ENDED', async () => {
+      const endedAuction = { ...mockAuction, status: AuctionStatus.ENDED };
+      mockAuctionRepository.findById.mockResolvedValue(endedAuction);
+      await expect(
+        service.adminCancelAuction(auctionId, 'Violates TOS'),
+      ).rejects.toThrow(AuctionInvalidStateException);
+    });
+  });
+
   describe('Cron Jobs', () => {
     it('should activate pending auctions', async () => {
       mockAuctionRepository.findPendingToActivate.mockResolvedValue([

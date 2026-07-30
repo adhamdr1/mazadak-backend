@@ -13,6 +13,7 @@ export enum RabbitMQEvent {
   WalletDeposited = 'WalletDeposited',
   WithdrawalCompleted = 'WithdrawalCompleted',
   EmailVerified = 'EmailVerified',
+  AuctionCancelledByAdmin = 'AuctionCancelledByAdmin',
 }
 
 // ─── Event Payloads ────────────────────────────────────────────────────────────
@@ -49,6 +50,15 @@ export interface AuctionCancelledPayload {
   auctionId: string;
   auctionTitle: string;
   sellerId: string;
+}
+
+export interface AuctionCancelledByAdminPayload {
+  auctionId: string;
+  auctionTitle: string;
+  sellerId: string;
+  adminActionReason: string;
+  highestBidderId?: string;
+  refundAmount?: number;
 }
 
 export interface UserRegisteredPayload {
@@ -105,7 +115,8 @@ export type RabbitMQEventPayload =
   | PasswordChangedPayload
   | WalletDepositedPayload
   | WithdrawalCompletedPayload
-  | EmailVerifiedPayload;
+  | EmailVerifiedPayload
+  | AuctionCancelledByAdminPayload;
 
 /** Map for Discriminated Union Type Safety */
 export type RabbitMQEventMap = {
@@ -119,6 +130,7 @@ export type RabbitMQEventMap = {
   [RabbitMQEvent.WalletDeposited]: WalletDepositedPayload;
   [RabbitMQEvent.WithdrawalCompleted]: WithdrawalCompletedPayload;
   [RabbitMQEvent.EmailVerified]: EmailVerifiedPayload;
+  [RabbitMQEvent.AuctionCancelledByAdmin]: AuctionCancelledByAdminPayload;
 };
 
 /** The parsed message with full type inference based on eventType */

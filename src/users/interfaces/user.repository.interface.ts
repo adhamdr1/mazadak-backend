@@ -34,6 +34,7 @@ export interface UpdateUserData {
   address?: { city: string; street: string };
   isEmailVerified?: boolean;
   password?: string;
+  isBanned?: boolean;
 }
 
 export interface IUserRepository {
@@ -60,6 +61,8 @@ export interface IUserRepository {
     limit: number,
     filter?: UsersFilter,
   ): Promise<{ items: User[]; total: number }>;
+
+  countVerified(): Promise<number>;
 
   softDelete(id: string): Promise<void>;
 

@@ -26,6 +26,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { AuctionsModule } from './auctions/auctions.module';
 import { UploadModule } from './upload/upload.module';
 import { BidsModule } from './bids/bids.module';
+import { AdminModule } from './admin/admin.module';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from './users/users.service';
 import { PubSubModule } from './infrastructure/pubsub/pubsub.module';
@@ -159,6 +160,7 @@ import type { JwtPayload } from './auth/interfaces/jwt-payload.interface';
     AuctionsModule,
     UploadModule,
     BidsModule,
+    AdminModule,
   ],
   providers: [
     // Global Authentication Guards

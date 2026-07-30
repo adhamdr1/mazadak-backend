@@ -27,7 +27,10 @@ import {
   EmailVerifiedPayload,
   PasswordResetPayload,
   PasswordChangedPayload,
+  AuctionCancelledByAdminPayload,
 } from '../infrastructure/rabbitmq/rabbitmq-event.types';
+import { InAppNotificationType } from './in-app/enums/in-app-notification-type.enum';
+import { NotificationReferenceType } from './in-app/enums/notification-reference-type.enum';
 
 @Injectable()
 export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
@@ -139,6 +142,9 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
         case RabbitMQEvent.BidPlaced:
           await this.handleBidPlaced(parsed.payload);
           break;
+        case RabbitMQEvent.AuctionCancelledByAdmin:
+          await this.handleAuctionCancelledByAdmin(parsed.payload);
+          break;
         case RabbitMQEvent.UserRegistered:
           await this.handleUserRegistered(parsed.payload);
           break;
@@ -196,6 +202,64 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
       payload.auctionTitle,
       payload.auctionId,
     );
+  }
+
+  private async handleAuctionCancelledByAdmin(
+    payload: AuctionCancelledByAdminPayload,
+  ) {
+    const seller = await this.usersService.findById(payload.sellerId);
+    if (seller) {
+      const name =
+        [seller.firstName, seller.lastName].filter(Boolean).join(' ') || 'User';
+      // Email for seller
+      await this.notificationsService.sendAuctionCancelledByAdminEmail(
+        seller.email,
+        name,
+        payload.auctionTitle,
+        payload.auctionId,
+        payload.adminActionReason,
+      );
+
+      // In-app Notification for Seller
+      await this.notificationsService.createInAppNotification({
+        userId: payload.sellerId,
+        type: InAppNotificationType.AUCTION_CANCELLED_BY_ADMIN,
+        title: 'Auction Cancelled by Admin ❌',
+        body: `Your auction "${payload.auctionTitle}" was cancelled by an admin. Reason: ${payload.adminActionReason}`,
+        referenceId: payload.auctionId,
+        referenceType: NotificationReferenceType.AUCTION,
+      });
+    }
+
+    // Notify highest bidder if any
+    if (payload.highestBidderId && payload.refundAmount !== undefined) {
+      const bidder = await this.usersService.findById(payload.highestBidderId);
+      if (bidder) {
+        const bidderName =
+          [bidder.firstName, bidder.lastName].filter(Boolean).join(' ') ||
+          'User';
+
+        // Email for highest bidder
+        await this.notificationsService.sendAuctionCancelledToBidderEmail(
+          bidder.email,
+          bidderName,
+          payload.auctionTitle,
+          payload.auctionId,
+          payload.adminActionReason,
+          payload.refundAmount,
+        );
+
+        // In-app Notification for highest bidder
+        await this.notificationsService.createInAppNotification({
+          userId: payload.highestBidderId,
+          type: InAppNotificationType.AUCTION_CANCELLED_BY_ADMIN,
+          title: 'Auction Cancelled by Admin ❌',
+          body: `The auction "${payload.auctionTitle}" has been cancelled by an Admin and your held funds of ${payload.refundAmount} EGP have been released. Reason: ${payload.adminActionReason}`,
+          referenceId: payload.auctionId,
+          referenceType: NotificationReferenceType.AUCTION,
+        });
+      }
+    }
   }
 
   private async handleAuctionEnded(payload: AuctionEndedPayload) {

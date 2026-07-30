@@ -12,6 +12,8 @@ export interface IWalletRepository {
 
   countAll(): Promise<number>;
 
+  sumAllBalances(): Promise<number>;
+
   creditBalance(
     walletId: string,
     amount: number,

@@ -70,6 +70,7 @@ export interface IAuctionRepository {
     id: string,
     status: AuctionStatus,
     session?: ClientSession,
+    adminActionReason?: string,
   ): Promise<void>;
 
   updateManyStatus(ids: Types.ObjectId[], status: AuctionStatus): Promise<void>;

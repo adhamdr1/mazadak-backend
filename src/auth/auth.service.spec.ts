@@ -124,6 +124,7 @@ function createMockUser(overrides: Partial<User> = {}): User {
     dateOfBirth: new Date('1990-01-01'),
     address: { city: 'Cairo', street: 'Street 1' },
     isEmailVerified: true,
+    isBanned: false,
     deletedAt: undefined,
     createdAt: new Date(),
     updatedAt: new Date(),
