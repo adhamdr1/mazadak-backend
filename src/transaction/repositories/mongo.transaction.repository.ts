@@ -10,6 +10,7 @@ import {
   TransactionDocument,
 } from '../entities/transaction.entity';
 import { TransactionsFilterInput } from '../dto/transactions-filter.input';
+import { SortOrder } from '../../common/enums/sort-order.enum';
 
 @Injectable()
 export class MongoTransactionRepository implements ITransactionRepository {
@@ -63,9 +64,17 @@ export class MongoTransactionRepository implements ITransactionRepository {
       filter,
     );
 
+    const sortParams: Record<string, 1 | -1> = {};
+    if (filter?.sort) {
+      sortParams[filter.sort.field] =
+        filter.sort.order === SortOrder.ASC ? 1 : -1;
+    } else {
+      sortParams['createdAt'] = -1;
+    }
+
     return this.transactionModel
       .find(query)
-      .sort({ createdAt: -1 })
+      .sort(sortParams)
       .skip((page - 1) * limit)
       .limit(limit)
       .exec();
@@ -90,9 +99,17 @@ export class MongoTransactionRepository implements ITransactionRepository {
   ): Promise<Transaction[]> {
     const query = this.buildFilterQuery({}, filter);
 
+    const sortParams: Record<string, 1 | -1> = {};
+    if (filter?.sort) {
+      sortParams[filter.sort.field] =
+        filter.sort.order === SortOrder.ASC ? 1 : -1;
+    } else {
+      sortParams['createdAt'] = -1;
+    }
+
     return this.transactionModel
       .find(query)
-      .sort({ createdAt: -1 })
+      .sort(sortParams)
       .skip((page - 1) * limit)
       .limit(limit)
       .exec();

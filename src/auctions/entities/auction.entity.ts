@@ -80,3 +80,6 @@ export class Auction {
 }
 
 export const AuctionSchema = SchemaFactory.createForClass(Auction);
+
+// Add text index for full-text search
+AuctionSchema.index({ title: 'text', description: 'text' });

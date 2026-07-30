@@ -1,5 +1,7 @@
 import { InputType, Field } from '@nestjs/graphql';
-import { IsOptional, IsString } from 'class-validator';
+import { IsOptional, IsString, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+import { UsersSortInput } from './users-sort.input';
 
 @InputType()
 export class UsersFilterInput {
@@ -7,4 +9,10 @@ export class UsersFilterInput {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @Field(() => UsersSortInput, { nullable: true })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => UsersSortInput)
+  sort?: UsersSortInput;
 }

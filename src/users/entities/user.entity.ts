@@ -93,3 +93,6 @@ export class User {
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
+
+// Add text index for full-text search
+UserSchema.index({ firstName: 'text', lastName: 'text', email: 'text' });

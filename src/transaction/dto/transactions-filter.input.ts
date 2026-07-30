@@ -1,9 +1,16 @@
 import { InputType, Field } from '@nestjs/graphql';
-import { IsOptional, IsString, IsEnum, IsDate } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsEnum,
+  IsDate,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { TransactionType } from '../enums/transaction-type.enum';
 import { TransactionStatus } from '../enums/transaction-status.enum';
 import { IsAfter } from '../../common/decorators/is-after.decorator';
+import { TransactionsSortInput } from './transactions-sort.input';
 
 @InputType()
 export class TransactionsFilterInput {
@@ -34,4 +41,10 @@ export class TransactionsFilterInput {
   @Type(() => Date)
   @IsAfter('startDate')
   endDate?: Date;
+
+  @Field(() => TransactionsSortInput, { nullable: true })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TransactionsSortInput)
+  sort?: TransactionsSortInput;
 }

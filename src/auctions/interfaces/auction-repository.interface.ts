@@ -3,10 +3,16 @@ import { Auction } from '../entities/auction.entity';
 import { AuctionStatus } from '../enums/auction-status.enum';
 import { AuctionCategory } from '../enums/auction-category.enum';
 
+export interface AuctionsSort {
+  field: string;
+  order: 'ASC' | 'DESC';
+}
+
 export interface AuctionsFilter {
   category?: AuctionCategory;
   status?: AuctionStatus;
   search?: string;
+  sort?: AuctionsSort;
 }
 
 export interface CreateAuctionData {

@@ -12,7 +12,9 @@ import { BidOnOwnAuctionException } from './exceptions/bid-on-own-auction.except
 import { AlreadyHighestBidderException } from './exceptions/already-highest-bidder.exception';
 import { BidAmountTooLowException } from './exceptions/bid-amount-too-low.exception';
 import { NotificationsService } from '../notifications/notifications.service';
+import { InvalidAuctionIdException } from './exceptions/invalid-auction-id.exception';
 import { UsersService } from '../users/users.service';
+import { OutboxService } from '../infrastructure/outbox/outbox.service';
 
 import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
 import { RedisService } from '../infrastructure/redis/redis.service';
@@ -72,6 +74,10 @@ const mockUsersService = {
   findById: jest.fn(),
 };
 
+const mockOutboxService = {
+  saveEvent: jest.fn().mockResolvedValue(undefined),
+};
+
 const mockRedisService = {
   invalidatePattern: jest.fn().mockResolvedValue(undefined),
 };
@@ -88,6 +94,7 @@ describe('BidsService', () => {
         { provide: WalletService, useValue: mockWalletService },
         { provide: NotificationsService, useValue: mockNotificationsService },
         { provide: UsersService, useValue: mockUsersService },
+        { provide: OutboxService, useValue: mockOutboxService },
         {
           provide: RealtimeService,
           useValue: {
@@ -274,20 +281,27 @@ describe('BidsService', () => {
     const mockPage = { items: [], total: 0 };
 
     it('should get auction bids', async () => {
+      const validAuctionId = '507f1f77bcf86cd799439011';
       mockBidRepository.findByAuctionId.mockResolvedValue(mockPage);
       const result = await service.getAuctionBids(
-        'auctionId',
+        validAuctionId,
         pagination,
         filter,
       );
       expect(result.items).toEqual([]);
       expect(result.total).toBe(0);
       expect(mockBidRepository.findByAuctionId).toHaveBeenCalledWith(
-        'auctionId',
+        validAuctionId,
         pagination.page,
         pagination.limit,
         filter,
       );
+    });
+
+    it('should throw InvalidAuctionIdException if auction ID format is invalid', async () => {
+      await expect(
+        service.getAuctionBids('invalid-id', pagination, filter),
+      ).rejects.toThrow(InvalidAuctionIdException);
     });
 
     it('should get user bids', async () => {

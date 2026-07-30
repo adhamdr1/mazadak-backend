@@ -2,6 +2,9 @@ import { Field, InputType } from '@nestjs/graphql';
 import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 import { AuctionCategory } from '../enums/auction-category.enum';
 import { AuctionStatus } from '../enums/auction-status.enum';
+import { AuctionsSortInput } from './auctions-sort.input';
+import { Type } from 'class-transformer';
+import { ValidateNested } from 'class-validator';
 
 @InputType()
 export class AuctionsFilterInput {
@@ -20,4 +23,10 @@ export class AuctionsFilterInput {
   @IsString()
   @MaxLength(100, { message: 'Search term must not exceed 100 characters' })
   search?: string;
+
+  @Field(() => AuctionsSortInput, { nullable: true })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AuctionsSortInput)
+  sort?: AuctionsSortInput;
 }

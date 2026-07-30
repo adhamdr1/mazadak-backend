@@ -96,9 +96,20 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
   private async handleMessage(msg: ConsumeMessage): Promise<void> {
     try {
       const content = msg.content.toString();
+      const raw = JSON.parse(content) as unknown;
 
-      // 3. Strong Typing applied
-      const parsed = JSON.parse(content) as RabbitMQParsedMessage;
+      // NestJS ClientProxy wraps the payload in a { pattern, data } structure by default.
+      // We extract the inner data if it exists.
+      const parsed = (
+        raw && typeof raw === 'object' && 'data' in raw ? raw.data : raw
+      ) as RabbitMQParsedMessage;
+
+      if (!parsed) {
+        this.logger.warn('Received empty or invalid message payload');
+        this.channelWrapper!.ack(msg);
+        return;
+      }
+
       const { messageId } = parsed;
 
       // 2. Constants used
