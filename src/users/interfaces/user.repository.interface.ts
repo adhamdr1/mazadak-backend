@@ -2,6 +2,16 @@ import { ClientSession } from 'mongoose';
 import { User } from '../entities/user.entity';
 import { AuthProvider } from '../enums/auth-provider.enum';
 
+export interface UsersSort {
+  field: string;
+  order: 'ASC' | 'DESC';
+}
+
+export interface UsersFilter {
+  search?: string;
+  sort?: UsersSort;
+}
+
 export interface CreateUserData {
   firstName: string;
   lastName: string;
@@ -48,7 +58,7 @@ export interface IUserRepository {
   findAll(
     page: number,
     limit: number,
-    search?: string,
+    filter?: UsersFilter,
   ): Promise<{ items: User[]; total: number }>;
 
   softDelete(id: string): Promise<void>;

@@ -42,7 +42,7 @@ export class UsersResolver {
     @Args('input') input: PaginationInput,
     @Args('filter', { nullable: true }) filter?: UsersFilterInput,
   ): Promise<UsersPage> {
-    return this.usersService.findAll(input, filter?.search);
+    return this.usersService.findAll(input, filter);
   }
 
   // ─── User Mutations ────────────────────────────────────────────────────────

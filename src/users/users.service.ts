@@ -10,6 +10,7 @@ import type { IUserRepository } from './interfaces/user.repository.interface';
 import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreateGoogleUserDto } from './dto/create-google-user.dto';
 import { UsersPage } from './dto/users-page.type';
+import { UsersFilterInput } from './dto/users-filter.input';
 import { UserNotFoundException } from './exceptions/user-not-found.exception';
 import { EmailAlreadyExistsException } from './exceptions/email-already-exists.exception';
 import { PhoneAlreadyExistsException } from './exceptions/phone-already-exists.exception';
@@ -127,12 +128,12 @@ export class UsersService {
 
   async findAll(
     pagination: PaginationInput,
-    search?: string,
+    filter?: UsersFilterInput,
   ): Promise<UsersPage> {
     const { items, total } = await this.userRepository.findAll(
       pagination.page,
       pagination.limit,
-      search,
+      filter,
     );
     return this.buildPage(items, total, pagination.limit, pagination.page);
   }

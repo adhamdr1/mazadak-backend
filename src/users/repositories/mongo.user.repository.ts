@@ -5,6 +5,7 @@ import {
   IUserRepository,
   CreateUserData,
   UpdateUserData,
+  UsersFilter,
 } from '../interfaces/user.repository.interface';
 import { User, UserDocument } from '../entities/user.entity';
 import { AuthProvider } from '../enums/auth-provider.enum';
@@ -97,26 +98,29 @@ export class MongoUserRepository implements IUserRepository {
   async findAll(
     page: number,
     limit: number,
-    search?: string,
+    filter?: UsersFilter,
   ): Promise<{ items: User[]; total: number }> {
     const skip = (page - 1) * limit;
 
     const query: Record<string, any> = {
       deletedAt: null,
     };
-    if (search) {
-      query.$or = [
-        { firstName: { $regex: search, $options: 'i' } },
-        { lastName: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { phoneNumber: { $regex: search, $options: 'i' } },
-      ];
+
+    if (filter?.search) {
+      query.$text = { $search: filter.search };
+    }
+
+    const sortParams: Record<string, 1 | -1> = {};
+    if (filter?.sort) {
+      sortParams[filter.sort.field] = filter.sort.order === 'ASC' ? 1 : -1;
+    } else {
+      sortParams['createdAt'] = -1; // Default
     }
 
     const [items, total] = await Promise.all([
       this.userModel
         .find(query)
-        .sort({ _id: -1 })
+        .sort(sortParams)
         .skip(skip)
         .limit(limit)
         .exec(),
