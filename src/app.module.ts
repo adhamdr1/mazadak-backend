@@ -6,7 +6,7 @@ import { AuthModule } from './auth/auth.module';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { GraphQLModule } from '@nestjs/graphql';
 import { join } from 'path';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -18,6 +18,9 @@ import { RedisModule as AppRedisModule } from './infrastructure/redis/redis.modu
 import { RabbitMQModule } from './infrastructure/rabbitmq/rabbitmq.module';
 import { OutboxModule } from './infrastructure/outbox/outbox.module';
 import { IpBlacklistMiddleware } from './common/middleware/ip-blacklist.middleware';
+import { RequestContextMiddleware } from './common/middleware/request-context.middleware';
+import { LoggingModule } from './infrastructure/logging/logging.module';
+import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import type { Request, Response } from 'express';
 import { WalletModule } from './wallet/wallet.module';
 import { TransactionModule } from './transaction/transaction.module';
@@ -33,6 +36,7 @@ import type { JwtPayload } from './auth/interfaces/jwt-payload.interface';
 
 @Module({
   imports: [
+    LoggingModule,
     ConfigModule.forRoot({
       isGlobal: true,
     }),
@@ -166,10 +170,14 @@ import type { JwtPayload } from './auth/interfaces/jwt-payload.interface';
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_GUARD, useClass: CustomThrottlerGuard },
+    // Global Logging Interceptor (with Winston Dependency Injection)
+    { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },
   ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(IpBlacklistMiddleware).forRoutes('*');
+    consumer
+      .apply(RequestContextMiddleware, IpBlacklistMiddleware)
+      .forRoutes('*');
   }
 }
