@@ -1,11 +1,26 @@
-import { NestFactory } from '@nestjs/core';
+import { NestFactory, HttpAdapterHost } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
 import * as express from 'express';
+import * as Sentry from '@sentry/nestjs';
+import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
+import { SentryExceptionFilter } from './common/filters/sentry-exception.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // Initialize Sentry before app bootstrap
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN || '',
+    environment: process.env.SENTRY_ENVIRONMENT || 'development',
+    tracesSampleRate: 1.0,
+  });
+
+  const app = await NestFactory.create(AppModule, {
+    bufferLogs: true,
+  });
+
+  // Set Winston as global logger
+  app.useLogger(app.get(WINSTON_MODULE_NEST_PROVIDER));
 
   app.use(
     helmet({
@@ -28,6 +43,10 @@ async function bootstrap() {
       transform: true, // بيحول الـ Strings لـ Objects (زي التاريخ)
     }),
   );
+
+  // Global Exception Filter for Sentry and error shielding
+  const { httpAdapter } = app.get(HttpAdapterHost);
+  app.useGlobalFilters(new SentryExceptionFilter(httpAdapter));
 
   await app.listen(3000);
 }
