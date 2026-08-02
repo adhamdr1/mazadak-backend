@@ -113,8 +113,15 @@ type Transaction {
   walletId: ID!
   type: TransactionType!
   amount: Float!
+  currency: String!
   status: TransactionStatus!
   referenceId: String
+  idempotencyKey: String
+  gatewayPaymentIntentId: String
+  gatewayTransactionId: String
+  gatewayProvider: String
+  referenceType: TransactionReferenceType
+  expiresAt: DateTime
   createdAt: DateTime!
 }
 
@@ -124,11 +131,22 @@ enum TransactionType {
   HOLD
   RELEASE
   CAPTURE
+  REFUND
 }
 
 enum TransactionStatus {
+  PENDING
+  PROCESSING
   SUCCESS
   FAILED
+  CANCELLED
+  EXPIRED
+}
+
+enum TransactionReferenceType {
+  AUCTION
+  USER
+  TRANSACTION
 }
 
 type TransactionsPage {

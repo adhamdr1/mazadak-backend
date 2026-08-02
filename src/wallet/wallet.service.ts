@@ -47,6 +47,7 @@ export class WalletService {
   private async executeWalletOp(params: {
     userId: string;
     amount: number;
+    currency?: string;
     type: TransactionType;
     operation: (
       walletId: string,
@@ -60,6 +61,7 @@ export class WalletService {
     this.validateAmount(params.amount);
     const wallet = await this.getWalletOrThrow(params.userId);
     const walletId = wallet._id.toString();
+    const currency = params.currency ?? 'EGP';
 
     let updated: Wallet | null = null;
 
@@ -72,6 +74,7 @@ export class WalletService {
         walletId,
         type: params.type,
         amount: params.amount,
+        currency,
         status: TransactionStatus.FAILED,
         referenceId: params.referenceId,
       });
@@ -82,6 +85,7 @@ export class WalletService {
       walletId,
       type: params.type,
       amount: params.amount,
+      currency,
       status: TransactionStatus.SUCCESS,
       referenceId: params.referenceId,
     });
@@ -136,10 +140,12 @@ export class WalletService {
     amount: number,
     referenceId?: string,
     session?: ClientSession,
+    currency?: string,
   ): Promise<{ wallet: Wallet; transaction: Transaction }> {
     const { wallet, transaction } = await this.executeWalletOp({
       userId,
       amount,
+      currency,
       type: TransactionType.DEPOSIT,
       referenceId,
       session,

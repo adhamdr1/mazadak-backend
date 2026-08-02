@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model, Types, ClientSession } from 'mongoose';
 import {
   ITransactionRepository,
   CreateTransactionData,
@@ -21,15 +21,30 @@ export class MongoTransactionRepository implements ITransactionRepository {
     private readonly transactionModel: Model<TransactionDocument>,
   ) {}
 
-  async create(data: CreateTransactionData): Promise<Transaction> {
+  async create(
+    data: CreateTransactionData,
+    session?: ClientSession,
+  ): Promise<Transaction> {
     const transaction = new this.transactionModel({
       walletId: new Types.ObjectId(data.walletId),
       type: data.type,
       amount: data.amount,
+      currency: data.currency,
       status: data.status,
       referenceId: data.referenceId ?? null,
+      idempotencyKey: data.idempotencyKey ?? null,
+      gatewayPaymentIntentId: data.gatewayPaymentIntentId ?? null,
+      gatewayTransactionId: data.gatewayTransactionId ?? null,
+      gatewayProvider: data.gatewayProvider ?? null,
+      referenceType: data.referenceType ?? null,
+      expiresAt: data.expiresAt ?? null,
     });
-    return transaction.save();
+    return transaction.save({ session });
+  }
+
+  async findById(id: string): Promise<Transaction | null> {
+    if (!Types.ObjectId.isValid(id)) return null;
+    return this.transactionModel.findById(id).exec();
   }
 
   private buildFilterQuery(

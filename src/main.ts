@@ -1,5 +1,6 @@
 import { NestFactory, HttpAdapterHost } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { IncomingMessage, ServerResponse } from 'http';
 import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
 import * as express from 'express';
@@ -17,6 +18,7 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
+    rawBody: true,
   });
 
   // Set Winston as global logger
@@ -32,8 +34,32 @@ async function bootstrap() {
   app.enableCors();
 
   // Increase payload limit for Base64 image uploads (Default is 100kb, we set it to 50mb)
-  app.use(express.json({ limit: '50mb' }));
-  app.use(express.urlencoded({ limit: '50mb', extended: true }));
+  // We add verify hook to preserve rawBody for signature verification
+  app.use(
+    express.json({
+      limit: '50mb',
+      verify: (
+        req: IncomingMessage & { rawBody?: Buffer },
+        _res: ServerResponse,
+        buf: Buffer,
+      ) => {
+        req.rawBody = buf;
+      },
+    }),
+  );
+  app.use(
+    express.urlencoded({
+      limit: '50mb',
+      extended: true,
+      verify: (
+        req: IncomingMessage & { rawBody?: Buffer },
+        _res: ServerResponse,
+        buf: Buffer,
+      ) => {
+        req.rawBody = buf;
+      },
+    }),
+  );
 
   // السطر ده هو اللي بيفعل الـ Validation على مستوى المشروع كله
   app.useGlobalPipes(

@@ -4,20 +4,25 @@ import type { JwtPayload } from '../../auth/interfaces/jwt-payload.interface';
 
 export const CurrentUser = createParamDecorator(
   (_data: unknown, context: ExecutionContext): JwtPayload | undefined => {
-    const ctx = GqlExecutionContext.create(context);
-    const gqlCtx = ctx.getContext<{
-      req?: { user?: JwtPayload };
-      user?: JwtPayload;
-    }>();
+    if (context.getType<string>() === 'graphql') {
+      const ctx = GqlExecutionContext.create(context);
+      const gqlCtx = ctx.getContext<{
+        req?: { user?: JwtPayload };
+        user?: JwtPayload;
+      }>();
 
-    // 1. HTTP Path (Priority to guarantee no change to legacy queries/mutations)
-    if (gqlCtx.req?.user) {
-      return gqlCtx.req.user;
-    }
+      // 1. HTTP Path (Priority to guarantee no change to legacy queries/mutations)
+      if (gqlCtx.req?.user) {
+        return gqlCtx.req.user;
+      }
 
-    // 2. WebSocket Path (Subscriptions context)
-    if (gqlCtx.user) {
-      return gqlCtx.user;
+      // 2. WebSocket Path (Subscriptions context)
+      if (gqlCtx.user) {
+        return gqlCtx.user;
+      }
+    } else {
+      const req = context.switchToHttp().getRequest<{ user?: JwtPayload }>();
+      return req.user;
     }
 
     return undefined;

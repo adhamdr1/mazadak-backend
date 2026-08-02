@@ -3,6 +3,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
 import { TransactionType } from '../enums/transaction-type.enum';
 import { TransactionStatus } from '../enums/transaction-status.enum';
+import { TransactionReferenceType } from '../enums/transaction-reference-type.enum';
 
 export type TransactionDocument = HydratedDocument<Transaction>;
 
@@ -32,6 +33,10 @@ export class Transaction {
   @Prop({ type: Number, required: true, min: 0 })
   amount!: number;
 
+  @Field(() => String)
+  @Prop({ type: String, required: true, uppercase: true })
+  currency!: string;
+
   @Field(() => TransactionStatus)
   @Prop({
     type: String,
@@ -44,8 +49,40 @@ export class Transaction {
   @Prop({ type: String, default: null })
   referenceId!: string | null;
 
+  @Field(() => String, { nullable: true })
+  @Prop({ type: String, default: null, index: true })
+  idempotencyKey!: string | null;
+
+  @Field(() => String, { nullable: true })
+  @Prop({ type: String, default: null, index: true })
+  gatewayPaymentIntentId!: string | null;
+
+  @Field(() => String, { nullable: true })
+  @Prop({ type: String, default: null, index: true })
+  gatewayTransactionId!: string | null;
+
+  @Field(() => String, { nullable: true })
+  @Prop({ type: String, default: null })
+  gatewayProvider!: string | null;
+
+  @Field(() => TransactionReferenceType, { nullable: true })
+  @Prop({ type: String, enum: TransactionReferenceType, default: null })
+  referenceType!: TransactionReferenceType | null;
+
+  @Field(() => Date, { nullable: true })
+  @Prop({ type: Date, default: null })
+  expiresAt!: Date | null;
+
   @Field()
   readonly createdAt!: Date;
 }
 
 export const TransactionSchema = SchemaFactory.createForClass(Transaction);
+TransactionSchema.index(
+  { gatewayPaymentIntentId: 1, status: 1 },
+  { unique: true, sparse: true },
+);
+TransactionSchema.index(
+  { idempotencyKey: 1, status: 1 },
+  { unique: true, sparse: true },
+);
