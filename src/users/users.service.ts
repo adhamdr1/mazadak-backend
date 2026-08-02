@@ -16,6 +16,7 @@ import { EmailAlreadyExistsException } from './exceptions/email-already-exists.e
 import { PhoneAlreadyExistsException } from './exceptions/phone-already-exists.exception';
 import { EmailAlreadyVerifiedException } from './exceptions/email-already-verified.exception';
 import { UserForbiddenException } from './exceptions/user-forbidden.exception';
+import { CannotBanAdminException } from './exceptions/cannot-ban-admin.exception';
 
 @Injectable()
 export class UsersService {
@@ -202,6 +203,12 @@ export class UsersService {
 
   async toggleBan(userId: string): Promise<User> {
     const user = await this.findById(userId);
+
+    // Prevent banning any admin (including themselves)
+    if (user.role === UserRole.ADMIN) {
+      throw new CannotBanAdminException();
+    }
+
     return (await this.userRepository.update(userId, {
       isBanned: !user.isBanned,
     })) as User;

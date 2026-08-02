@@ -6,6 +6,7 @@ import { InvalidCredentialsException } from './exceptions/invalid-credentials.ex
 import { EmailNotVerifiedException } from './exceptions/email-not-verified.exception';
 import { InvalidTokenException } from './exceptions/invalid-token.exception';
 import { AccountDisabledException } from './exceptions/account-disabled.exception';
+import { AccountBannedException } from './exceptions/account-banned.exception';
 import { GoogleAccountNoPasswordException } from './exceptions/google-account-no-password.exception';
 import { SamePasswordException } from './exceptions/same-password.exception';
 import { JwtService } from '@nestjs/jwt';
@@ -126,9 +127,13 @@ export class AuthService {
       throw new InvalidCredentialsException();
     }
 
-    // 2. Reject soft-deleted accounts.
+    // 2. Reject soft-deleted accounts and banned accounts.
     if (user.deletedAt) {
       throw new InvalidCredentialsException();
+    }
+
+    if (user.isBanned) {
+      throw new AccountBannedException();
     }
 
     if (!user.password) {

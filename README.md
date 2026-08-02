@@ -1,98 +1,174 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# 🔨 Mazadak - Real-Time Auction Platform
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+<div align="center">
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+![NestJS](https://img.shields.io/badge/NestJS-E0234E?style=for-the-badge&logo=nestjs&logoColor=white)
+![GraphQL](https://img.shields.io/badge/GraphQL-E10098?style=for-the-badge&logo=graphql&logoColor=white)
+![MongoDB](https://img.shields.io/badge/MongoDB-4EA94B?style=for-the-badge&logo=mongodb&logoColor=white)
+![RabbitMQ](https://img.shields.io/badge/RabbitMQ-FF6600?style=for-the-badge&logo=rabbitmq&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-DC382D?style=for-the-badge&logo=redis&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)
 
-## Description
+**A highly scalable, robust, and event-driven backend system for a real-time auction and bidding platform. Built from the ground up using NestJS, GraphQL, and enterprise-grade Microservices patterns.**
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+[💻 Quick Start & Installation](#-quick-start--installation) • [🎯 Overview](#-overview) • [🏗️ Architecture Flow](#️-architecture-flow) • [🗄️ Database Entities](#️-database-entities) • [✨ Key Technical Features](#-key-technical-features)
 
-## Project setup
+</div>
 
+---
+
+## 💻 Quick Start & Installation
+
+To get a local copy up and running, follow these simple steps.
+
+### Prerequisites
+Make sure you have the following installed on your machine:
+- Node.js (v18+)
+- Docker & Docker Compose (for running MongoDB, Redis, and RabbitMQ easily)
+
+### 1. Clone the Repository
 ```bash
-$ npm install
+git clone https://github.com/adhamdr1/mazadak-backend.git
+cd mazadak-backend
 ```
 
-## Compile and run the project
-
+### 2. Install Dependencies
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+npm install
 ```
 
-## Run tests
-
+### 3. Environment Setup
+We have provided an `.env.example` file. Copy it to create your own `.env` file:
 ```bash
-# unit tests
-$ npm run test
+cp .env.example .env
+```
+Open the `.env` file and fill in your Cloudinary and SMTP credentials if you plan to test image uploads and emails.
 
-# e2e tests
-$ npm run test:e2e
+### 4. Start Infrastructure (Docker)
+We use Docker to easily spin up MongoDB (with Replica Sets for Transactions), Redis, and RabbitMQ.
+```bash
+docker-compose up -d
+```
+*(Ensure Docker is running on your machine before executing this command)*
 
-# test coverage
-$ npm run test:cov
+### 5. Run the Application
+```bash
+# Development mode
+npm run start:dev
+
+# Production build
+npm run build
+npm run start:prod
 ```
 
-## Deployment
+### 6. Access the API
+The GraphQL Playground is available at:
+👉 **http://localhost:3000/graphql**
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+---
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+## 🎯 Overview
 
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+**Mazadak** is an enterprise-grade backend infrastructure designed for high-concurrency auction environments. Users can browse items, place real-time bids, and manage their digital wallets. 
+
+The system prioritizes **Data Consistency** and **Fault Tolerance** by relying heavily on the **Outbox Pattern**, **Event-Driven Messaging**, and **Distributed Transactions**.
+
+---
+
+## 🏗️ Architecture Flow
+
+We moved away from a traditional monolithic REST API to a scalable, distributed architecture. Below is the request and lifecycle diagram for our platform:
+
+```mermaid
+graph TD
+    Client[Client / Frontend] -->|GraphQL Query/Mutation/Subscription| Gateway[NestJS Gateway / IP Blacklist Middleware]
+    Gateway -->|Checks IP in Redis| Blacklist{Is IP Blacklisted?}
+    Blacklist -->|Yes| Block[403 Forbidden]
+    Blacklist -->|No| AuthGuard[JwtAuth Guard & Custom Throttler Guard]
+    
+    AuthGuard -->|If strict rate limit exceeded| AddBlacklist[Add IP to Redis Blacklist 24h]
+    AuthGuard -->|Success| Exec[Execute Business Logic]
+    
+    Exec -->|Mongoose Session| Tx[MongoDB ACID Transaction]
+    Tx -->|Write Data| DB[(MongoDB)]
+    Tx -->|Save Event| Outbox[(Outbox Collection)]
+    
+    OutboxWorker[Outbox Worker Cron] -->|Poll Events| Outbox
+    OutboxWorker -->|Publish Event| RabbitMQ[RabbitMQ Message Broker]
+    
+    RabbitMQ -->|Event Routed| Consumers[Background Consumers]
+    Consumers -->|Notifications Queue| NotificationConsumer[Notifications Consumer]
+    NotificationConsumer -->|Send Email| SMTP[SMTP Server]
+    NotificationConsumer -->|Broadcast WS| PubSub[Redis PubSub]
+    PubSub -->|Live Subscription Update| Client
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+---
 
-## Resources
+## 🗄️ Database Entities
 
-Check out a few resources that may come in handy when working with NestJS:
+Our database schema is designed to handle financial transactions securely and maintain complete data integrity.
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+1. **User (`users`)**:
+   - Manages authentication and authorization.
+   - Contains `role` (ADMIN or USER), `isBanned` flags, and linked `googleId` for OAuth.
+2. **Wallet (`wallets`)**:
+   - One-to-one relationship with `User`.
+   - Tracks `balance` (Total available funds) and `heldBalance` (Funds locked in active bids).
+3. **Auction (`auctions`)**:
+   - The core entity containing item details, `startingPrice`, `minimumBidIncrement`, and the dynamic `currentPrice`.
+   - Tracks the auction `status` (ACTIVE, PENDING, COMPLETED, CANCELLED).
+4. **Bid (`bids`)**:
+   - Records every bid placed on an auction.
+   - Tracks whether a bid is currently `WINNING` or has been `OUTBID`.
+5. **Transaction (`transactions`)**:
+   - The immutable financial ledger.
+   - Records every `DEPOSIT`, `WITHDRAW`, `HOLD`, `RELEASE`, and `CAPTURE` operation tied to a Wallet.
+6. **Outbox Event (`outbox_events`)**:
+   - Temporarily stores domain events before they are picked up and published to RabbitMQ to ensure zero data loss.
 
-## Support
+---
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+## ✨ Key Technical Features
 
-## Stay in touch
+### 🔐 Security & Automated Threat Prevention
+- **Smart Rate Limiting (`CustomThrottlerGuard`):** Enforces rate limiting per User ID if authenticated, falling back to IP address. Sensitive endpoints use a strict policy.
+- **Automated IP Blacklisting:** If strict rate limits (e.g. login/banning endpoints) are breached, the malicious IP is automatically blacklisted in Redis for 24 hours.
+- **Fast Gateway Filtering (`IpBlacklistMiddleware`):** Rejects requests from blacklisted IPs at the gateway level before hitting NestJS routing, saving system resources.
+- **Exception Shielding:** Clean, specialized errors like `AccountBannedException` and `CannotBanAdminException` returning consistent GraphQL error structures.
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+### 💰 Reliable Financial Engine (ACID)
+- **Non-blocking Bid Holds:** Placing a bid locks the bid amount in the user's `heldBalance` without deducting it immediately, maintaining maximum available balance visibility.
+- **Instant Releases:** If outbid, the system automatically frees the held funds instantly.
+- **Atomic Captures:** Upon auction completion, funds are captured from the winner and transferred to the seller via multi-document MongoDB transactions ensuring absolute consistency.
 
-## License
+### 📧 Scalable Event-Driven Notifications
+- **Outbox Pattern Worker:** Prevents data loss during network hiccups by committing notification events to the DB first. A background job polls and publishes them to RabbitMQ.
+- **Asynchronous Processing:** Heavy tasks like rendering Handlebars HTML templates and sending emails (Auction won, deposit receipt, password reset) are offloaded to asynchronous background consumers.
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+### ⚡ Real-Time GraphQL Subscriptions
+- **GraphQL-WS Handshake Validation:** Secures WebSocket connections by verifying JWT and lookup user state (active, banned, deleted) during handshake, rejecting invalid sockets.
+- **Real-Time Bids & Updates:** Live bidding and notifications are pushed instantly to clients using GraphQL Subscriptions backed by **Redis Pub/Sub** for cross-instance scaling.
+
+### ☁️ Cloud Media Integration
+- **Cloudinary Integration:** Scalable image hosting and optimization for auction items.
+
+---
+
+## 🤝 Contributing
+Contributions are always welcome! Please follow these steps:
+1. Fork the repository.
+2. Create a new branch (`git checkout -b feature/amazing-feature`).
+3. Commit your changes (`git commit -m 'Add amazing feature'`).
+4. Push to the branch (`git push origin feature/amazing-feature`).
+5. Open a Pull Request.
+
+## 👨‍💻 Author
+**Adham Mohamed**
+- GitHub: [@adhamdr1](https://github.com/adhamdr1)
+- LinkedIn: [Adham Mohamed](https://www.linkedin.com/in/adham-mohamed74/)
+
+---
+<div align="center">
+⭐ Star this repository if you find it helpful!
+</div>
