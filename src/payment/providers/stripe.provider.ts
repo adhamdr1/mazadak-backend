@@ -6,8 +6,10 @@ import {
   PaymentCreationResult,
   RefundPaymentData,
   PaymentStatusResult,
+  ExtractedWebhookData,
 } from '../interfaces/payment-provider.interface';
 import { PaymentStatus } from '../enums/payment-status.enum';
+import { StripeWebhookEvent } from '../constants/webhook-event-constants';
 import Stripe from 'stripe';
 
 @Injectable()
@@ -17,15 +19,15 @@ export class StripeProvider implements IPaymentProvider {
   private endpointSecret: string;
 
   constructor(private readonly configService: ConfigService) {
-    this.stripe = new Stripe(
-      this.configService.get<string>('STRIPE_SECRET_KEY') || 'sk_test_mock',
-      {
-        apiVersion:
-          '2024-06-20' as unknown as Stripe.StripeConfig['apiVersion'],
-      },
+    const secret = this.configService.getOrThrow<string>('STRIPE_SECRET_KEY');
+
+    this.stripe = new Stripe(secret, {
+      apiVersion: Stripe.API_VERSION,
+    });
+
+    this.endpointSecret = this.configService.getOrThrow<string>(
+      'STRIPE_WEBHOOK_SECRET',
     );
-    this.endpointSecret =
-      this.configService.get<string>('STRIPE_WEBHOOK_SECRET') || 'whsec_mock';
   }
 
   async createPayment(data: CreatePaymentData): Promise<PaymentCreationResult> {
@@ -136,5 +138,33 @@ export class StripeProvider implements IPaymentProvider {
       );
       throw err;
     }
+  }
+
+  extractWebhookData(payload: Record<string, unknown>): ExtractedWebhookData {
+    const stripePayload = payload as {
+      type?: string;
+      data?: {
+        object?: {
+          metadata?: { transactionId?: string };
+          amount?: number;
+          currency?: string;
+        };
+      };
+    };
+
+    const eventType = stripePayload.type;
+    const dataObj = stripePayload.data?.object;
+    const transactionId = dataObj?.metadata?.transactionId;
+    const isSuccess = eventType === StripeWebhookEvent.PaymentIntentSucceeded;
+    const amountMinorUnits = Number(dataObj?.amount || 0);
+    const rawCurrency = dataObj?.currency;
+    const currency = String(rawCurrency || 'EGP').toUpperCase();
+
+    return {
+      transactionId,
+      isSuccess,
+      amountMinorUnits,
+      currency,
+    };
   }
 }

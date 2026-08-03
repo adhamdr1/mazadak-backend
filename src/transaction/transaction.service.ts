@@ -18,6 +18,7 @@ import { TransactionNotFoundException } from '../payment/exceptions/transaction-
 import { UsersService } from '../users/users.service';
 import { TransactionAmountMismatchException } from '../payment/exceptions/transaction-amount-mismatch.exception';
 import { TransactionCurrencyMismatchException } from '../payment/exceptions/transaction-currency-mismatch.exception';
+import Decimal from 'decimal.js';
 
 @Injectable()
 export class TransactionService {
@@ -27,6 +28,7 @@ export class TransactionService {
     @Inject('IWalletRepository')
     private readonly walletRepository: IWalletRepository,
     private readonly usersService: UsersService,
+    private readonly outboxService: OutboxService,
   ) {}
 
   async createTransaction(
@@ -36,6 +38,18 @@ export class TransactionService {
     return this.transactionRepository.create(data, session);
   }
 
+  async updateGatewayPaymentIntentId(
+    id: string,
+    gatewayPaymentIntentId: string,
+    session?: ClientSession,
+  ): Promise<Transaction | null> {
+    return this.transactionRepository.updateGatewayPaymentIntentId(
+      id,
+      gatewayPaymentIntentId,
+      session,
+    );
+  }
+
   // ─── Payment Webhook Processing ──────────────────────────────────────────────
 
   async updateTransactionStatusAndEmitOutbox(
@@ -43,12 +57,13 @@ export class TransactionService {
     status: TransactionStatus,
     webhookAmount: number, // in minor units
     webhookCurrency: string,
-    outboxService: OutboxService,
     session: ClientSession,
   ): Promise<void> {
-    // 1. Fetch transaction
-    const transaction =
-      await this.transactionRepository.findById(transactionId);
+    // 1. Fetch transaction within session
+    const transaction = await this.transactionRepository.findById(
+      transactionId,
+      session,
+    );
     if (!transaction) {
       throw new TransactionNotFoundException();
     }
@@ -59,8 +74,8 @@ export class TransactionService {
     }
 
     // Validate amount and currency (converting webhook minor units to major units)
-    const expectedAmount = webhookAmount / 100;
-    if (transaction.amount !== expectedAmount) {
+    const expectedAmount = new Decimal(webhookAmount).div(100).toNumber();
+    if (!new Decimal(transaction.amount).equals(expectedAmount)) {
       throw new TransactionAmountMismatchException(
         transaction.amount,
         expectedAmount,
@@ -132,7 +147,7 @@ export class TransactionService {
           ? [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User'
           : 'User';
 
-        await outboxService.saveEvent(
+        await this.outboxService.saveEvent(
           RabbitMQEvent.WalletDeposited,
           {
             userId: wallet.userId.toString(),

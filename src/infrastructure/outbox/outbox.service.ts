@@ -27,7 +27,7 @@ export class OutboxService {
   async saveEvent(
     eventType: RabbitMQEvent,
     payload: RabbitMQEventPayload,
-    session: ClientSession,
+    session?: ClientSession,
     correlationId?: string,
   ): Promise<void> {
     await this.outboxModel.create(
@@ -40,7 +40,7 @@ export class OutboxService {
           publishedAt: null,
         },
       ],
-      { session },
+      session ? { session } : undefined,
     );
   }
 }

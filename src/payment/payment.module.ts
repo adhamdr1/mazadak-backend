@@ -15,6 +15,7 @@ import { OutboxModule } from '../infrastructure/outbox/outbox.module';
 import { WalletModule } from '../wallet/wallet.module';
 import { WebhookConsumer } from './consumers/webhook.consumer';
 import { ReconciliationService } from './reconciliation.service';
+import { PaymentExpirationService } from './payment-expiration.service';
 import { MongoWebhookEventRepository } from './repositories/mongo.webhook-event.repository';
 import { UsersModule } from '../users/users.module';
 
@@ -37,6 +38,7 @@ import { UsersModule } from '../users/users.module';
     PaymobProvider,
     WebhookConsumer,
     ReconciliationService,
+    PaymentExpirationService,
     {
       provide: 'IWebhookEventRepository',
       useClass: MongoWebhookEventRepository,

@@ -7,6 +7,7 @@ import { MongoWalletRepository } from './repositories/mongo.wallet.repository';
 import { TransactionModule } from '../transaction/transaction.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { UsersModule } from '../users/users.module';
+import { OutboxModule } from '../infrastructure/outbox/outbox.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { UsersModule } from '../users/users.module';
     TransactionModule,
     NotificationsModule,
     UsersModule,
+    OutboxModule,
   ],
   providers: [
     WalletResolver,

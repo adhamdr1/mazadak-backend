@@ -23,6 +23,7 @@ import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
 import { RedisService } from '../infrastructure/redis/redis.service';
 import { OutboxService } from '../infrastructure/outbox/outbox.service';
 import { RabbitMQEvent } from '../infrastructure/rabbitmq/rabbitmq-event.types';
+import Decimal from 'decimal.js';
 
 const ACTIVE_AUCTIONS_PATTERN = 'auction:active:*';
 
@@ -68,7 +69,9 @@ export class BidsService {
     }
 
     const minimumRequired = currentWinner
-      ? auction.currentPrice + auction.minimumBidIncrement
+      ? new Decimal(auction.currentPrice)
+          .plus(auction.minimumBidIncrement)
+          .toNumber()
       : auction.startingPrice;
 
     if (input.amount < minimumRequired) {

@@ -7,6 +7,7 @@ import { MongoTransactionRepository } from './repositories/mongo.transaction.rep
 import { Wallet, WalletSchema } from '../wallet/entities/wallet.entity';
 import { MongoWalletRepository } from '../wallet/repositories/mongo.wallet.repository';
 import { UsersModule } from '../users/users.module';
+import { OutboxModule } from '../infrastructure/outbox/outbox.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { UsersModule } from '../users/users.module';
       { name: Wallet.name, schema: WalletSchema },
     ]),
     UsersModule,
+    OutboxModule,
   ],
   providers: [
     TransactionResolver,

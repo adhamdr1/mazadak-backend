@@ -17,8 +17,8 @@ import { TransactionStatus } from '../transaction/enums/transaction-status.enum'
 import { randomUUID } from 'crypto';
 import { type IWebhookEventRepository } from './interfaces/webhook-event.repository.interface';
 import { WebhookSignatureVerificationFailedException } from './exceptions/webhook-signature-verification-failed.exception';
-import { StripeWebhookEvent } from './constants/webhook-event-constants';
 import { UsersService } from '../users/users.service';
+import Decimal from 'decimal.js';
 
 @Injectable()
 export class PaymentService {
@@ -130,48 +130,16 @@ export class PaymentService {
       session.startTransaction();
 
       // Extract transaction ID from payload based on provider
-      let internalTransactionId: string | undefined;
-      let isSuccess = false;
-      let webhookAmount = 0;
-      let webhookCurrency = 'EGP';
+      const paymentProvider = this.providerFactory.getProvider(
+        provider as PaymentProviderType,
+      );
 
-      if ((provider as PaymentProviderType) === PaymentProviderType.STRIPE) {
-        const stripePayload = payload as {
-          data?: {
-            object?: {
-              metadata?: { transactionId?: string };
-              amount?: number;
-              currency?: string;
-            };
-          };
-          type?: string;
-        };
-        internalTransactionId =
-          stripePayload.data?.object?.metadata?.transactionId;
-        isSuccess =
-          stripePayload.type === StripeWebhookEvent.PaymentIntentSucceeded;
-        webhookAmount = Number(stripePayload.data?.object?.amount || 0);
-
-        const rawCurrency = stripePayload.data?.object?.currency;
-        webhookCurrency = String(rawCurrency || 'EGP').toUpperCase();
-      } else if (
-        (provider as PaymentProviderType) === PaymentProviderType.PAYMOB
-      ) {
-        const paymobPayload = payload as {
-          obj?: {
-            order?: { merchant_order_id?: string };
-            success?: boolean;
-            amount_cents?: number;
-            currency?: string;
-          };
-        };
-        internalTransactionId = paymobPayload.obj?.order?.merchant_order_id;
-        isSuccess = paymobPayload.obj?.success === true;
-        webhookAmount = Number(paymobPayload.obj?.amount_cents || 0);
-
-        const rawCurrency = paymobPayload.obj?.currency;
-        webhookCurrency = String(rawCurrency || 'EGP').toUpperCase();
-      }
+      const {
+        transactionId: internalTransactionId,
+        isSuccess,
+        amountMinorUnits: webhookAmount,
+        currency: webhookCurrency,
+      } = paymentProvider.extractWebhookData(payload);
 
       if (!internalTransactionId) {
         this.logger.warn(
@@ -184,7 +152,6 @@ export class PaymentService {
           isSuccess ? TransactionStatus.SUCCESS : TransactionStatus.FAILED,
           webhookAmount,
           webhookCurrency,
-          this.outboxService,
           session,
         );
         this.logger.log(
@@ -223,15 +190,27 @@ export class PaymentService {
     userId: string,
     data: InitializePaymentDto,
   ): Promise<PaymentInitResult> {
-    const session = await this.connection.startSession();
+    const idempotencyKey = randomUUID();
+
+    const wallet = await this.walletService.getWalletByUserId(userId);
+    const user = await this.usersService.findById(userId);
+
+    // 1. Create PENDING transaction in DB first
+    const transaction = await this.transactionService.createTransaction({
+      walletId: wallet._id.toString(),
+      type: TransactionType.DEPOSIT,
+      amount: new Decimal(data.amount).div(100).toNumber(), // convert minor units to major units
+      currency: data.currency,
+      status: TransactionStatus.PENDING,
+      idempotencyKey,
+      gatewayProvider: data.provider,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hour expiry
+    });
+
+    const transactionId = transaction._id.toString();
+
+    // 2. Call external payment provider outside DB transaction
     try {
-      session.startTransaction();
-
-      const idempotencyKey = randomUUID();
-
-      const wallet = await this.walletService.getWalletByUserId(userId);
-      const user = await this.usersService.findById(userId);
-
       const provider = this.providerFactory.getProvider(data.provider);
       const gatewayResult = await provider.createPayment({
         amount: data.amount,
@@ -240,28 +219,18 @@ export class PaymentService {
         metadata: {
           userId,
           walletId: wallet._id.toString(),
+          transactionId,
         },
         email: user?.email,
         firstName: user?.firstName,
         lastName: user?.lastName,
       });
 
-      await this.transactionService.createTransaction(
-        {
-          walletId: wallet._id.toString(),
-          type: TransactionType.DEPOSIT,
-          amount: data.amount / 100, // convert minor units to major units
-          currency: data.currency,
-          status: TransactionStatus.PENDING,
-          idempotencyKey,
-          gatewayPaymentIntentId: gatewayResult.gatewayPaymentIntentId,
-          gatewayProvider: data.provider,
-          expiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hour expiry
-        },
-        session,
+      // 3. Attach gatewayPaymentIntentId to the transaction record
+      await this.transactionService.updateGatewayPaymentIntentId(
+        transactionId,
+        gatewayResult.gatewayPaymentIntentId,
       );
-
-      await session.commitTransaction();
 
       return {
         gatewayPaymentIntentId: gatewayResult.gatewayPaymentIntentId,
@@ -270,10 +239,10 @@ export class PaymentService {
         idempotencyKey,
       };
     } catch (err) {
-      await session.abortTransaction();
+      this.logger.error(
+        `Failed to create gateway payment for transaction ${transactionId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
       throw err;
-    } finally {
-      await session.endSession();
     }
   }
 }

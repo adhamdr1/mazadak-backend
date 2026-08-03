@@ -26,7 +26,13 @@ export interface ITransactionRepository {
     session?: ClientSession,
   ): Promise<Transaction>;
 
-  findById(id: string): Promise<Transaction | null>;
+  findById(id: string, session?: ClientSession): Promise<Transaction | null>;
+
+  updateGatewayPaymentIntentId(
+    id: string,
+    gatewayPaymentIntentId: string,
+    session?: ClientSession,
+  ): Promise<Transaction | null>;
 
   findByWalletId(
     walletId: string,

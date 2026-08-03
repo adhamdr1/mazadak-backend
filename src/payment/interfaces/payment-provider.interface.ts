@@ -29,6 +29,13 @@ export interface RefundPaymentData {
   reason?: string;
 }
 
+export interface ExtractedWebhookData {
+  transactionId?: string;
+  isSuccess: boolean;
+  amountMinorUnits: number;
+  currency: string;
+}
+
 export interface IPaymentProvider {
   createPayment(data: CreatePaymentData): Promise<PaymentCreationResult>;
 
@@ -43,4 +50,6 @@ export interface IPaymentProvider {
   getPaymentStatus(
     gatewayPaymentIntentId: string,
   ): Promise<PaymentStatusResult>;
+
+  extractWebhookData(payload: Record<string, unknown>): ExtractedWebhookData;
 }

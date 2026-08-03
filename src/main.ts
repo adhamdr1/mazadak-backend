@@ -37,7 +37,7 @@ async function bootstrap() {
   // We add verify hook to preserve rawBody for signature verification
   app.use(
     express.json({
-      limit: '50mb',
+      limit: '1mb',
       verify: (
         req: IncomingMessage & { rawBody?: Buffer },
         _res: ServerResponse,
@@ -49,7 +49,7 @@ async function bootstrap() {
   );
   app.use(
     express.urlencoded({
-      limit: '50mb',
+      limit: '1mb',
       extended: true,
       verify: (
         req: IncomingMessage & { rawBody?: Buffer },

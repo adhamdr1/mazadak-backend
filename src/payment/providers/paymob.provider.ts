@@ -10,6 +10,7 @@ import {
   PaymentCreationResult,
   RefundPaymentData,
   PaymentStatusResult,
+  ExtractedWebhookData,
 } from '../interfaces/payment-provider.interface';
 import { PaymentStatus } from '../enums/payment-status.enum';
 import axios from 'axios';
@@ -244,5 +245,32 @@ export class PaymobProvider implements IPaymentProvider {
       );
       throw err;
     }
+  }
+
+  extractWebhookData(payload: Record<string, unknown>): ExtractedWebhookData {
+    const paymobPayload = payload as {
+      obj?: {
+        order?: { merchant_order_id?: string };
+        merchant_order_id?: string;
+        success?: boolean | string;
+        amount_cents?: number;
+        currency?: string;
+      };
+    };
+    const obj = paymobPayload.obj;
+    const transactionId =
+      obj?.order?.merchant_order_id ?? obj?.merchant_order_id;
+    const success = obj?.success;
+    const isSuccess = success === true || success === 'true';
+    const amountMinorUnits = Number(obj?.amount_cents || 0);
+    const rawCurrency = obj?.currency;
+    const currency = String(rawCurrency || 'EGP').toUpperCase();
+
+    return {
+      transactionId,
+      isSuccess,
+      amountMinorUnits,
+      currency,
+    };
   }
 }

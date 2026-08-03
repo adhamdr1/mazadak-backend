@@ -7,6 +7,7 @@ import { Types } from 'mongoose';
 import { TransactionsFilterInput } from './dto/transactions-filter.input';
 import { PaginationInput } from '../common/dto/pagination.input';
 import { UsersService } from '../users/users.service';
+import { OutboxService } from '../infrastructure/outbox/outbox.service';
 
 const mockTransactionRepository = {
   create: jest.fn(),
@@ -27,6 +28,10 @@ const mockUsersService = {
   findById: jest.fn(),
 };
 
+const mockOutboxService = {
+  saveEvent: jest.fn(),
+};
+
 describe('TransactionService', () => {
   let service: TransactionService;
 
@@ -40,6 +45,7 @@ describe('TransactionService', () => {
         },
         { provide: 'IWalletRepository', useValue: mockWalletRepository },
         { provide: UsersService, useValue: mockUsersService },
+        { provide: OutboxService, useValue: mockOutboxService },
       ],
     }).compile();
 
@@ -187,7 +193,6 @@ describe('TransactionService', () => {
           TransactionStatus.SUCCESS,
           1000,
           'EGP',
-          mockOutboxService as unknown as any,
           {} as unknown as any,
         ),
       ).rejects.toThrow('TRANSACTION_NOT_FOUND');
@@ -204,7 +209,6 @@ describe('TransactionService', () => {
         TransactionStatus.SUCCESS,
         1000,
         'EGP',
-        mockOutboxService as unknown as any,
         {} as unknown as any,
       );
 
@@ -225,7 +229,6 @@ describe('TransactionService', () => {
           TransactionStatus.SUCCESS,
           1000, // 10 EGP
           'EGP',
-          mockOutboxService as unknown as any,
           {} as unknown as any,
         ),
       ).rejects.toThrow('TRANSACTION_AMOUNT_MISMATCH');
@@ -245,7 +248,6 @@ describe('TransactionService', () => {
           TransactionStatus.SUCCESS,
           1000,
           'USD',
-          mockOutboxService as unknown as any,
           {} as unknown as any,
         ),
       ).rejects.toThrow('TRANSACTION_CURRENCY_MISMATCH');
@@ -269,7 +271,6 @@ describe('TransactionService', () => {
         TransactionStatus.SUCCESS,
         1000,
         'EGP',
-        mockOutboxService as unknown as any,
         {} as unknown as any,
       );
 
@@ -307,7 +308,6 @@ describe('TransactionService', () => {
         TransactionStatus.SUCCESS,
         1000,
         'EGP',
-        mockOutboxService as unknown as any,
         {} as unknown as any,
       );
 

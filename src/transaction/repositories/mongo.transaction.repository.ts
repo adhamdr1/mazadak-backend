@@ -42,9 +42,29 @@ export class MongoTransactionRepository implements ITransactionRepository {
     return transaction.save({ session });
   }
 
-  async findById(id: string): Promise<Transaction | null> {
+  async findById(
+    id: string,
+    session?: ClientSession,
+  ): Promise<Transaction | null> {
     if (!Types.ObjectId.isValid(id)) return null;
-    return this.transactionModel.findById(id).exec();
+    return this.transactionModel
+      .findById(id)
+      .session(session ?? null)
+      .exec();
+  }
+
+  async updateGatewayPaymentIntentId(
+    id: string,
+    gatewayPaymentIntentId: string,
+    session?: ClientSession,
+  ): Promise<Transaction | null> {
+    return this.transactionModel
+      .findByIdAndUpdate(
+        id,
+        { $set: { gatewayPaymentIntentId } },
+        { new: true, session },
+      )
+      .exec();
   }
 
   private buildFilterQuery(

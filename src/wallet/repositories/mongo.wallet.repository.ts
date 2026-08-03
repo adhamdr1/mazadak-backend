@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Model, Types } from 'mongoose';
 import { IWalletRepository } from '../interfaces/wallet.repository.interface';
 import { Wallet, WalletDocument } from '../entities/wallet.entity';
+import Decimal from 'decimal.js';
 
 @Injectable()
 export class MongoWalletRepository implements IWalletRepository {
@@ -49,7 +50,9 @@ export class MongoWalletRepository implements IWalletRepository {
         },
       },
     ]);
-    return result.length > 0 ? Number(result[0].totalBalance) : 0;
+    return result.length > 0
+      ? new Decimal(result[0].totalBalance).toNumber()
+      : 0;
   }
 
   // Deposit: no condition needed, always safe to credit.
@@ -58,10 +61,11 @@ export class MongoWalletRepository implements IWalletRepository {
     amount: number,
     session?: ClientSession,
   ): Promise<Wallet | null> {
+    const cleanAmount = new Decimal(amount).toNumber();
     return await this.walletModel
       .findByIdAndUpdate(
         new Types.ObjectId(walletId),
-        { $inc: { balance: amount } },
+        { $inc: { balance: cleanAmount } },
         { returnDocument: 'after', session },
       )
       .exec();
@@ -73,15 +77,16 @@ export class MongoWalletRepository implements IWalletRepository {
     amount: number,
     session?: ClientSession,
   ): Promise<Wallet | null> {
+    const cleanAmount = new Decimal(amount).toNumber();
     return await this.walletModel
       .findOneAndUpdate(
         {
           _id: new Types.ObjectId(walletId),
           $expr: {
-            $gte: [{ $subtract: ['$balance', '$heldBalance'] }, amount],
+            $gte: [{ $subtract: ['$balance', '$heldBalance'] }, cleanAmount],
           },
         },
-        { $inc: { balance: -amount } },
+        { $inc: { balance: -cleanAmount } },
         { returnDocument: 'after', session },
       )
       .exec();
@@ -93,15 +98,16 @@ export class MongoWalletRepository implements IWalletRepository {
     amount: number,
     session?: ClientSession,
   ): Promise<Wallet | null> {
+    const cleanAmount = new Decimal(amount).toNumber();
     return await this.walletModel
       .findOneAndUpdate(
         {
           _id: new Types.ObjectId(walletId),
           $expr: {
-            $gte: [{ $subtract: ['$balance', '$heldBalance'] }, amount],
+            $gte: [{ $subtract: ['$balance', '$heldBalance'] }, cleanAmount],
           },
         },
-        { $inc: { heldBalance: amount } },
+        { $inc: { heldBalance: cleanAmount } },
         { returnDocument: 'after', session },
       )
       .exec();
@@ -113,13 +119,14 @@ export class MongoWalletRepository implements IWalletRepository {
     amount: number,
     session?: ClientSession,
   ): Promise<Wallet | null> {
+    const cleanAmount = new Decimal(amount).toNumber();
     return await this.walletModel
       .findOneAndUpdate(
         {
           _id: new Types.ObjectId(walletId),
-          $expr: { $gte: ['$heldBalance', amount] },
+          $expr: { $gte: ['$heldBalance', cleanAmount] },
         },
-        { $inc: { heldBalance: -amount } },
+        { $inc: { heldBalance: -cleanAmount } },
         { returnDocument: 'after', session },
       )
       .exec();
@@ -131,13 +138,14 @@ export class MongoWalletRepository implements IWalletRepository {
     amount: number,
     session?: ClientSession,
   ): Promise<Wallet | null> {
+    const cleanAmount = new Decimal(amount).toNumber();
     return await this.walletModel
       .findOneAndUpdate(
         {
           _id: new Types.ObjectId(walletId),
-          $expr: { $gte: ['$heldBalance', amount] },
+          $expr: { $gte: ['$heldBalance', cleanAmount] },
         },
-        { $inc: { balance: -amount, heldBalance: -amount } },
+        { $inc: { balance: -cleanAmount, heldBalance: -cleanAmount } },
         { returnDocument: 'after', session },
       )
       .exec();

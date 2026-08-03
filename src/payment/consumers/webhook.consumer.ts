@@ -6,7 +6,13 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as amqplib from 'amqplib';
-import { PAYMENTS_WEBHOOK_QUEUE } from '../../infrastructure/rabbitmq/rabbitmq.constants';
+import {
+  PAYMENTS_WEBHOOK_QUEUE,
+  RETRY_QUEUE_5S,
+  RETRY_QUEUE_30S,
+  RETRY_QUEUE_2M,
+  X_RETRY_COUNT,
+} from '../../infrastructure/rabbitmq/rabbitmq.constants';
 import {
   RabbitMQParsedMessage,
   RabbitMQEvent,
@@ -52,12 +58,7 @@ export class WebhookConsumer implements OnModuleInit, OnModuleDestroy {
           this.channel?.ack(msg);
         } catch (error: unknown) {
           const err = error as Error;
-          this.logger.error(
-            `Failed to process webhook message: ${err.message}`,
-            err.stack,
-          );
-          // Reject and do not requeue to route it to Dead Letter Queue (DLQ)
-          this.channel?.nack(msg, false, false);
+          this.handleProcessingError(msg, err);
         }
       });
 
@@ -67,6 +68,42 @@ export class WebhookConsumer implements OnModuleInit, OnModuleDestroy {
         'Failed to initialize WebhookConsumer RabbitMQ connection',
         err,
       );
+    }
+  }
+
+  private handleProcessingError(msg: amqplib.ConsumeMessage, err: Error): void {
+    if (!this.channel) return;
+
+    const headers = (msg.properties.headers as Record<string, unknown>) || {};
+    const retryCount = (Number(headers[X_RETRY_COUNT]) || 0) + 1;
+
+    let targetQueue: string | null = null;
+    if (retryCount === 1) {
+      targetQueue = RETRY_QUEUE_5S;
+    } else if (retryCount === 2) {
+      targetQueue = RETRY_QUEUE_30S;
+    } else if (retryCount === 3) {
+      targetQueue = RETRY_QUEUE_2M;
+    }
+
+    if (targetQueue) {
+      this.logger.warn(
+        `Webhook processing failed (attempt ${retryCount}). Re-queueing to ${targetQueue} for retry: ${err.message}`,
+      );
+      this.channel.sendToQueue(targetQueue, msg.content, {
+        headers: {
+          ...headers,
+          [X_RETRY_COUNT]: retryCount,
+        },
+      });
+      this.channel.ack(msg);
+    } else {
+      this.logger.error(
+        `Webhook processing failed after ${retryCount - 1} retries. Routing to Dead Letter Queue: ${err.message}`,
+        err.stack,
+      );
+      // Reject and do not requeue to route it to Dead Letter Queue (DLQ)
+      this.channel.nack(msg, false, false);
     }
   }
 
