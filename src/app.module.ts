@@ -29,6 +29,7 @@ import { AuctionsModule } from './auctions/auctions.module';
 import { UploadModule } from './upload/upload.module';
 import { BidsModule } from './bids/bids.module';
 import { AdminModule } from './admin/admin.module';
+import { PaymentModule } from './payment/payment.module';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from './users/users.service';
 import { PubSubModule } from './infrastructure/pubsub/pubsub.module';
@@ -164,6 +165,7 @@ import type { JwtPayload } from './auth/interfaces/jwt-payload.interface';
     UploadModule,
     BidsModule,
     AdminModule,
+    PaymentModule,
   ],
   providers: [
     // Global Authentication Guards

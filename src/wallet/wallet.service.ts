@@ -11,9 +11,10 @@ import { TransactionStatus } from '../transaction/enums/transaction-status.enum'
 import { Transaction } from '../transaction/entities/transaction.entity';
 import { WalletsPage } from './dto/wallets-page.type';
 import { PaginationInput } from '../common/dto/pagination.input';
-import { RabbitMQService } from '../infrastructure/rabbitmq/rabbitmq.service';
 import { RabbitMQEvent } from '../infrastructure/rabbitmq/rabbitmq-event.types';
 import { UsersService } from '../users/users.service';
+import { OutboxService } from '../infrastructure/outbox/outbox.service';
+import Decimal from 'decimal.js';
 
 @Injectable()
 export class WalletService {
@@ -23,14 +24,16 @@ export class WalletService {
     @Inject('IWalletRepository')
     private readonly walletRepository: IWalletRepository,
     private readonly transactionService: TransactionService,
-    private readonly rabbitMQService: RabbitMQService,
     private readonly usersService: UsersService,
+    private readonly outboxService: OutboxService,
   ) {}
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
 
   private validateAmount(amount: number): void {
-    if (amount <= 0) throw new InvalidAmountException();
+    if (!amount || new Decimal(amount).lessThanOrEqualTo(0)) {
+      throw new InvalidAmountException();
+    }
   }
 
   private async getWalletOrThrow(userId: string): Promise<Wallet> {
@@ -47,6 +50,7 @@ export class WalletService {
   private async executeWalletOp(params: {
     userId: string;
     amount: number;
+    currency?: string;
     type: TransactionType;
     operation: (
       walletId: string,
@@ -60,6 +64,7 @@ export class WalletService {
     this.validateAmount(params.amount);
     const wallet = await this.getWalletOrThrow(params.userId);
     const walletId = wallet._id.toString();
+    const currency = params.currency ?? 'EGP';
 
     let updated: Wallet | null = null;
 
@@ -72,19 +77,24 @@ export class WalletService {
         walletId,
         type: params.type,
         amount: params.amount,
+        currency,
         status: TransactionStatus.FAILED,
         referenceId: params.referenceId,
       });
       throw error;
     }
 
-    const transaction = await this.transactionService.createTransaction({
-      walletId,
-      type: params.type,
-      amount: params.amount,
-      status: TransactionStatus.SUCCESS,
-      referenceId: params.referenceId,
-    });
+    const transaction = await this.transactionService.createTransaction(
+      {
+        walletId,
+        type: params.type,
+        amount: params.amount,
+        currency,
+        status: TransactionStatus.SUCCESS,
+        referenceId: params.referenceId,
+      },
+      params.session,
+    );
 
     return { wallet: updated, transaction };
   }
@@ -136,10 +146,12 @@ export class WalletService {
     amount: number,
     referenceId?: string,
     session?: ClientSession,
+    currency?: string,
   ): Promise<{ wallet: Wallet; transaction: Transaction }> {
     const { wallet, transaction } = await this.executeWalletOp({
       userId,
       amount,
+      currency,
       type: TransactionType.DEPOSIT,
       referenceId,
       session,
@@ -154,13 +166,16 @@ export class WalletService {
     // If referenceId is present, it's a system action (like winning an auction),
     // and the user will already receive a context-specific email (e.g., Auction Won).
     if (!referenceId) {
-      this.notifyDeposit(userId, amount, transaction._id.toString()).catch(
-        (err) => {
-          this.logger.error(
-            `Failed to send deposit email: ${err instanceof Error ? err.message : String(err)}`,
-          );
-        },
-      );
+      this.notifyDeposit(
+        userId,
+        amount,
+        transaction._id.toString(),
+        session,
+      ).catch((err) => {
+        this.logger.error(
+          `Failed to queue deposit notification: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
     }
 
     return { wallet, transaction };
@@ -188,13 +203,16 @@ export class WalletService {
     // Only send the generic withdrawal email if this is a manual withdrawal.
     if (!referenceId) {
       // Pass created MongoDB Transaction _id to email!
-      this.notifyWithdrawal(userId, amount, transaction._id.toString()).catch(
-        (err) => {
-          this.logger.error(
-            `Failed to send withdrawal email for user ${userId}: ${err instanceof Error ? err.message : String(err)}`,
-          );
-        },
-      );
+      this.notifyWithdrawal(
+        userId,
+        amount,
+        transaction._id.toString(),
+        session,
+      ).catch((err) => {
+        this.logger.error(
+          `Failed to queue withdrawal notification for user ${userId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
     }
 
     return { wallet, transaction };
@@ -204,6 +222,7 @@ export class WalletService {
     userId: string,
     amount: number,
     transactionId?: string,
+    session?: ClientSession,
   ): Promise<void> {
     const user = await this.usersService.findById(userId);
     if (!user) return;
@@ -211,19 +230,25 @@ export class WalletService {
     const name =
       [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
 
-    await this.rabbitMQService.publish(RabbitMQEvent.WalletDeposited, {
-      userId,
-      email: user.email,
-      name,
-      amount,
-      transactionId: transactionId || 'N/A',
-    });
+    await this.outboxService.saveEvent(
+      RabbitMQEvent.WalletDeposited,
+      {
+        userId,
+        email: user.email,
+        name,
+        amount,
+        transactionId: transactionId || 'N/A',
+      },
+      session,
+      transactionId,
+    );
   }
 
   private async notifyWithdrawal(
     userId: string,
     amount: number,
     transactionId?: string,
+    session?: ClientSession,
   ): Promise<void> {
     const user = await this.usersService.findById(userId);
     if (!user) return;
@@ -231,13 +256,18 @@ export class WalletService {
     const name =
       [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
 
-    await this.rabbitMQService.publish(RabbitMQEvent.WithdrawalCompleted, {
-      userId,
-      email: user.email,
-      name,
-      amount,
-      transactionId: transactionId || 'N/A',
-    });
+    await this.outboxService.saveEvent(
+      RabbitMQEvent.WithdrawalCompleted,
+      {
+        userId,
+        email: user.email,
+        name,
+        amount,
+        transactionId: transactionId || 'N/A',
+      },
+      session,
+      transactionId,
+    );
   }
 
   // ─── Internal (called by AuctionService) ─────────────────────────────────────

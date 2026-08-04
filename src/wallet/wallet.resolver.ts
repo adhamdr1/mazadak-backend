@@ -19,6 +19,7 @@ import { DepositInput } from './dto/deposit.input';
 import { WithdrawInput } from './dto/withdraw.input';
 import { WalletsPage } from './dto/wallets-page.type';
 import { PaginationInput } from '../common/dto/pagination.input';
+import Decimal from 'decimal.js';
 
 @Resolver(() => Wallet)
 @UseGuards(JwtAuthGuard)
@@ -50,7 +51,7 @@ export class WalletResolver {
 
   @ResolveField(() => Number, { name: 'availableBalance' })
   availableBalance(@Parent() wallet: Wallet): number {
-    return wallet.balance - wallet.heldBalance;
+    return new Decimal(wallet.balance).minus(wallet.heldBalance).toNumber();
   }
 
   // ─── Mutations (Mock — Stripe integration pending) ────────────────────────

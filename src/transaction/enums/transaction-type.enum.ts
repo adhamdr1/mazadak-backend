@@ -15,6 +15,9 @@ export enum TransactionType {
 
   // خصم الرصيد المجمد نهائياً عند الفوز بالمزاد
   CAPTURE = 'CAPTURE',
+
+  // استرداد مبلغ مدفوع
+  REFUND = 'REFUND',
 }
 
 registerEnumType(TransactionType, {

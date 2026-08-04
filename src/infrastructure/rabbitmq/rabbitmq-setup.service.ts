@@ -1,4 +1,4 @@
-﻿import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as amqplib from 'amqplib';
 import {
@@ -8,6 +8,7 @@ import {
   RETRY_QUEUE_5S,
   RETRY_QUEUE_30S,
   RETRY_QUEUE_2M,
+  PAYMENTS_WEBHOOK_QUEUE,
 } from './rabbitmq.constants';
 
 /**
@@ -70,9 +71,21 @@ export class RabbitMQSetupService implements OnApplicationBootstrap {
       });
 
       // ── 5. Bindings ───────────────────────────────────────────────────────
-      // Route ALL events from the exchange to the notifications queue.
-      // Future queues (analytics, audit) would bind with their own routing keys.
       await channel.bindQueue(NOTIFICATIONS_QUEUE, MAZADAK_EXCHANGE, '#');
+
+      // ── 6. Payments Webhook Queue ─────────────────────────────────────────
+      await channel.assertQueue(PAYMENTS_WEBHOOK_QUEUE, {
+        durable: true,
+        arguments: {
+          'x-dead-letter-exchange': '',
+          'x-dead-letter-routing-key': DEAD_LETTER_QUEUE,
+        },
+      });
+      await channel.bindQueue(
+        PAYMENTS_WEBHOOK_QUEUE,
+        MAZADAK_EXCHANGE,
+        'PaymentWebhookReceived',
+      );
 
       this.logger.log('RabbitMQ topology asserted successfully');
     } catch (err) {

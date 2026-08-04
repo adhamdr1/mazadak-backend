@@ -42,6 +42,12 @@ export class TransactionsFilterInput {
   @IsAfter('startDate')
   endDate?: Date;
 
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsDate()
+  @Type(() => Date)
+  expiresAtBefore?: Date;
+
   @Field(() => TransactionsSortInput, { nullable: true })
   @IsOptional()
   @ValidateNested()

@@ -6,6 +6,8 @@ import { Transaction, TransactionSchema } from './entities/transaction.entity';
 import { MongoTransactionRepository } from './repositories/mongo.transaction.repository';
 import { Wallet, WalletSchema } from '../wallet/entities/wallet.entity';
 import { MongoWalletRepository } from '../wallet/repositories/mongo.wallet.repository';
+import { UsersModule } from '../users/users.module';
+import { OutboxModule } from '../infrastructure/outbox/outbox.module';
 
 @Module({
   imports: [
@@ -14,6 +16,8 @@ import { MongoWalletRepository } from '../wallet/repositories/mongo.wallet.repos
       // مطلوب لـ MongoWalletRepository لجلب walletId من userId
       { name: Wallet.name, schema: WalletSchema },
     ]),
+    UsersModule,
+    OutboxModule,
   ],
   providers: [
     TransactionResolver,
@@ -27,6 +31,6 @@ import { MongoWalletRepository } from '../wallet/repositories/mongo.wallet.repos
       useClass: MongoWalletRepository,
     },
   ],
-  exports: [TransactionService],
+  exports: [TransactionService, 'ITransactionRepository'],
 })
 export class TransactionModule {}

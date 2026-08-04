@@ -1,4 +1,4 @@
-﻿// Injection token for the AMQP client proxy
+// Injection token for the AMQP client proxy
 export const RABBITMQ_CLIENT = 'RABBITMQ_CLIENT';
 
 // Exchange
@@ -7,6 +7,7 @@ export const MAZADAK_EXCHANGE = 'mazadak.events';
 // Queues
 export const NOTIFICATIONS_QUEUE = 'notifications.queue';
 export const DEAD_LETTER_QUEUE = 'dead.letter.queue';
+export const PAYMENTS_WEBHOOK_QUEUE = 'payments.webhook.queue';
 
 // Retry queues (TTL-based Exponential Backoff)
 export const RETRY_QUEUE_5S = 'retry.queue.5s';
