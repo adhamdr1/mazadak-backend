@@ -11,7 +11,7 @@
 
 **A highly scalable, robust, and event-driven backend system for a real-time auction and bidding platform. Built from the ground up using NestJS, GraphQL, and enterprise-grade Microservices patterns.**
 
-[💻 Quick Start & Installation](#-quick-start--installation) • [🎯 Overview](#-overview) • [🏗️ Architecture Flow](#️-architecture-flow) • [🗄️ Database Entities](#️-database-entities) • [✨ Key Technical Features](#-key-technical-features)
+[💻 Quick Start & Installation](#-quick-start--installation) • [🎯 Overview](#-overview) • [🏗️ Architecture Flow](#️-architecture-flow) • [🗄️ Database Entities](#️-database-entities) • [✨ Key Technical Features](#-key-technical-features) • [💳 Payment Integration](#-payment-gateway-integration)
 
 </div>
 
@@ -141,6 +141,137 @@ Our database schema is designed to handle financial transactions securely and ma
 - **Non-blocking Bid Holds:** Placing a bid locks the bid amount in the user's `heldBalance` without deducting it immediately, maintaining maximum available balance visibility.
 - **Instant Releases:** If outbid, the system automatically frees the held funds instantly.
 - **Atomic Captures:** Upon auction completion, funds are captured from the winner and transferred to the seller via multi-document MongoDB transactions ensuring absolute consistency.
+
+---
+
+## 💳 Payment Gateway Integration
+
+This is the most complex and technically demanding feature in the entire system. We built a **production-grade, fault-tolerant payment engine** from scratch, implementing multiple enterprise design patterns to guarantee absolute financial consistency — even under network failures, provider retries, or system crashes.
+
+### The Challenge
+
+Integrating a payment gateway is deceptively complex. The core problem is that **two separate systems** (our DB and the payment provider) must stay in sync. What happens if:
+- The payment provider charges the user, but our server crashes before saving the transaction?
+- The provider retries a webhook that we already processed?
+- A `PENDING` transaction is stuck because the webhook was never delivered?
+
+Each of these scenarios, if unhandled, leads to **real financial loss or data corruption**.
+
+### Our Solution: A Multi-Layer Financial Engine
+
+#### Layer 1 — Append-Only Ledger (Event Sourcing)
+
+Instead of updating a single transaction record (e.g., changing `PENDING` → `SUCCESS`), we **append a new immutable child record** that references the original via `referenceId`.
+
+```
+[PENDING] ← root record (created at initiation)
+    └── [SUCCESS] referenceId = PENDING._id  ← appended on success
+         or
+    └── [FAILED]  referenceId = PENDING._id  ← appended on failure
+```
+
+This means:
+- The ledger is **tamper-proof** and **append-only** — no record is ever mutated.
+- A full financial audit trail exists for every single operation.
+- The `hasChild` flag on the parent record tells us whether this transaction has been settled, without an expensive DB lookup.
+
+#### Layer 2 — Idempotent Webhook Processing
+
+Payment providers retry webhooks aggressively (sometimes 10+ times). Without idempotency, a user could be credited multiple times for one payment.
+
+We use a dedicated **`webhook_events` collection** as an idempotency store:
+
+```mermaid
+sequenceDiagram
+    participant PG as Payment Gateway
+    participant API as Our Webhook Handler
+    participant DB as MongoDB
+
+    PG->>API: POST /webhook {providerEventId: "evt_123"}
+    API->>DB: findOne({providerEventId: "evt_123"})
+    
+    alt Already exists and processed = true
+        DB-->>API: Found (processed)
+        API-->>PG: 200 OK (Idempotent — safe ignore)
+    else New or unprocessed
+        API->>DB: Start ACID Session
+        Note over DB: Atomically in one session:
+        DB->>DB: 1. Append child Transaction (SUCCESS/FAILED)
+        DB->>DB: 2. Credit wallet if SUCCESS DEPOSIT
+        DB->>DB: 3. Save WalletDeposited event to outbox
+        DB->>DB: 4. Mark webhook_event as processed = true
+        API->>DB: Commit Session
+        API-->>PG: 200 OK
+    end
+```
+
+#### Layer 3 — ACID Distributed Transactions (MongoDB Sessions)
+
+Every financial operation that involves multiple documents is wrapped in a **single MongoDB `ClientSession`**. This guarantees atomicity:
+
+> ✅ Either ALL of these succeed together, or NONE of them are saved.
+
+1. Append new `Transaction` record (child record with SUCCESS/FAILED status)
+2. Credit/Debit the user's `Wallet`
+3. Save the domain event to `outbox_events`
+4. Mark the `webhook_event` as processed
+
+If any single step throws an error, `session.abortTransaction()` rolls back the entire DB state — no partial writes, no ghost records.
+
+#### Layer 4 — Safety Net: Reconciliation & Expiration Workers
+
+Webhooks can fail to deliver entirely. We have two background Cron Jobs that act as a safety net:
+
+| Worker | Job | Interval |
+|---|---|---|
+| `PaymentExpirationWorker` | Finds `PENDING` transactions past their `expiresAt` date and marks them `EXPIRED` | Every hour |
+| `ReconciliationWorker` | Queries the payment provider's API directly to check the true status of unresolved `PENDING` transactions and reconciles them | Every hour |
+
+This ensures **zero transactions are left stuck in `PENDING` forever**, even if every webhook was lost.
+
+#### Layer 5 — Provider Factory Pattern (Strategy)
+
+The integration is built with extensibility in mind. Payment provider logic is abstracted behind an `IPaymentProvider` interface, and the correct provider is resolved at runtime via a `PaymentProviderFactory`:
+
+```
+PaymentService → PaymentProviderFactory.getProvider("PAYMOB")
+                                           ↓
+                              IPaymentProvider (interface)
+                                           ↓
+                          PaymobProvider implements IPaymentProvider
+```
+
+Adding a new gateway (Stripe, PayPal, etc.) requires **zero changes to core business logic** — just implement the interface and register the provider.
+
+### Data Flow: Initiating a Deposit
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant API as NestJS API
+    participant PG as Payment Gateway
+    participant DB as MongoDB
+
+    User->>API: initializePayment(amount)
+    API->>DB: Create PENDING Transaction (with idempotencyKey)
+    API->>PG: Create Payment Intent
+    
+    alt Gateway Error
+        PG-->>API: Error
+        API->>DB: Append FAILED Transaction (referenceId = PENDING._id)
+        API-->>User: Error (user can retry immediately)
+    else Gateway Success
+        PG-->>API: {paymentIntentId, redirectUrl}
+        API->>DB: Update PENDING tx with gatewayPaymentIntentId
+        API-->>User: {redirectUrl} (redirect to payment page)
+        
+        Note over User,PG: User completes payment on gateway's page
+        
+        PG->>API: POST /webhook (payment completed)
+        API->>DB: Append SUCCESS tx + Credit wallet (atomically)
+        API-->>PG: 200 OK
+    end
+```
 
 ### 📧 Scalable Event-Driven Notifications
 - **Outbox Pattern Worker:** Prevents data loss during network hiccups by committing notification events to the DB first. A background job polls and publishes them to RabbitMQ.

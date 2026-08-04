@@ -11,7 +11,6 @@ import { TransactionStatus } from '../transaction/enums/transaction-status.enum'
 import { TransactionType } from '../transaction/enums/transaction-type.enum';
 import { TransactionService } from '../transaction/transaction.service';
 import { PaymentStatus } from './enums/payment-status.enum';
-import Decimal from 'decimal.js';
 
 const RECONCILIATION_LOCK_KEY = 'reconciliation:lock';
 const LOCK_TTL_SECONDS = 60;
@@ -100,22 +99,18 @@ export class ReconciliationService {
               this.logger.log(
                 `Reconciliation: Transaction ${transaction._id.toString()} was SUCCESSFUL on gateway. Crediting wallet.`,
               );
-              await this.transactionService.updateTransactionStatusAndEmitOutbox(
+              await this.transactionService.updateTransactionStatusDirect(
                 transaction._id.toString(),
                 TransactionStatus.SUCCESS,
-                new Decimal(transaction.amount).mul(100).toNumber(),
-                transaction.currency,
                 session,
               );
             } else if (result.status === PaymentStatus.FAILED) {
               this.logger.log(
                 `Reconciliation: Transaction ${transaction._id.toString()} was FAILED/CANCELED on gateway.`,
               );
-              await this.transactionService.updateTransactionStatusAndEmitOutbox(
+              await this.transactionService.updateTransactionStatusDirect(
                 transaction._id.toString(),
                 TransactionStatus.FAILED,
-                new Decimal(transaction.amount).mul(100).toNumber(),
-                transaction.currency,
                 session,
               );
             }

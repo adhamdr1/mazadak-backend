@@ -84,14 +84,17 @@ export class WalletService {
       throw error;
     }
 
-    const transaction = await this.transactionService.createTransaction({
-      walletId,
-      type: params.type,
-      amount: params.amount,
-      currency,
-      status: TransactionStatus.SUCCESS,
-      referenceId: params.referenceId,
-    });
+    const transaction = await this.transactionService.createTransaction(
+      {
+        walletId,
+        type: params.type,
+        amount: params.amount,
+        currency,
+        status: TransactionStatus.SUCCESS,
+        referenceId: params.referenceId,
+      },
+      params.session,
+    );
 
     return { wallet: updated, transaction };
   }

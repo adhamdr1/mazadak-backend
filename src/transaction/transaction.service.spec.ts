@@ -16,6 +16,7 @@ const mockTransactionRepository = {
   findAll: jest.fn(),
   countAll: jest.fn(),
   findById: jest.fn(),
+  markHasChild: jest.fn(),
 };
 
 const mockWalletRepository = {

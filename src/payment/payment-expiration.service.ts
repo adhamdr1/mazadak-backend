@@ -4,7 +4,6 @@ import { Connection } from 'mongoose';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';
-import Decimal from 'decimal.js';
 import type { ITransactionRepository } from '../transaction/interfaces/transaction.repository.interface';
 import { TransactionService } from '../transaction/transaction.service';
 import { TransactionStatus } from '../transaction/enums/transaction-status.enum';
@@ -53,59 +52,50 @@ export class PaymentExpirationService {
 
       while (hasMore) {
         // Find PENDING deposit transactions where expiresAt <= now
-        const pendingTransactions = await this.transactionRepository.findAll(
+        const expiredTransactions = await this.transactionRepository.findAll(
           page,
           limit,
           {
             status: TransactionStatus.PENDING,
             type: TransactionType.DEPOSIT,
-            endDate: now,
+            expiresAtBefore: now,
           },
         );
 
-        if (pendingTransactions.length === 0) {
+        if (expiredTransactions.length === 0) {
           break;
         }
 
-        // Filter only transactions with explicit expiresAt passed
-        const trulyExpired = pendingTransactions.filter(
-          (t) => t.expiresAt && new Date(t.expiresAt) <= now,
+        this.logger.log(
+          `Expiration worker page ${page}: Found ${expiredTransactions.length} expired pending deposit(s). Marking as EXPIRED...`,
         );
 
-        if (trulyExpired.length > 0) {
-          this.logger.log(
-            `Expiration worker page ${page}: Found ${trulyExpired.length} expired pending deposit(s). Marking as EXPIRED...`,
-          );
+        for (const transaction of expiredTransactions) {
+          const session = await this.connection.startSession();
+          try {
+            session.startTransaction();
 
-          for (const transaction of trulyExpired) {
-            const session = await this.connection.startSession();
-            try {
-              session.startTransaction();
+            await this.transactionService.updateTransactionStatusDirect(
+              transaction._id.toString(),
+              TransactionStatus.EXPIRED,
+              session,
+            );
 
-              await this.transactionService.updateTransactionStatusAndEmitOutbox(
-                transaction._id.toString(),
-                TransactionStatus.EXPIRED,
-                new Decimal(transaction.amount).mul(100).toNumber(),
-                transaction.currency,
-                session,
-              );
-
-              await session.commitTransaction();
-              this.logger.log(
-                `Transaction ${transaction._id.toString()} successfully marked as EXPIRED.`,
-              );
-            } catch (err) {
-              await session.abortTransaction();
-              this.logger.error(
-                `Failed to expire transaction ${transaction._id.toString()}: ${err instanceof Error ? err.message : String(err)}`,
-              );
-            } finally {
-              await session.endSession();
-            }
+            await session.commitTransaction();
+            this.logger.log(
+              `Transaction ${transaction._id.toString()} successfully marked as EXPIRED.`,
+            );
+          } catch (err) {
+            await session.abortTransaction();
+            this.logger.error(
+              `Failed to expire transaction ${transaction._id.toString()}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          } finally {
+            await session.endSession();
           }
         }
 
-        if (pendingTransactions.length < limit) {
+        if (expiredTransactions.length < limit) {
           hasMore = false;
         } else {
           page++;

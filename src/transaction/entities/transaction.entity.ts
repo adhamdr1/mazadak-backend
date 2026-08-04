@@ -34,7 +34,7 @@ export class Transaction {
   amount!: number;
 
   @Field(() => String)
-  @Prop({ type: String, required: true, uppercase: true })
+  @Prop({ type: String, required: true, uppercase: true, default: 'EGP' })
   currency!: string;
 
   @Field(() => TransactionStatus)
@@ -72,6 +72,10 @@ export class Transaction {
   @Field(() => Date, { nullable: true })
   @Prop({ type: Date, default: null })
   expiresAt!: Date | null;
+
+  @Field(() => Boolean, { defaultValue: false })
+  @Prop({ type: Boolean, default: false, index: true })
+  hasChild!: boolean;
 
   @Field()
   readonly createdAt!: Date;

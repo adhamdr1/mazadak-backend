@@ -29,7 +29,6 @@ export class MongoTransactionRepository implements ITransactionRepository {
       walletId: new Types.ObjectId(data.walletId),
       type: data.type,
       amount: data.amount,
-      currency: data.currency,
       status: data.status,
       referenceId: data.referenceId ?? null,
       idempotencyKey: data.idempotencyKey ?? null,
@@ -38,6 +37,7 @@ export class MongoTransactionRepository implements ITransactionRepository {
       gatewayProvider: data.gatewayProvider ?? null,
       referenceType: data.referenceType ?? null,
       expiresAt: data.expiresAt ?? null,
+      hasChild: false,
     });
     return transaction.save({ session });
   }
@@ -46,10 +46,22 @@ export class MongoTransactionRepository implements ITransactionRepository {
     id: string,
     session?: ClientSession,
   ): Promise<Transaction | null> {
-    if (!Types.ObjectId.isValid(id)) return null;
     return this.transactionModel
       .findById(id)
       .session(session ?? null)
+      .exec();
+  }
+
+  async markHasChild(
+    id: string,
+    session?: ClientSession,
+  ): Promise<Transaction | null> {
+    return this.transactionModel
+      .findByIdAndUpdate(
+        id,
+        { $set: { hasChild: true } },
+        { new: true, session },
+      )
       .exec();
   }
 
@@ -65,6 +77,20 @@ export class MongoTransactionRepository implements ITransactionRepository {
         { new: true, session },
       )
       .exec();
+  }
+
+  private shouldApplyDefaultTransactionFilter(
+    filter?: TransactionsFilterInput,
+  ): boolean {
+    if (!filter) return true;
+    return !(
+      filter.status ||
+      filter.type ||
+      filter.search ||
+      filter.startDate ||
+      filter.endDate ||
+      filter.expiresAtBefore
+    );
   }
 
   private buildFilterQuery(
@@ -87,6 +113,10 @@ export class MongoTransactionRepository implements ITransactionRepository {
       query['createdAt'] = createdAtQuery;
     }
 
+    if (filter.expiresAtBefore) {
+      query['expiresAt'] = { $lte: filter.expiresAtBefore, $ne: null };
+    }
+
     return query;
   }
 
@@ -96,10 +126,17 @@ export class MongoTransactionRepository implements ITransactionRepository {
     limit: number,
     filter?: TransactionsFilterInput,
   ): Promise<Transaction[]> {
-    const query = this.buildFilterQuery(
+    const baseQuery = this.buildFilterQuery(
       { walletId: new Types.ObjectId(walletId) },
       filter,
     );
+
+    if (this.shouldApplyDefaultTransactionFilter(filter)) {
+      baseQuery['$or'] = [
+        { referenceId: { $ne: null } },
+        { referenceId: null, hasChild: false },
+      ];
+    }
 
     const sortParams: Record<string, 1 | -1> = {};
     if (filter?.sort) {
@@ -110,7 +147,7 @@ export class MongoTransactionRepository implements ITransactionRepository {
     }
 
     return this.transactionModel
-      .find(query)
+      .find(baseQuery)
       .sort(sortParams)
       .skip((page - 1) * limit)
       .limit(limit)
@@ -121,12 +158,19 @@ export class MongoTransactionRepository implements ITransactionRepository {
     walletId: string,
     filter?: TransactionsFilterInput,
   ): Promise<number> {
-    const query = this.buildFilterQuery(
+    const baseQuery = this.buildFilterQuery(
       { walletId: new Types.ObjectId(walletId) },
       filter,
     );
 
-    return this.transactionModel.countDocuments(query).exec();
+    if (this.shouldApplyDefaultTransactionFilter(filter)) {
+      baseQuery['$or'] = [
+        { referenceId: { $ne: null } },
+        { referenceId: null, hasChild: false },
+      ];
+    }
+
+    return this.transactionModel.countDocuments(baseQuery).exec();
   }
 
   async findAll(

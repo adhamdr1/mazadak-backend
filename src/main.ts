@@ -27,11 +27,16 @@ async function bootstrap() {
   app.use(
     helmet({
       crossOriginEmbedderPolicy: false,
-      contentSecurityPolicy: false,
+      contentSecurityPolicy:
+        process.env.NODE_ENV === 'production' ? undefined : false,
     }),
   );
 
-  app.enableCors();
+  app.enableCors({
+    origin: process.env.FRONTEND_URL || 'http://localhost:4000',
+    credentials: true,
+    methods: ['GET', 'POST', 'OPTIONS'],
+  });
 
   // Increase payload limit for Base64 image uploads (Default is 100kb, we set it to 50mb)
   // We add verify hook to preserve rawBody for signature verification

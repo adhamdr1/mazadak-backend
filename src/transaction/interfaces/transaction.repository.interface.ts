@@ -9,7 +9,7 @@ export interface CreateTransactionData {
   walletId: string;
   type: TransactionType;
   amount: number;
-  currency: string;
+  currency?: string;
   status: TransactionStatus;
   referenceId?: string;
   idempotencyKey?: string;
@@ -18,6 +18,7 @@ export interface CreateTransactionData {
   gatewayProvider?: string;
   referenceType?: TransactionReferenceType;
   expiresAt?: Date;
+  hasChild?: boolean;
 }
 
 export interface ITransactionRepository {
@@ -27,6 +28,11 @@ export interface ITransactionRepository {
   ): Promise<Transaction>;
 
   findById(id: string, session?: ClientSession): Promise<Transaction | null>;
+
+  markHasChild(
+    id: string,
+    session?: ClientSession,
+  ): Promise<Transaction | null>;
 
   updateGatewayPaymentIntentId(
     id: string,

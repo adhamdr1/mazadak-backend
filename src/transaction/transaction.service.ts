@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { ClientSession } from 'mongoose';
+import { ClientSession, Types } from 'mongoose';
 import { TransactionStatus } from './enums/transaction-status.enum';
 import { TransactionType } from './enums/transaction-type.enum';
 import { RabbitMQEvent } from '../infrastructure/rabbitmq/rabbitmq-event.types';
@@ -35,7 +35,13 @@ export class TransactionService {
     data: CreateTransactionData,
     session?: ClientSession,
   ): Promise<Transaction> {
-    return this.transactionRepository.create(data, session);
+    const transaction = await this.transactionRepository.create(data, session);
+
+    if (data.referenceId && Types.ObjectId.isValid(data.referenceId)) {
+      await this.transactionRepository.markHasChild(data.referenceId, session);
+    }
+
+    return transaction;
   }
 
   async updateGatewayPaymentIntentId(
@@ -43,6 +49,7 @@ export class TransactionService {
     gatewayPaymentIntentId: string,
     session?: ClientSession,
   ): Promise<Transaction | null> {
+    if (!Types.ObjectId.isValid(id)) return null;
     return this.transactionRepository.updateGatewayPaymentIntentId(
       id,
       gatewayPaymentIntentId,
@@ -52,13 +59,14 @@ export class TransactionService {
 
   // ─── Payment Webhook Processing ──────────────────────────────────────────────
 
-  async updateTransactionStatusAndEmitOutbox(
+  async updateTransactionStatusDirect(
     transactionId: string,
     status: TransactionStatus,
-    webhookAmount: number, // in minor units
-    webhookCurrency: string,
     session: ClientSession,
   ): Promise<void> {
+    if (!Types.ObjectId.isValid(transactionId)) {
+      throw new TransactionNotFoundException();
+    }
     // 1. Fetch transaction within session
     const transaction = await this.transactionRepository.findById(
       transactionId,
@@ -71,22 +79,6 @@ export class TransactionService {
     // 2. Prevent re-processing
     if (transaction.status !== TransactionStatus.PENDING) {
       return; // Already processed
-    }
-
-    // Validate amount and currency (converting webhook minor units to major units)
-    const expectedAmount = new Decimal(webhookAmount).div(100).toNumber();
-    if (!new Decimal(transaction.amount).equals(expectedAmount)) {
-      throw new TransactionAmountMismatchException(
-        transaction.amount,
-        expectedAmount,
-      );
-    }
-
-    if (transaction.currency.toUpperCase() !== webhookCurrency.toUpperCase()) {
-      throw new TransactionCurrencyMismatchException(
-        transaction.currency,
-        webhookCurrency,
-      );
     }
 
     // 3. Create status transition by appending a new transaction record
@@ -161,6 +153,47 @@ export class TransactionService {
         );
       }
     }
+  }
+
+  async updateTransactionStatusAndEmitOutbox(
+    transactionId: string,
+    status: TransactionStatus,
+    webhookAmount: number, // in minor units
+    webhookCurrency: string,
+    session: ClientSession,
+  ): Promise<void> {
+    if (!Types.ObjectId.isValid(transactionId)) {
+      throw new TransactionNotFoundException();
+    }
+    const transaction = await this.transactionRepository.findById(
+      transactionId,
+      session,
+    );
+    if (!transaction) {
+      throw new TransactionNotFoundException();
+    }
+
+    if (transaction.status !== TransactionStatus.PENDING) {
+      return;
+    }
+
+    // Validate amount and currency (converting webhook minor units to major units)
+    const expectedAmount = new Decimal(webhookAmount).div(100).toNumber();
+    if (!new Decimal(transaction.amount).equals(expectedAmount)) {
+      throw new TransactionAmountMismatchException(
+        transaction.amount,
+        expectedAmount,
+      );
+    }
+
+    if (transaction.currency.toUpperCase() !== webhookCurrency.toUpperCase()) {
+      throw new TransactionCurrencyMismatchException(
+        transaction.currency,
+        webhookCurrency,
+      );
+    }
+
+    await this.updateTransactionStatusDirect(transactionId, status, session);
   }
 
   // ─── Resolver ────────────────────────────────────────────────────────────────

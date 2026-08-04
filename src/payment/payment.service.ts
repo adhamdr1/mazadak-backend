@@ -19,7 +19,6 @@ import { type IWebhookEventRepository } from './interfaces/webhook-event.reposit
 import { WebhookSignatureVerificationFailedException } from './exceptions/webhook-signature-verification-failed.exception';
 import { UsersService } from '../users/users.service';
 import Decimal from 'decimal.js';
-
 @Injectable()
 export class PaymentService {
   private readonly logger = new Logger(PaymentService.name);
@@ -146,6 +145,11 @@ export class PaymentService {
           `Could not extract internalTransactionId for webhook ${providerEventId}`,
         );
         // Mark as processed anyway so we don't retry a bad payload infinitely
+      } else if (webhookCurrency?.toUpperCase() !== 'EGP') {
+        this.logger.error(
+          `Unsupported currency received in webhook ${providerEventId}: ${webhookCurrency}`,
+        );
+        // Mark as processed anyway so we don't retry a bad payload infinitely
       } else {
         await this.transactionService.updateTransactionStatusAndEmitOutbox(
           internalTransactionId,
@@ -175,10 +179,14 @@ export class PaymentService {
         err.stack,
       );
 
-      // Update retry count and error message outside the transaction
-      webhookEvent.retryCount += 1;
-      webhookEvent.errorMessage = err.message;
-      await this.webhookEventRepository.save(webhookEvent);
+      // Re-fetch fresh webhookEvent from DB outside session to clear any in-memory mutations from the aborted session
+      const freshWebhookEvent =
+        await this.webhookEventRepository.findOne(providerEventId);
+      if (freshWebhookEvent) {
+        freshWebhookEvent.retryCount += 1;
+        freshWebhookEvent.errorMessage = err.message;
+        await this.webhookEventRepository.save(freshWebhookEvent);
+      }
 
       throw err;
     } finally {
@@ -242,6 +250,24 @@ export class PaymentService {
       this.logger.error(
         `Failed to create gateway payment for transaction ${transactionId}: ${err instanceof Error ? err.message : String(err)}`,
       );
+
+      await this.transactionService
+        .createTransaction({
+          walletId: wallet._id.toString(),
+          type: TransactionType.DEPOSIT,
+          amount: new Decimal(data.amount).div(100).toNumber(),
+          currency: data.currency,
+          status: TransactionStatus.FAILED,
+          referenceId: transactionId,
+          idempotencyKey,
+          gatewayProvider: data.provider,
+        })
+        .catch((createErr) => {
+          this.logger.error(
+            `Failed to record FAILED status transition for transaction ${transactionId}: ${createErr instanceof Error ? createErr.message : String(createErr)}`,
+          );
+        });
+
       throw err;
     }
   }
