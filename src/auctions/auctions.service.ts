@@ -1,5 +1,7 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { Types } from 'mongoose';
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import Redis from 'ioredis';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import type { IAuctionRepository } from './interfaces/auction-repository.interface';
 import { Auction } from './entities/auction.entity';
@@ -35,6 +37,10 @@ const ACTIVE_AUCTIONS_PATTERN = 'auction:active:*';
 const ACTIVE_AUCTIONS_SOFT_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const ACTIVE_AUCTIONS_HARD_TTL_S = 60 * 60; // 1 hour
 
+const ACTIVATE_AUCTIONS_LOCK_KEY = 'auction:activate:lock';
+const END_AUCTIONS_LOCK_KEY = 'auction:end:lock';
+const LOCK_TTL_SECONDS = 30;
+
 @Injectable()
 export class AuctionsService {
   private readonly logger = new Logger(AuctionsService.name);
@@ -50,6 +56,7 @@ export class AuctionsService {
     private readonly redisService: RedisService,
     private readonly rabbitMQService: RabbitMQService,
     private readonly outboxService: OutboxService,
+    @InjectRedis() private readonly redis: Redis,
   ) {}
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -446,63 +453,114 @@ export class AuctionsService {
 
   @Cron(CronExpression.EVERY_MINUTE)
   async activatePendingAuctions(): Promise<void> {
-    const auctions = await this.auctionRepository.findPendingToActivate();
-    if (!auctions.length) return;
+    let acquiredLock = false;
+    try {
+      const lockResult = await this.redis
+        .set(ACTIVATE_AUCTIONS_LOCK_KEY, '1', 'EX', LOCK_TTL_SECONDS, 'NX')
+        .catch((err) => {
+          this.logger.warn(
+            `Redis activate auctions lock error: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          return null;
+        });
 
-    const ids = auctions.map((a) => a._id);
-    await this.auctionRepository.updateManyStatus(ids, AuctionStatus.ACTIVE);
-    this.logger.log(`Activated ${ids.length} auction(s)`);
+      if (!lockResult) return;
+      acquiredLock = true;
 
-    // Invalidate active auctions cache (new auctions are now active)
-    void this.redisService.invalidatePattern(ACTIVE_AUCTIONS_PATTERN);
+      const auctions = await this.auctionRepository.findPendingToActivate();
+      if (!auctions.length) return;
 
-    for (const auction of auctions) {
-      // Notify seller via email/in-app
-      this.notifySellerAuctionStarted(auction).catch((err) => {
-        this.logger.error(
-          `Failed to send auction started email for ${auction._id.toString()}: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      });
+      for (const auction of auctions) {
+        const session = await this.auctionRepository.startSession();
+        try {
+          session.startTransaction();
 
-      // Publish real-time status change (non-blocking)
-      void this.realtimeService.publishAuctionStatusChanged({
-        auction: { ...auction, status: AuctionStatus.ACTIVE },
-      });
+          await this.auctionRepository.updateStatus(
+            auction._id.toString(),
+            AuctionStatus.ACTIVE,
+            session,
+          );
+
+          await this.outboxService.saveEvent(
+            RabbitMQEvent.AuctionStarted,
+            {
+              auctionId: auction._id.toString(),
+              auctionTitle: auction.title,
+              sellerId: auction.sellerId.toString(),
+            },
+            session,
+          );
+
+          await session.commitTransaction();
+
+          // Publish real-time status change (non-blocking)
+          void this.realtimeService.publishAuctionStatusChanged({
+            auction: { ...auction, status: AuctionStatus.ACTIVE },
+          });
+        } catch (err) {
+          await session.abortTransaction();
+          this.logger.error(
+            `Failed to activate auction ${auction._id.toString()}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        } finally {
+          await session.endSession();
+        }
+      }
+
+      // Invalidate active auctions cache (new auctions are now active)
+      void this.redisService.invalidatePattern(ACTIVE_AUCTIONS_PATTERN);
+      this.logger.log(`Activated ${auctions.length} auction(s)`);
+    } catch (err) {
+      this.logger.error(
+        `Failed to run activatePendingAuctions: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    } finally {
+      if (acquiredLock) {
+        await this.redis.del(ACTIVATE_AUCTIONS_LOCK_KEY).catch(() => undefined);
+      }
     }
   }
 
   @Cron(CronExpression.EVERY_MINUTE)
   async endActiveAuctions(): Promise<void> {
-    const auctions = await this.auctionRepository.findActiveToEnd();
-    if (!auctions.length) return;
+    let acquiredLock = false;
+    try {
+      const lockResult = await this.redis
+        .set(END_AUCTIONS_LOCK_KEY, '1', 'EX', LOCK_TTL_SECONDS, 'NX')
+        .catch((err) => {
+          this.logger.warn(
+            `Redis end auctions lock error: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          return null;
+        });
 
-    const ids = auctions.map((a) => a._id);
-    await this.auctionRepository.updateManyStatus(ids, AuctionStatus.ENDED);
-    this.logger.log(`Ended ${ids.length} auction(s)`);
+      if (!lockResult) return;
+      acquiredLock = true;
 
-    // Invalidate active auctions cache (ended auctions must leave the list)
-    void this.redisService.invalidatePattern(ACTIVE_AUCTIONS_PATTERN);
+      const auctions = await this.auctionRepository.findActiveToEnd();
+      if (!auctions.length) return;
 
-    // Publish real-time status change for each ended auction (non-blocking)
-    for (const auction of auctions) {
-      void this.realtimeService.publishAuctionStatusChanged({
-        auction: { ...auction, status: AuctionStatus.ENDED },
-      });
+      const ids = auctions.map((a) => a._id);
+      await this.auctionRepository.updateManyStatus(ids, AuctionStatus.ENDED);
+      this.logger.log(`Ended ${ids.length} auction(s)`);
+
+      // Invalidate active auctions cache (ended auctions must leave the list)
+      void this.redisService.invalidatePattern(ACTIVE_AUCTIONS_PATTERN);
+
+      // Publish real-time status change for each ended auction (non-blocking)
+      for (const auction of auctions) {
+        void this.realtimeService.publishAuctionStatusChanged({
+          auction: { ...auction, status: AuctionStatus.ENDED },
+        });
+      }
+    } catch (err) {
+      this.logger.error(
+        `Failed to run endActiveAuctions: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    } finally {
+      if (acquiredLock) {
+        await this.redis.del(END_AUCTIONS_LOCK_KEY).catch(() => undefined);
+      }
     }
-    // Note: Emails are handled by bids.service.ts (finalizeEndedAuctions)
-  }
-
-  private async notifySellerAuctionStarted(auction: Auction): Promise<void> {
-    const seller = await this.usersService.findById(
-      auction.sellerId.toString(),
-    );
-    if (!seller) return;
-
-    // Publish AuctionStarted event (Email and In-App will be handled by consumer)
-    await this.rabbitMQService.publish(RabbitMQEvent.AuctionStarted, {
-      auctionId: auction._id.toString(),
-      auctionTitle: auction.title,
-      sellerId: auction.sellerId.toString(),
-    });
   }
 }

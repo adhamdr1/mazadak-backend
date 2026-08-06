@@ -82,7 +82,8 @@ export class PaymobProvider implements IPaymentProvider {
           delivery_needed: 'false',
           amount_cents: data.amount,
           currency: data.currency.toUpperCase(),
-          merchant_order_id: data.idempotencyKey,
+          merchant_order_id:
+            data.metadata?.transactionId || data.idempotencyKey,
         },
       );
       const orderId = orderResponse.data.id;

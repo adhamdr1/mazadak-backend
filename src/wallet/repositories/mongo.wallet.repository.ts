@@ -132,7 +132,7 @@ export class MongoWalletRepository implements IWalletRepository {
       .exec();
   }
 
-  // Capture: atomically removes amount from held (balance was already debited during hold).
+  // Capture: settles a held amount by deducting it from the total balance and releasing the corresponding held balance.
   async captureHeldBalance(
     walletId: string,
     amount: number,

@@ -83,10 +83,7 @@ export class ReconciliationService {
             continue;
           }
 
-          const session = await this.connection.startSession();
           try {
-            session.startTransaction();
-
             const providerType =
               transaction.gatewayProvider as PaymentProviderType;
             const provider = this.providerFactory.getProvider(providerType);
@@ -95,34 +92,50 @@ export class ReconciliationService {
               transaction.gatewayPaymentIntentId,
             );
 
-            if (result.status === PaymentStatus.SUCCESS) {
-              this.logger.log(
-                `Reconciliation: Transaction ${transaction._id.toString()} was SUCCESSFUL on gateway. Crediting wallet.`,
-              );
-              await this.transactionService.updateTransactionStatusDirect(
-                transaction._id.toString(),
-                TransactionStatus.SUCCESS,
-                session,
-              );
-            } else if (result.status === PaymentStatus.FAILED) {
-              this.logger.log(
-                `Reconciliation: Transaction ${transaction._id.toString()} was FAILED/CANCELED on gateway.`,
-              );
-              await this.transactionService.updateTransactionStatusDirect(
-                transaction._id.toString(),
-                TransactionStatus.FAILED,
-                session,
-              );
+            if (
+              result.status !== PaymentStatus.SUCCESS &&
+              result.status !== PaymentStatus.FAILED
+            ) {
+              continue;
             }
 
-            await session.commitTransaction();
+            const session = await this.connection.startSession();
+            try {
+              session.startTransaction();
+
+              if (result.status === PaymentStatus.SUCCESS) {
+                this.logger.log(
+                  `Reconciliation: Transaction ${transaction._id.toString()} was SUCCESSFUL on gateway. Crediting wallet.`,
+                );
+                await this.transactionService.updateTransactionStatusDirect(
+                  transaction._id.toString(),
+                  TransactionStatus.SUCCESS,
+                  session,
+                );
+              } else if (result.status === PaymentStatus.FAILED) {
+                this.logger.log(
+                  `Reconciliation: Transaction ${transaction._id.toString()} was FAILED/CANCELED on gateway.`,
+                );
+                await this.transactionService.updateTransactionStatusDirect(
+                  transaction._id.toString(),
+                  TransactionStatus.FAILED,
+                  session,
+                );
+              }
+
+              await session.commitTransaction();
+            } catch (err) {
+              await session.abortTransaction();
+              this.logger.error(
+                `Failed to reconcile transaction ${transaction._id.toString()}: ${err instanceof Error ? err.message : String(err)}`,
+              );
+            } finally {
+              await session.endSession();
+            }
           } catch (err) {
-            await session.abortTransaction();
             this.logger.error(
-              `Failed to reconcile transaction ${transaction._id.toString()}: ${err instanceof Error ? err.message : String(err)}`,
+              `Failed to get payment status for transaction ${transaction._id.toString()}: ${err instanceof Error ? err.message : String(err)}`,
             );
-          } finally {
-            await session.endSession();
           }
         }
 
