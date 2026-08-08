@@ -15,15 +15,19 @@ import Stripe from 'stripe';
 @Injectable()
 export class StripeProvider implements IPaymentProvider {
   private readonly logger = new Logger(StripeProvider.name);
-  private stripe: Stripe;
+  private stripe: Stripe | null = null;
   private endpointSecret: string;
+  private readonly isMock: boolean;
 
   constructor(private readonly configService: ConfigService) {
     const secret = this.configService.getOrThrow<string>('STRIPE_SECRET_KEY');
+    this.isMock = secret === 'sk_test_mock';
 
-    this.stripe = new Stripe(secret, {
-      apiVersion: Stripe.API_VERSION,
-    });
+    if (!this.isMock) {
+      this.stripe = new Stripe(secret, {
+        apiVersion: Stripe.API_VERSION,
+      });
+    }
 
     this.endpointSecret = this.configService.getOrThrow<string>(
       'STRIPE_WEBHOOK_SECRET',
@@ -31,7 +35,22 @@ export class StripeProvider implements IPaymentProvider {
   }
 
   async createPayment(data: CreatePaymentData): Promise<PaymentCreationResult> {
+    if (this.isMock) {
+      this.logger.log('Mocking Stripe PaymentIntent creation for testing...');
+      const mockIntentId = 'pi_mock_' + Math.floor(Math.random() * 100000);
+      const mockClientSecret = `${mockIntentId}_secret_${Date.now()}`;
+      return {
+        gatewayPaymentIntentId: mockIntentId,
+        clientSecret: mockClientSecret,
+        paymentUrl: null,
+      };
+    }
+
     try {
+      if (!this.stripe) {
+        throw new Error('Stripe client is not initialized');
+      }
+
       const paymentIntent = await this.stripe.paymentIntents.create(
         {
           amount: data.amount,
@@ -64,7 +83,18 @@ export class StripeProvider implements IPaymentProvider {
     signature: string,
     secret?: string,
   ): boolean {
+    if (this.isMock || this.endpointSecret === 'whsec_mock') {
+      this.logger.log(
+        'Bypassing Stripe signature verification for mock testing...',
+      );
+      return true;
+    }
+
     try {
+      if (!this.stripe) {
+        throw new Error('Stripe client is not initialized');
+      }
+
       const webhookSecret = secret || this.endpointSecret;
       this.stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
       return true;
@@ -78,7 +108,18 @@ export class StripeProvider implements IPaymentProvider {
   }
 
   async refund(data: RefundPaymentData): Promise<void> {
+    if (this.isMock) {
+      this.logger.log(
+        `Mocking Stripe refund for PaymentIntent ${data.gatewayPaymentIntentId} with amount ${data.amount}`,
+      );
+      return;
+    }
+
     try {
+      if (!this.stripe) {
+        throw new Error('Stripe client is not initialized');
+      }
+
       await this.stripe.refunds.create({
         payment_intent: data.gatewayPaymentIntentId,
         amount: data.amount,
@@ -100,7 +141,21 @@ export class StripeProvider implements IPaymentProvider {
   async getPaymentStatus(
     gatewayPaymentIntentId: string,
   ): Promise<PaymentStatusResult> {
+    if (this.isMock) {
+      this.logger.log(
+        `Mocking Stripe getPaymentStatus for: ${gatewayPaymentIntentId}`,
+      );
+      return {
+        status: PaymentStatus.SUCCESS,
+        gatewayTransactionId: 'ch_mock_' + gatewayPaymentIntentId.split('_')[2],
+      };
+    }
+
     try {
+      if (!this.stripe) {
+        throw new Error('Stripe client is not initialized');
+      }
+
       const paymentIntent = await this.stripe.paymentIntents.retrieve(
         gatewayPaymentIntentId,
       );

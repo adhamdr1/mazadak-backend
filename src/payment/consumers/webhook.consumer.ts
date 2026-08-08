@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as amqplib from 'amqplib';
+import * as amqpManager from 'amqp-connection-manager';
+import { AmqpConnectionManager, ChannelWrapper } from 'amqp-connection-manager';
 import {
   PAYMENTS_WEBHOOK_QUEUE,
   RETRY_QUEUE_5S,
@@ -22,71 +24,88 @@ import { PaymentService } from '../payment.service';
 @Injectable()
 export class WebhookConsumer implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(WebhookConsumer.name);
-  private connection?: amqplib.ChannelModel;
-  private channel?: amqplib.Channel;
+  private connection: AmqpConnectionManager | null = null;
+  private channelWrapper: ChannelWrapper | null = null;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly paymentService: PaymentService,
   ) {}
 
-  async onModuleInit() {
+  onModuleInit() {
     const url = this.configService.getOrThrow<string>('RABBITMQ_URL');
+    this.connection = amqpManager.connect([url]);
 
-    try {
-      this.connection = await amqplib.connect(url);
-      this.channel = await this.connection.createChannel();
+    this.connection.on('connect', () => {
+      this.logger.log('Connected to RabbitMQ (WebhookConsumer)!');
+    });
 
-      await this.channel.prefetch(1);
-
-      // eslint-disable-next-line @typescript-eslint/no-misused-promises
-      await this.channel.consume(PAYMENTS_WEBHOOK_QUEUE, async (msg) => {
-        if (!msg) return;
-
-        try {
-          const content = msg.content.toString();
-          const raw = JSON.parse(content) as unknown;
-
-          // NestJS ClientProxy wraps published messages in a { pattern, data } envelope.
-          // We extract the inner data (RabbitMQMessage) if that envelope is present,
-          // matching the same unwrapping logic used by NotificationsConsumer.
-          const parsedMessage = (
-            raw && typeof raw === 'object' && 'data' in raw
-              ? (raw as { data: RabbitMQParsedMessage }).data
-              : raw
-          ) as RabbitMQParsedMessage;
-
-          if (
-            parsedMessage.eventType === RabbitMQEvent.PaymentWebhookReceived
-          ) {
-            await this.paymentService.processPaymentWebhookEvent(
-              parsedMessage.payload,
-            );
-          }
-
-          this.channel?.ack(msg);
-        } catch (error: unknown) {
-          const err = error as Error;
-          this.logger.error(
-            `Failed to process webhook message: ${err.message}`,
-            err.stack,
-          );
-          this.handleProcessingError(msg, err);
-        }
-      });
-
-      this.logger.log('Started consuming PAYMENTS_WEBHOOK_QUEUE');
-    } catch (err) {
-      this.logger.error(
-        'Failed to initialize WebhookConsumer RabbitMQ connection',
-        err,
+    this.connection.on('disconnect', (err) => {
+      this.logger.warn(
+        `Disconnected from RabbitMQ (WebhookConsumer): ${err.err.message}. Reconnecting...`,
       );
+    });
+
+    this.channelWrapper = this.connection.createChannel({
+      setup: (channel: amqplib.Channel) => {
+        return Promise.all([
+          channel.prefetch(1),
+          channel.consume(
+            PAYMENTS_WEBHOOK_QUEUE,
+            (msg: amqplib.ConsumeMessage | null) => {
+              if (msg) {
+                this.handleMessage(msg, channel).catch((error: unknown) => {
+                  this.logger.error(
+                    `Unhandled error in webhook consumer: ${error instanceof Error ? error.message : String(error)}`,
+                  );
+                });
+              }
+            },
+            { noAck: false },
+          ),
+        ]);
+      },
+    });
+
+    this.logger.log('Started consuming PAYMENTS_WEBHOOK_QUEUE');
+  }
+
+  private async handleMessage(
+    msg: amqplib.ConsumeMessage,
+    channel: amqplib.Channel,
+  ): Promise<void> {
+    try {
+      const content = msg.content.toString();
+      const raw = JSON.parse(content) as unknown;
+
+      const parsedMessage = (
+        raw && typeof raw === 'object' && 'data' in raw
+          ? (raw as { data: RabbitMQParsedMessage }).data
+          : raw
+      ) as RabbitMQParsedMessage;
+
+      if (parsedMessage.eventType === RabbitMQEvent.PaymentWebhookReceived) {
+        await this.paymentService.processPaymentWebhookEvent(
+          parsedMessage.payload,
+        );
+      }
+
+      channel.ack(msg);
+    } catch (error: unknown) {
+      const err = error as Error;
+      this.logger.error(
+        `Failed to process webhook message: ${err.message}`,
+        err.stack,
+      );
+      this.handleProcessingError(msg, err, channel);
     }
   }
 
-  private handleProcessingError(msg: amqplib.ConsumeMessage, err: Error): void {
-    if (!this.channel) return;
-
+  private handleProcessingError(
+    msg: amqplib.ConsumeMessage,
+    err: Error,
+    channel: amqplib.Channel,
+  ): void {
     const headers = (msg.properties.headers as Record<string, unknown>) || {};
     const retryCount = (Number(headers[X_RETRY_COUNT]) || 0) + 1;
 
@@ -103,25 +122,28 @@ export class WebhookConsumer implements OnModuleInit, OnModuleDestroy {
       this.logger.warn(
         `Webhook processing failed (attempt ${retryCount}). Re-queueing to ${targetQueue} for retry: ${err.message}`,
       );
-      this.channel.sendToQueue(targetQueue, msg.content, {
+      channel.sendToQueue(targetQueue, msg.content, {
         headers: {
           ...headers,
           [X_RETRY_COUNT]: retryCount,
         },
       });
-      this.channel.ack(msg);
+      channel.ack(msg);
     } else {
       this.logger.error(
         `Webhook processing failed after ${retryCount - 1} retries. Routing to Dead Letter Queue: ${err.message}`,
         err.stack,
       );
-      // Reject and do not requeue to route it to Dead Letter Queue (DLQ)
-      this.channel.nack(msg, false, false);
+      channel.nack(msg, false, false);
     }
   }
 
   async onModuleDestroy() {
-    await this.channel?.close().catch(() => {});
-    await this.connection?.close().catch(() => {});
+    if (this.channelWrapper) {
+      await this.channelWrapper.close();
+    }
+    if (this.connection) {
+      await this.connection.close();
+    }
   }
 }

@@ -60,7 +60,7 @@ export class MongoInAppNotificationRepository implements IInAppNotificationRepos
       .findOneAndUpdate(
         { _id: notificationId, userId },
         { isRead: true },
-        { new: true, session },
+        { returnDocument: 'after', session },
       )
       .exec();
   }

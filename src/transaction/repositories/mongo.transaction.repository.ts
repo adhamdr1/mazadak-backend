@@ -60,7 +60,7 @@ export class MongoTransactionRepository implements ITransactionRepository {
       .findByIdAndUpdate(
         id,
         { $set: { hasChild: true } },
-        { new: true, session },
+        { returnDocument: 'after', session },
       )
       .exec();
   }
