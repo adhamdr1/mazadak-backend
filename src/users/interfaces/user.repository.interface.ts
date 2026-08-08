@@ -67,4 +67,6 @@ export interface IUserRepository {
   softDelete(id: string): Promise<void>;
 
   linkGoogleAccount(userId: string, googleId: string): Promise<User | null>;
+
+  reactivate(id: string): Promise<User | null>;
 }

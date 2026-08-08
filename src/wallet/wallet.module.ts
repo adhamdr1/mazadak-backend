@@ -6,7 +6,6 @@ import { Wallet, WalletSchema } from './entities/wallet.entity';
 import { MongoWalletRepository } from './repositories/mongo.wallet.repository';
 import { TransactionModule } from '../transaction/transaction.module';
 import { NotificationsModule } from '../notifications/notifications.module';
-import { UsersModule } from '../users/users.module';
 import { OutboxModule } from '../infrastructure/outbox/outbox.module';
 
 @Module({
@@ -14,7 +13,6 @@ import { OutboxModule } from '../infrastructure/outbox/outbox.module';
     MongooseModule.forFeature([{ name: Wallet.name, schema: WalletSchema }]),
     TransactionModule,
     NotificationsModule,
-    UsersModule,
     OutboxModule,
   ],
   providers: [

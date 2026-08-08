@@ -18,6 +18,8 @@ import { PhoneAlreadyExistsException } from './exceptions/phone-already-exists.e
 import { EmailAlreadyVerifiedException } from './exceptions/email-already-verified.exception';
 import { UserForbiddenException } from './exceptions/user-forbidden.exception';
 import { CannotBanAdminException } from './exceptions/cannot-ban-admin.exception';
+import { WalletService } from '../wallet/wallet.service';
+import { WalletHasBalanceException } from '../wallet/exceptions/wallet-has-balance.exception';
 
 @Injectable()
 export class UsersService {
@@ -26,6 +28,7 @@ export class UsersService {
     private readonly userRepository: IUserRepository,
     @Inject('IAuthRepository')
     private readonly authRepository: IAuthRepository,
+    private readonly walletService: WalletService,
   ) {}
 
   async startSession(): Promise<ClientSession> {
@@ -185,7 +188,19 @@ export class UsersService {
       throw new UserForbiddenException();
     }
     await this.findById(targetId);
+
+    // Verify wallet has zero balance (available balance + held balance = 0) before deletion.
+    const wallet = await this.walletService.getWalletByUserId(targetId);
+    if (wallet.balance > 0 || wallet.heldBalance > 0) {
+      throw new WalletHasBalanceException();
+    }
+
     await this.userRepository.softDelete(targetId);
+  }
+
+  async reactivateUser(id: string): Promise<void> {
+    const updated = await this.userRepository.reactivate(id);
+    if (!updated) throw new UserNotFoundException();
   }
 
   async linkGoogleAccount(userId: string, googleId: string): Promise<User> {

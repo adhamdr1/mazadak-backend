@@ -35,6 +35,8 @@ import {
   AuctionCancelledPayload,
   WalletDepositedPayload,
   WithdrawalCompletedPayload,
+  AccountReactivationRequestedPayload,
+  AccountReactivatedPayload,
 } from '../infrastructure/rabbitmq/rabbitmq-event.types';
 import { InAppNotificationType } from './in-app/enums/in-app-notification-type.enum';
 import { NotificationReferenceType } from './in-app/enums/notification-reference-type.enum';
@@ -175,6 +177,12 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
           break;
         case RabbitMQEvent.AuctionCancelled:
           await this.handleAuctionCancelled(parsed.payload);
+          break;
+        case RabbitMQEvent.AccountReactivationRequested:
+          await this.handleAccountReactivationRequested(parsed.payload);
+          break;
+        case RabbitMQEvent.AccountReactivated:
+          await this.handleAccountReactivated(parsed.payload);
           break;
         default: {
           const unknownEvent = (parsed as { eventType?: string }).eventType;
@@ -527,9 +535,15 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
   }
 
   private async handleWalletDeposited(payload: WalletDepositedPayload) {
+    const user = await this.usersService.findById(payload.userId);
+    const email = user?.email ?? '';
+    const name = user
+      ? [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User'
+      : 'User';
+
     await this.notificationsService.sendDepositSuccessfulEmail(
-      payload.email,
-      payload.name,
+      email,
+      name,
       payload.amount,
       payload.transactionId,
     );
@@ -545,9 +559,15 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
   }
 
   private async handleWithdrawalCompleted(payload: WithdrawalCompletedPayload) {
+    const user = await this.usersService.findById(payload.userId);
+    const email = user?.email ?? '';
+    const name = user
+      ? [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User'
+      : 'User';
+
     await this.notificationsService.sendWithdrawalCompletedEmail(
-      payload.email,
-      payload.name,
+      email,
+      name,
       payload.amount,
       payload.transactionId,
     );
@@ -559,6 +579,30 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
       body: `An amount of ${payload.amount} EGP has been withdrawn from your wallet. Ref: ${payload.transactionId}.`,
       referenceId: payload.transactionId,
       referenceType: NotificationReferenceType.TRANSACTION,
+    });
+  }
+
+  private async handleAccountReactivationRequested(
+    payload: AccountReactivationRequestedPayload,
+  ) {
+    await this.notificationsService.sendAccountReactivationEmail(
+      payload.email,
+      payload.verificationToken,
+      payload.name,
+    );
+  }
+
+  private async handleAccountReactivated(payload: AccountReactivatedPayload) {
+    await this.notificationsService.sendAccountReactivatedEmail(
+      payload.email,
+      payload.name,
+    );
+
+    await this.notificationsService.createInAppNotification({
+      userId: payload.userId,
+      type: InAppNotificationType.WELCOME,
+      title: 'Welcome Back to Mazadak! 🌟',
+      body: 'Your account has been successfully reactivated.',
     });
   }
 }

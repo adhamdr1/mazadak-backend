@@ -6,6 +6,7 @@ import { InvalidCredentialsException } from './exceptions/invalid-credentials.ex
 import { EmailNotVerifiedException } from './exceptions/email-not-verified.exception';
 import { InvalidTokenException } from './exceptions/invalid-token.exception';
 import { AccountDisabledException } from './exceptions/account-disabled.exception';
+import { AccountSoftDeletedException } from './exceptions/account-soft-deleted.exception';
 import { AccountBannedException } from './exceptions/account-banned.exception';
 import { GoogleAccountNoPasswordException } from './exceptions/google-account-no-password.exception';
 import { SamePasswordException } from './exceptions/same-password.exception';
@@ -15,6 +16,7 @@ import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
 import { RegisterInput } from './dto/register.input';
 import { AuthResponse } from './dto/auth.response';
+import { RegisterResponse } from './dto/register.response';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
 import type { IAuthRepository } from './interfaces/auth-repository.interface';
 import { CreateUserInput } from '../users/dto/create-user.input';
@@ -69,12 +71,15 @@ export class AuthService {
     );
   }
 
-  async register(registerInput: RegisterInput): Promise<AuthResponse> {
+  async register(registerInput: RegisterInput): Promise<RegisterResponse> {
     // 1. Verify email is not taken.
     const existingUser = await this.usersService.findByEmail(
       registerInput.email,
     );
     if (existingUser) {
+      if (existingUser.deletedAt) {
+        throw new AccountSoftDeletedException();
+      }
       throw new EmailAlreadyExistsException();
     }
 
@@ -115,7 +120,11 @@ export class AuthService {
       verificationToken,
     });
 
-    return this.issueAuthTokens(user);
+    return {
+      success: true,
+      message:
+        'Verification email sent. Please check your inbox to verify your account.',
+    };
   }
 
   async login(loginInput: LoginInput): Promise<AuthResponse> {
@@ -129,7 +138,7 @@ export class AuthService {
 
     // 2. Reject soft-deleted accounts and banned accounts.
     if (user.deletedAt) {
-      throw new InvalidCredentialsException();
+      throw new AccountSoftDeletedException();
     }
 
     if (user.isBanned) {
@@ -167,6 +176,9 @@ export class AuthService {
     }
     const existingUser = await this.usersService.findByEmail(email);
     if (existingUser) {
+      if (existingUser.deletedAt) {
+        throw new AccountSoftDeletedException();
+      }
       throw new EmailAlreadyExistsException();
     }
 
@@ -207,7 +219,7 @@ export class AuthService {
       throw new RegistrationRequiredException();
     }
     if (user.deletedAt) {
-      throw new AccountDisabledException();
+      throw new AccountSoftDeletedException();
     }
     // 4. Link account if needed
     if (!user.googleId && user.authProvider === AuthProvider.LOCAL) {
@@ -250,6 +262,68 @@ export class AuthService {
           `Failed to publish EmailVerified event: ${err instanceof Error ? err.message : String(err)}`,
         );
       });
+
+    return true;
+  }
+
+  async requestReactivation(email: string): Promise<boolean> {
+    const user = await this.usersService.findByEmail(email);
+    // Security: Do not reveal if the email exists or is soft-deleted
+    if (!user || !user.deletedAt) {
+      return true;
+    }
+
+    const verificationToken = this.generateEmailVerificationToken(
+      user._id.toString(),
+    );
+
+    // Publish AccountReactivationRequested event to trigger verification email
+    await this.rabbitMQService.publish(
+      RabbitMQEvent.AccountReactivationRequested,
+      {
+        userId: user._id.toString(),
+        email: user.email,
+        name: user.firstName,
+        phone: user.phoneNumber,
+        verificationToken,
+      },
+    );
+
+    return true;
+  }
+
+  async confirmReactivation(token: string): Promise<boolean> {
+    let userId: string;
+    try {
+      const payload = this.jwtService.verify<{ sub: string }>(token, {
+        secret: this.configService.getOrThrow<string>(
+          'JWT_VERIFICATION_SECRET',
+        ),
+      });
+      userId = payload.sub;
+    } catch {
+      throw new InvalidTokenException();
+    }
+
+    const user = await this.usersService.findById(userId);
+    await this.usersService.reactivateUser(userId);
+
+    // Publish AccountReactivated event
+    if (user) {
+      const name =
+        [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
+      this.rabbitMQService
+        .publish(RabbitMQEvent.AccountReactivated, {
+          userId,
+          email: user.email,
+          name,
+        })
+        .catch((err: unknown) => {
+          this.logger?.error(
+            `Failed to publish AccountReactivated event: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        });
+    }
 
     return true;
   }

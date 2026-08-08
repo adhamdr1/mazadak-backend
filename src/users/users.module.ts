@@ -9,6 +9,7 @@ import {
   RefreshTokenSchema,
 } from '../auth/entities/refresh-token.entity';
 import { MongoAuthRepository } from '../auth/repositories/mongo.auth.repository';
+import { WalletModule } from '../wallet/wallet.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { MongoAuthRepository } from '../auth/repositories/mongo.auth.repository'
       { name: User.name, schema: UserSchema },
       { name: RefreshToken.name, schema: RefreshTokenSchema },
     ]),
+    WalletModule,
   ],
   providers: [
     UsersResolver,

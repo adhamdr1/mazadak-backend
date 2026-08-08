@@ -2,6 +2,7 @@ import { Resolver, Mutation, Args, Context } from '@nestjs/graphql';
 import { AuthService } from './auth.service';
 import { RegisterInput } from './dto/register.input';
 import { AuthResponse } from './dto/auth.response';
+import { RegisterResponse } from './dto/register.response';
 import { Public } from '../common/decorators/public.decorator';
 import { LoginInput } from './dto/login.input';
 import { GoogleLoginInput } from './dto/google-login.input';
@@ -20,10 +21,10 @@ export class AuthResolver {
 
   @Public()
   @Throttle({ strict: { ttl: 60_000, limit: 5 } })
-  @Mutation(() => AuthResponse, { name: 'register' })
+  @Mutation(() => RegisterResponse, { name: 'register' })
   async register(
     @Args('registerInput') registerInput: RegisterInput,
-  ): Promise<AuthResponse> {
+  ): Promise<RegisterResponse> {
     return this.authService.register(registerInput);
   }
 
@@ -70,6 +71,24 @@ export class AuthResolver {
     @Args('email', { type: () => String }) email: string,
   ): Promise<boolean> {
     return this.authService.resendConfirmationEmail(email);
+  }
+
+  @Public()
+  @Throttle({ strict: { ttl: 60_000, limit: 5 } })
+  @Mutation(() => Boolean, { name: 'requestReactivation' })
+  async requestReactivation(
+    @Args('email', { type: () => String }) email: string,
+  ): Promise<boolean> {
+    return this.authService.requestReactivation(email);
+  }
+
+  @Public()
+  @Throttle({ strict: { ttl: 60_000, limit: 5 } })
+  @Mutation(() => Boolean, { name: 'confirmReactivation' })
+  async confirmReactivation(
+    @Args('token', { type: () => String }) token: string,
+  ): Promise<boolean> {
+    return this.authService.confirmReactivation(token);
   }
 
   @Public()
