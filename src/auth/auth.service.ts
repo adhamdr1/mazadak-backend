@@ -590,6 +590,8 @@ export class AuthService {
       sub: user._id.toString(),
       email: user.email,
       role: user.role,
+      firstName: user.firstName,
+      lastName: user.lastName,
     };
     const accessToken = this.generateAccessToken(payload);
     const { token: refreshToken, expiresAt } =

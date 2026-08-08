@@ -37,7 +37,7 @@ export class PaymentController {
     @CurrentUser() currentUser: JwtPayloadInterface.JwtPayload,
     @Body() dto: InitializePaymentDto,
   ): Promise<PaymentInitResult> {
-    return this.paymentService.initializePayment(currentUser.sub, dto);
+    return this.paymentService.initializePayment(currentUser, dto);
   }
 
   @Public()

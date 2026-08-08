@@ -45,7 +45,6 @@ export interface AuctionEndedPayload {
   sellerId: string;
   finalPrice: number;
   winnerId?: string;
-  winnerName?: string;
   captureTransactionId?: string;
   depositTransactionId?: string;
 }

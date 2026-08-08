@@ -17,7 +17,7 @@ import { TransactionStatus } from '../transaction/enums/transaction-status.enum'
 import { randomUUID } from 'crypto';
 import { type IWebhookEventRepository } from './interfaces/webhook-event.repository.interface';
 import { WebhookSignatureVerificationFailedException } from './exceptions/webhook-signature-verification-failed.exception';
-import { UsersService } from '../users/users.service';
+import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import Decimal from 'decimal.js';
 @Injectable()
 export class PaymentService {
@@ -31,7 +31,6 @@ export class PaymentService {
     private readonly transactionService: TransactionService,
     private readonly outboxService: OutboxService,
     private readonly walletService: WalletService,
-    private readonly usersService: UsersService,
   ) {}
 
   async handleWebhook(
@@ -195,13 +194,12 @@ export class PaymentService {
   }
 
   async initializePayment(
-    userId: string,
+    currentUser: JwtPayload,
     data: InitializePaymentDto,
   ): Promise<PaymentInitResult> {
     const idempotencyKey = randomUUID();
 
-    const wallet = await this.walletService.getWalletByUserId(userId);
-    const user = await this.usersService.findById(userId);
+    const wallet = await this.walletService.getWalletByUserId(currentUser.sub);
 
     // 1. Create PENDING transaction in DB first
     const transaction = await this.transactionService.createTransaction({
@@ -225,13 +223,13 @@ export class PaymentService {
         currency: data.currency || 'EGP',
         idempotencyKey,
         metadata: {
-          userId,
+          userId: currentUser.sub,
           walletId: wallet._id.toString(),
           transactionId,
         },
-        email: user?.email,
-        firstName: user?.firstName,
-        lastName: user?.lastName,
+        email: currentUser.email,
+        firstName: currentUser.firstName,
+        lastName: currentUser.lastName,
       });
 
       // 3. Attach gatewayPaymentIntentId to the transaction record

@@ -20,7 +20,6 @@ import { BidOnOwnAuctionException } from './exceptions/bid-on-own-auction.except
 import { InvalidAuctionIdException } from './exceptions/invalid-auction-id.exception';
 import { AuctionNotFoundException } from '../auctions/exceptions/auction-not-found.exception';
 import { NotificationsService } from '../notifications/notifications.service';
-import { UsersService } from '../users/users.service';
 import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
 import { RedisService } from '../infrastructure/redis/redis.service';
 import { OutboxService } from '../infrastructure/outbox/outbox.service';
@@ -45,7 +44,6 @@ export class BidsService {
     private readonly auctionRepository: IAuctionRepository,
     private readonly walletService: WalletService,
     private readonly notificationsService: NotificationsService,
-    private readonly usersService: UsersService,
     private readonly realtimeService: RealtimeService,
     private readonly redisService: RedisService,
     private readonly outboxService: OutboxService,
@@ -274,20 +272,6 @@ export class BidsService {
             session,
           );
 
-          // Fetch winner name for seller's notification
-          let winnerName: string | null = null;
-          try {
-            const winnerUser = await this.usersService.findById(winnerId);
-            if (winnerUser) {
-              winnerName =
-                [winnerUser.firstName, winnerUser.lastName]
-                  .filter(Boolean)
-                  .join(' ') || 'Winning Bidder';
-            }
-          } catch {
-            winnerName = 'Winning Bidder';
-          }
-
           // Send Outbox Event
           await this.outboxService.saveEvent(
             RabbitMQEvent.AuctionEnded,
@@ -297,7 +281,6 @@ export class BidsService {
               sellerId,
               finalPrice: auction.currentPrice,
               winnerId,
-              winnerName: winnerName || undefined,
               captureTransactionId: captureTransaction._id.toString(),
               depositTransactionId: depositTransaction._id.toString(),
             },

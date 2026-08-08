@@ -13,7 +13,6 @@ import { AlreadyHighestBidderException } from './exceptions/already-highest-bidd
 import { BidAmountTooLowException } from './exceptions/bid-amount-too-low.exception';
 import { NotificationsService } from '../notifications/notifications.service';
 import { InvalidAuctionIdException } from './exceptions/invalid-auction-id.exception';
-import { UsersService } from '../users/users.service';
 import { OutboxService } from '../infrastructure/outbox/outbox.service';
 
 import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
@@ -70,10 +69,6 @@ const mockNotificationsService = {
   createInAppNotification: jest.fn().mockResolvedValue(undefined),
 };
 
-const mockUsersService = {
-  findById: jest.fn(),
-};
-
 const mockOutboxService = {
   saveEvent: jest.fn().mockResolvedValue(undefined),
 };
@@ -93,7 +88,6 @@ describe('BidsService', () => {
         { provide: 'IAuctionRepository', useValue: mockAuctionRepository },
         { provide: WalletService, useValue: mockWalletService },
         { provide: NotificationsService, useValue: mockNotificationsService },
-        { provide: UsersService, useValue: mockUsersService },
         { provide: OutboxService, useValue: mockOutboxService },
         {
           provide: RealtimeService,

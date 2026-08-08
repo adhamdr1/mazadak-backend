@@ -390,42 +390,17 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
   }
 
   private async handleAuctionEnded(payload: AuctionEndedPayload) {
+    let winnerName = 'Winning Bidder';
     const seller = await this.usersService.findById(payload.sellerId);
-    if (seller) {
-      const sellerName =
-        [seller.firstName, seller.lastName].filter(Boolean).join(' ') || 'User';
-      // Email
-      await this.notificationsService.sendAuctionEndedSellerEmail(
-        seller.email,
-        sellerName,
-        payload.auctionTitle,
-        payload.finalPrice,
-        payload.winnerName || null,
-        payload.auctionId,
-        payload.depositTransactionId,
-      );
-
-      // In-App Notification
-      await this.notificationsService.createInAppNotification({
-        userId: payload.sellerId,
-        type: InAppNotificationType.AUCTION_ENDED_SELLER,
-        title: 'Your auction has ended 🏁',
-        body: payload.winnerId
-          ? `Your auction "${payload.auctionTitle}" has successfully ended. Sold for ${payload.finalPrice} EGP to ${payload.winnerName || 'Winning Bidder'}.`
-          : `Your auction "${payload.auctionTitle}" has ended with no bids.`,
-        referenceId: payload.auctionId,
-        referenceType: NotificationReferenceType.AUCTION,
-      });
-    }
 
     if (payload.winnerId) {
       const winner = await this.usersService.findById(payload.winnerId);
       if (winner) {
-        const winnerName =
+        winnerName =
           [winner.firstName, winner.lastName].filter(Boolean).join(' ') ||
-          'User';
+          'Winning Bidder';
 
-        // Email
+        // Email to winner
         await this.notificationsService.sendAuctionWonEmail(
           winner.email,
           winnerName,
@@ -435,7 +410,7 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
           payload.captureTransactionId,
         );
 
-        // In-App Notification
+        // In-App Notification to winner
         await this.notificationsService.createInAppNotification({
           userId: payload.winnerId,
           type: InAppNotificationType.AUCTION_WON,
@@ -445,6 +420,33 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
           referenceType: NotificationReferenceType.AUCTION,
         });
       }
+    }
+
+    if (seller) {
+      const sellerName =
+        [seller.firstName, seller.lastName].filter(Boolean).join(' ') || 'User';
+      // Email to seller
+      await this.notificationsService.sendAuctionEndedSellerEmail(
+        seller.email,
+        sellerName,
+        payload.auctionTitle,
+        payload.finalPrice,
+        payload.winnerId ? winnerName : null,
+        payload.auctionId,
+        payload.depositTransactionId,
+      );
+
+      // In-App Notification to seller
+      await this.notificationsService.createInAppNotification({
+        userId: payload.sellerId,
+        type: InAppNotificationType.AUCTION_ENDED_SELLER,
+        title: 'Your auction has ended 🏁',
+        body: payload.winnerId
+          ? `Your auction "${payload.auctionTitle}" has successfully ended. Sold for ${payload.finalPrice} EGP to ${winnerName}.`
+          : `Your auction "${payload.auctionTitle}" has ended with no bids.`,
+        referenceId: payload.auctionId,
+        referenceType: NotificationReferenceType.AUCTION,
+      });
     }
   }
 

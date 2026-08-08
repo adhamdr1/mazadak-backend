@@ -16,7 +16,6 @@ import { AuctionInvalidStateException } from './exceptions/auction-invalid-state
 import { AuctionNotPendingException } from './exceptions/auction-not-pending.exception';
 import { PaginationInput } from '../common/dto/pagination.input';
 import { NotificationsService } from '../notifications/notifications.service';
-import { UsersService } from '../users/users.service';
 import { WalletService } from '../wallet/wallet.service';
 import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
 import { RedisService } from '../infrastructure/redis/redis.service';
@@ -69,10 +68,6 @@ const mockNotificationsService = {
   createInAppNotification: jest.fn().mockResolvedValue(undefined),
 };
 
-const mockUsersService = {
-  findById: jest.fn(),
-};
-
 describe('AuctionsService', () => {
   let service: AuctionsService;
 
@@ -86,7 +81,6 @@ describe('AuctionsService', () => {
           useValue: { uploadImage: jest.fn(), deleteImage: jest.fn() },
         },
         { provide: NotificationsService, useValue: mockNotificationsService },
-        { provide: UsersService, useValue: mockUsersService },
         { provide: WalletService, useValue: mockWalletService },
         {
           provide: RealtimeService,
