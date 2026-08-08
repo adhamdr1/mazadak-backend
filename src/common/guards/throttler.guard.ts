@@ -37,20 +37,25 @@ export class CustomThrottlerGuard extends ThrottlerGuard {
     super(options, storageService, reflector);
   }
 
-  // Override context for GraphQL with strict typing
+  // Override context for GraphQL and HTTP
   protected override getRequestResponse(context: ExecutionContext): {
     req: RequestWithUser;
-    res: any;
+    res: Record<string, any>;
   } {
-    const ctx = GqlExecutionContext.create(context);
-    const { req, res } = ctx.getContext<{
-      req: RequestWithUser;
-      res: Response;
-    }>();
+    if (context.getType<string>() === 'graphql') {
+      const ctx = GqlExecutionContext.create(context);
+      const { req, res } = ctx.getContext<{
+        req: RequestWithUser;
+        res: Record<string, any>;
+      }>();
+      return { req, res };
+    }
 
+    // Fallback for standard HTTP requests
+    const http = context.switchToHttp();
     return {
-      req,
-      res,
+      req: http.getRequest<RequestWithUser>(),
+      res: http.getResponse<Record<string, any>>(),
     };
   }
 

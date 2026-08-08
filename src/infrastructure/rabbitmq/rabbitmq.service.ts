@@ -1,4 +1,4 @@
-﻿import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { randomUUID } from 'crypto';
 import { RABBITMQ_CLIENT, MAZADAK_EXCHANGE } from './rabbitmq.constants';
@@ -34,7 +34,9 @@ export class RabbitMQService {
     };
 
     try {
-      // emit is fire-and-forget (no reply expected)
+      // emit is fire-and-forget (no reply expected).
+      // NestJS ClientProxy wraps this in { pattern, data } and publishes to
+      // the configured queue. The message content is the RabbitMQMessage envelope.
       await this.client
         .emit({ exchange: MAZADAK_EXCHANGE, routingKey: eventType }, message)
         .toPromise();

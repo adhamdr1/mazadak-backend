@@ -84,9 +84,15 @@ export class Transaction {
 export const TransactionSchema = SchemaFactory.createForClass(Transaction);
 TransactionSchema.index(
   { gatewayPaymentIntentId: 1, status: 1 },
-  { unique: true, sparse: true },
+  {
+    unique: true,
+    partialFilterExpression: { gatewayPaymentIntentId: { $type: 'string' } },
+  },
 );
 TransactionSchema.index(
   { idempotencyKey: 1, status: 1 },
-  { unique: true, sparse: true },
+  {
+    unique: true,
+    partialFilterExpression: { idempotencyKey: { $type: 'string' } },
+  },
 );

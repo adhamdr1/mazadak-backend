@@ -45,7 +45,16 @@ export class WebhookConsumer implements OnModuleInit, OnModuleDestroy {
 
         try {
           const content = msg.content.toString();
-          const parsedMessage = JSON.parse(content) as RabbitMQParsedMessage;
+          const raw = JSON.parse(content) as unknown;
+
+          // NestJS ClientProxy wraps published messages in a { pattern, data } envelope.
+          // We extract the inner data (RabbitMQMessage) if that envelope is present,
+          // matching the same unwrapping logic used by NotificationsConsumer.
+          const parsedMessage = (
+            raw && typeof raw === 'object' && 'data' in raw
+              ? (raw as { data: RabbitMQParsedMessage }).data
+              : raw
+          ) as RabbitMQParsedMessage;
 
           if (
             parsedMessage.eventType === RabbitMQEvent.PaymentWebhookReceived
@@ -58,6 +67,10 @@ export class WebhookConsumer implements OnModuleInit, OnModuleDestroy {
           this.channel?.ack(msg);
         } catch (error: unknown) {
           const err = error as Error;
+          this.logger.error(
+            `Failed to process webhook message: ${err.message}`,
+            err.stack,
+          );
           this.handleProcessingError(msg, err);
         }
       });

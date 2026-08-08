@@ -71,6 +71,20 @@ export class PaymobProvider implements IPaymentProvider {
   }
 
   async createPayment(data: CreatePaymentData): Promise<PaymentCreationResult> {
+    if (this.apiKey === 'api_mock') {
+      this.logger.log('Mocking Paymob payment creation for testing...');
+      const mockOrderId = Math.floor(Math.random() * 100000).toString();
+      const mockPaymentToken = 'mock_payment_token_' + Date.now();
+      const iframeId =
+        this.configService.get<string>('PAYMOB_IFRAME_ID') || '1234';
+
+      return {
+        gatewayPaymentIntentId: mockOrderId,
+        clientSecret: mockPaymentToken,
+        paymentUrl: `https://accept.paymob.com/api/acceptance/iframes/${iframeId}?payment_token=${mockPaymentToken}`,
+      };
+    }
+
     try {
       const token = await this.getAuthToken();
 
@@ -140,6 +154,11 @@ export class PaymobProvider implements IPaymentProvider {
     signature: string,
     secret?: string,
   ): boolean {
+    if (this.apiKey === 'api_mock') {
+      this.logger.log('Bypassing Paymob HMAC verification for mock testing...');
+      return true;
+    }
+
     try {
       const body = JSON.parse(rawBody.toString()) as PaymobWebhookPayload;
       const obj = body.obj;
@@ -215,6 +234,16 @@ export class PaymobProvider implements IPaymentProvider {
   async getPaymentStatus(
     gatewayPaymentIntentId: string,
   ): Promise<PaymentStatusResult> {
+    if (this.apiKey === 'api_mock') {
+      this.logger.log(
+        `Mocking Paymob getPaymentStatus for orderId: ${gatewayPaymentIntentId}`,
+      );
+      return {
+        status: PaymentStatus.PENDING,
+        gatewayTransactionId: gatewayPaymentIntentId,
+      };
+    }
+
     try {
       const token = await this.getAuthToken();
       const response = await axios.get<{

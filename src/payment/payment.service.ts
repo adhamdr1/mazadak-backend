@@ -208,7 +208,7 @@ export class PaymentService {
       walletId: wallet._id.toString(),
       type: TransactionType.DEPOSIT,
       amount: new Decimal(data.amount).div(100).toNumber(), // convert minor units to major units
-      currency: data.currency,
+      currency: data.currency || 'EGP',
       status: TransactionStatus.PENDING,
       idempotencyKey,
       gatewayProvider: data.provider,
@@ -222,7 +222,7 @@ export class PaymentService {
       const provider = this.providerFactory.getProvider(data.provider);
       const gatewayResult = await provider.createPayment({
         amount: data.amount,
-        currency: data.currency,
+        currency: data.currency || 'EGP',
         idempotencyKey,
         metadata: {
           userId,

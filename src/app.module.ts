@@ -52,6 +52,10 @@ import type { JwtPayload } from './auth/interfaces/jwt-payload.interface';
             ttl: 60_000,
             limit: 100,
           },
+          // 'global' throttler applies to all routes (100 requests/minute).
+          // 'strict' throttler has a high global limit (99999) by design so it does not
+          // block normal authenticated traffic globally. Sensitive endpoints (e.g. auth mutations)
+          // explicitly override this with @Throttle({ strict: { ttl: 60_000, limit: 5 } }).
           {
             name: 'strict',
             ttl: 60_000,

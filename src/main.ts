@@ -39,7 +39,7 @@ async function bootstrap() {
     methods: ['GET', 'POST', 'OPTIONS'],
   });
 
-  // Increase payload limit for Base64 image uploads (Default is 100kb, we set it to 50mb)
+  // Set payload limit for request body (1mb)
   // We add verify hook to preserve rawBody for signature verification
   app.use(
     express.json({
