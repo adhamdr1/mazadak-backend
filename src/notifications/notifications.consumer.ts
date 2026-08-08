@@ -16,6 +16,10 @@ import { UsersService } from '../users/users.service';
 import {
   IDEMPOTENCY_KEY_PREFIX,
   IDEMPOTENCY_TTL_S,
+  RETRY_QUEUE_5S,
+  RETRY_QUEUE_30S,
+  RETRY_QUEUE_2M,
+  X_RETRY_COUNT,
 } from '../infrastructure/rabbitmq/rabbitmq.constants';
 import {
   RabbitMQEvent,
@@ -73,11 +77,11 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
             this.queueName,
             (msg: ConsumeMessage | null) => {
               if (msg) {
-                this.handleMessage(msg).catch((error: unknown) => {
+                this.handleMessage(msg, channel).catch((error: unknown) => {
                   this.logger.error(
                     `Unhandled error processing message: ${error instanceof Error ? error.message : String(error)}`,
                   );
-                  channel.nack(msg, false, false);
+                  this.handleProcessingError(msg, error as Error, channel);
                 });
               }
             },
@@ -99,7 +103,10 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async handleMessage(msg: ConsumeMessage): Promise<void> {
+  private async handleMessage(
+    msg: ConsumeMessage,
+    channel: amqplib.Channel,
+  ): Promise<void> {
     try {
       const content = msg.content.toString();
       const raw = JSON.parse(content) as unknown;
@@ -185,13 +192,51 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
         IDEMPOTENCY_TTL_S,
       );
 
-      this.channelWrapper!.ack(msg);
+      channel.ack(msg);
       this.logger.log(`Successfully processed event ${parsed.eventType}`);
     } catch (error) {
       this.logger.error(
         `Error processing message: ${error instanceof Error ? error.message : String(error)}`,
       );
-      this.channelWrapper!.nack(msg, false, false);
+      this.handleProcessingError(msg, error as Error, channel);
+    }
+  }
+
+  private handleProcessingError(
+    msg: ConsumeMessage,
+    err: Error,
+    channel: amqplib.Channel,
+  ): void {
+    const headers = (msg.properties.headers as Record<string, unknown>) || {};
+    const retryCount = (Number(headers[X_RETRY_COUNT]) || 0) + 1;
+
+    let targetQueue: string | null = null;
+    if (retryCount === 1) {
+      targetQueue = RETRY_QUEUE_5S;
+    } else if (retryCount === 2) {
+      targetQueue = RETRY_QUEUE_30S;
+    } else if (retryCount === 3) {
+      targetQueue = RETRY_QUEUE_2M;
+    }
+
+    if (targetQueue) {
+      this.logger.warn(
+        `Notification processing failed (attempt ${retryCount}). Re-queueing to ${targetQueue} for retry: ${err.message}`,
+      );
+      channel.sendToQueue(targetQueue, msg.content, {
+        headers: {
+          ...headers,
+          [X_RETRY_COUNT]: retryCount,
+        },
+      });
+      channel.ack(msg);
+    } else {
+      this.logger.error(
+        `Notification processing failed after ${retryCount - 1} retries. Routing to Dead Letter Queue: ${err.message}`,
+        err.stack,
+      );
+      // Reject and do not requeue to route it to Dead Letter Queue (DLQ)
+      channel.nack(msg, false, false);
     }
   }
 

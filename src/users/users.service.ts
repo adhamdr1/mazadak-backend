@@ -1,5 +1,6 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { ClientSession } from 'mongoose';
+import type { IAuthRepository } from '../auth/interfaces/auth-repository.interface';
 import { UpdateUserInput } from './dto/update-user.input';
 import { PaginationInput } from '../common/dto/pagination.input';
 import { CreateUserInput } from './dto/create-user.input';
@@ -23,6 +24,8 @@ export class UsersService {
   constructor(
     @Inject('IUserRepository')
     private readonly userRepository: IUserRepository,
+    @Inject('IAuthRepository')
+    private readonly authRepository: IAuthRepository,
   ) {}
 
   async startSession(): Promise<ClientSession> {
@@ -209,9 +212,16 @@ export class UsersService {
       throw new CannotBanAdminException();
     }
 
-    return (await this.userRepository.update(userId, {
+    const updatedUser = (await this.userRepository.update(userId, {
       isBanned: !user.isBanned,
     })) as User;
+
+    if (updatedUser.isBanned) {
+      // Revoke all refresh tokens for this user
+      await this.authRepository.deleteAllUserTokens(userId);
+    }
+
+    return updatedUser;
   }
 
   async countVerifiedUsers(): Promise<number> {

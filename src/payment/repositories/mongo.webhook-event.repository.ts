@@ -44,7 +44,7 @@ export class MongoWebhookEventRepository implements IWebhookEventRepository {
       return doc.save({ session });
     }
     return this.webhookEventModel
-      .findByIdAndUpdate(doc._id, doc, { new: true, session })
+      .findByIdAndUpdate(doc._id, doc, { returnDocument: 'after', session })
       .exec() as Promise<WebhookEvent>;
   }
 }

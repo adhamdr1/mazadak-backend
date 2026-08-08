@@ -1,5 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Types } from 'mongoose';
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import Redis from 'ioredis';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PlaceBidInput } from './dto/place-bid.input';
 import { BidsFilterInput } from './dto/bids-filter.input';
@@ -27,6 +29,9 @@ import Decimal from 'decimal.js';
 
 const ACTIVE_AUCTIONS_PATTERN = 'auction:active:*';
 
+const FINALIZE_AUCTIONS_LOCK_KEY = 'auction:finalize:lock';
+const LOCK_TTL_SECONDS = 30;
+
 export const BID_ADDED = 'BID_ADDED';
 
 @Injectable()
@@ -44,44 +49,49 @@ export class BidsService {
     private readonly realtimeService: RealtimeService,
     private readonly redisService: RedisService,
     private readonly outboxService: OutboxService,
+    @InjectRedis() private readonly redis: Redis,
   ) {}
 
   async placeBid(userId: string, input: PlaceBidInput): Promise<Bid> {
-    const auction = await this.auctionRepository.findById(input.auctionId);
-    if (!auction) {
-      throw new AuctionNotFoundException();
-    }
-
-    if (auction.status !== AuctionStatus.ACTIVE) {
-      throw new AuctionNotActiveException();
-    }
-
-    if (auction.sellerId.toString() === userId) {
-      throw new BidOnOwnAuctionException();
-    }
-
-    const currentWinner = await this.bidRepository.findWinningByAuctionId(
-      input.auctionId,
-    );
-
-    if (currentWinner && currentWinner.bidderId.toString() === userId) {
-      throw new AlreadyHighestBidderException();
-    }
-
-    const minimumRequired = currentWinner
-      ? new Decimal(auction.currentPrice)
-          .plus(auction.minimumBidIncrement)
-          .toNumber()
-      : auction.startingPrice;
-
-    if (input.amount < minimumRequired) {
-      throw new BidAmountTooLowException();
-    }
-
     const session = await this.bidRepository.startSession();
     session.startTransaction();
 
     try {
+      const auction = await this.auctionRepository.findById(
+        input.auctionId,
+        session,
+      );
+      if (!auction) {
+        throw new AuctionNotFoundException();
+      }
+
+      if (auction.status !== AuctionStatus.ACTIVE) {
+        throw new AuctionNotActiveException();
+      }
+
+      if (auction.sellerId.toString() === userId) {
+        throw new BidOnOwnAuctionException();
+      }
+
+      const currentWinner = await this.bidRepository.findWinningByAuctionId(
+        input.auctionId,
+        session,
+      );
+
+      if (currentWinner && currentWinner.bidderId.toString() === userId) {
+        throw new AlreadyHighestBidderException();
+      }
+
+      const minimumRequired = currentWinner
+        ? new Decimal(auction.currentPrice)
+            .plus(auction.minimumBidIncrement)
+            .toNumber()
+        : auction.startingPrice;
+
+      if (input.amount < minimumRequired) {
+        throw new BidAmountTooLowException();
+      }
+
       // 1. Hold new bidder's funds
       await this.walletService.hold(
         userId,
@@ -176,32 +186,107 @@ export class BidsService {
 
   @Cron(CronExpression.EVERY_MINUTE)
   async finalizeEndedAuctions(): Promise<void> {
-    const endedAuctions = await this.auctionRepository.findEndedWithoutWinner();
+    let acquiredLock = false;
+    try {
+      const lockResult = await this.redis
+        .set(FINALIZE_AUCTIONS_LOCK_KEY, '1', 'EX', LOCK_TTL_SECONDS, 'NX')
+        .catch((err) => {
+          this.logger.warn(
+            `Redis finalize auctions lock error: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          return null;
+        });
 
-    if (endedAuctions.length === 0) {
-      return;
-    }
+      if (!lockResult) return;
+      acquiredLock = true;
 
-    this.logger.log(`Found ${endedAuctions.length} ended auctions to finalize`);
+      const endedAuctions =
+        await this.auctionRepository.findEndedWithoutWinner();
 
-    for (const auction of endedAuctions) {
-      const auctionId = auction._id.toString();
-      const session = await this.bidRepository.startSession();
-      session.startTransaction();
+      if (endedAuctions.length === 0) {
+        return;
+      }
 
-      try {
-        const winningBid = await this.bidRepository.findWinningByAuctionId(
-          auctionId,
-          session,
-        );
+      this.logger.log(
+        `Found ${endedAuctions.length} ended auctions to finalize`,
+      );
 
-        if (!winningBid) {
-          this.logger.log(`Auction ${auctionId} ended with no bids`);
-          await this.auctionRepository.finalizeAuction(
+      for (const auction of endedAuctions) {
+        const auctionId = auction._id.toString();
+        const session = await this.bidRepository.startSession();
+        session.startTransaction();
+
+        try {
+          const winningBid = await this.bidRepository.findWinningByAuctionId(
             auctionId,
-            undefined,
             session,
           );
+
+          if (!winningBid) {
+            this.logger.log(`Auction ${auctionId} ended with no bids`);
+            await this.auctionRepository.finalizeAuction(
+              auctionId,
+              undefined,
+              session,
+            );
+
+            // Send Outbox Event
+            await this.outboxService.saveEvent(
+              RabbitMQEvent.AuctionEnded,
+              {
+                auctionId,
+                auctionTitle: auction.title,
+                sellerId: auction.sellerId.toString(),
+                finalPrice: auction.currentPrice,
+              },
+              session,
+            );
+
+            await session.commitTransaction();
+            continue;
+          }
+
+          const winnerId = winningBid.bidderId.toString();
+          const sellerId = auction.sellerId.toString();
+
+          // 1. Capture the funds from the winner
+          const { transaction: captureTransaction } =
+            await this.walletService.capture(
+              winnerId,
+              winningBid.amount,
+              auctionId,
+              session,
+            );
+
+          // 2. Deposit the funds to the seller
+          const { transaction: depositTransaction } =
+            await this.walletService.deposit(
+              sellerId,
+              winningBid.amount,
+              auctionId,
+              session,
+            );
+
+          // 3. Assign the winner to the auction and mark as finalized
+          await this.auctionRepository.finalizeAuction(
+            auctionId,
+            winnerId,
+            session,
+          );
+
+          // Fetch winner name for seller's notification
+          let winnerName: string | null = null;
+          try {
+            const winnerUser = await this.usersService.findById(winnerId);
+            if (winnerUser) {
+              winnerName =
+                [winnerUser.firstName, winnerUser.lastName]
+                  .filter(Boolean)
+                  .join(' ') || 'Winning Bidder';
+            }
+          } catch {
+            winnerName = 'Winning Bidder';
+          }
 
           // Send Outbox Event
           await this.outboxService.saveEvent(
@@ -209,86 +294,37 @@ export class BidsService {
             {
               auctionId,
               auctionTitle: auction.title,
-              sellerId: auction.sellerId.toString(),
+              sellerId,
               finalPrice: auction.currentPrice,
+              winnerId,
+              winnerName: winnerName || undefined,
+              captureTransactionId: captureTransaction._id.toString(),
+              depositTransactionId: depositTransaction._id.toString(),
             },
             session,
           );
 
           await session.commitTransaction();
-          continue;
-        }
 
-        const winnerId = winningBid.bidderId.toString();
-        const sellerId = auction.sellerId.toString();
-
-        // 1. Capture the funds from the winner
-        const { transaction: captureTransaction } =
-          await this.walletService.capture(
-            winnerId,
-            winningBid.amount,
-            auctionId,
-            session,
+          this.logger.log(
+            `Successfully finalized auction ${auctionId}. Winner: ${winnerId}, Seller: ${sellerId}, Amount: ${winningBid.amount}`,
           );
-
-        // 2. Deposit the funds to the seller
-        const { transaction: depositTransaction } =
-          await this.walletService.deposit(
-            sellerId,
-            winningBid.amount,
-            auctionId,
-            session,
+        } catch (error) {
+          await session.abortTransaction();
+          this.logger.error(
+            `Failed to finalize auction ${auctionId}: ${(error as Error).message}`,
           );
-
-        // 3. Assign the winner to the auction and mark as finalized
-        await this.auctionRepository.finalizeAuction(
-          auctionId,
-          winnerId,
-          session,
-        );
-
-        // Fetch winner name for seller's notification
-        let winnerName: string | null = null;
-        try {
-          const winnerUser = await this.usersService.findById(winnerId);
-          if (winnerUser) {
-            winnerName =
-              [winnerUser.firstName, winnerUser.lastName]
-                .filter(Boolean)
-                .join(' ') || 'Winning Bidder';
-          }
-        } catch {
-          winnerName = 'Winning Bidder';
+        } finally {
+          await session.endSession();
         }
-
-        // Send Outbox Event
-        await this.outboxService.saveEvent(
-          RabbitMQEvent.AuctionEnded,
-          {
-            auctionId,
-            auctionTitle: auction.title,
-            sellerId,
-            finalPrice: auction.currentPrice,
-            winnerId,
-            winnerName: winnerName || undefined,
-            captureTransactionId: captureTransaction._id.toString(),
-            depositTransactionId: depositTransaction._id.toString(),
-          },
-          session,
-        );
-
-        await session.commitTransaction();
-
-        this.logger.log(
-          `Successfully finalized auction ${auctionId}. Winner: ${winnerId}, Seller: ${sellerId}, Amount: ${winningBid.amount}`,
-        );
-      } catch (error) {
-        await session.abortTransaction();
-        this.logger.error(
-          `Failed to finalize auction ${auctionId}: ${(error as Error).message}`,
-        );
-      } finally {
-        await session.endSession();
+      }
+    } catch (err) {
+      this.logger.error(
+        `Failed to run finalizeEndedAuctions: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    } finally {
+      if (acquiredLock) {
+        await this.redis.del(FINALIZE_AUCTIONS_LOCK_KEY).catch(() => undefined);
       }
     }
   }

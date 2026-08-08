@@ -1,4 +1,4 @@
-import { IsEnum, IsNumber, IsString, Min } from 'class-validator';
+import { IsEnum, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 import { PaymentProviderType } from '../enums/payment-provider-type.enum';
 
 export class InitializePaymentDto {
@@ -9,6 +9,7 @@ export class InitializePaymentDto {
   @Min(1)
   amount!: number; // minor units (e.g. cents)
 
+  @IsOptional()
   @IsString()
-  currency!: string;
+  currency?: string = 'EGP';
 }

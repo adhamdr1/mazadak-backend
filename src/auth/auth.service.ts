@@ -319,7 +319,7 @@ export class AuthService {
 
     // 5. Fetch fresh user data — role/email might have changed since token was issued.
     const user = await this.usersService.findById(payload.sub);
-    if (!user || user.deletedAt) {
+    if (!user || user.deletedAt || user.isBanned) {
       throw new AccountDisabledException();
     }
 

@@ -33,8 +33,11 @@ export class MongoAuctionRepository implements IAuctionRepository {
     return await auction.save();
   }
 
-  async findById(id: string): Promise<Auction | null> {
-    return await this.auctionModel.findById(new Types.ObjectId(id)).exec();
+  async findById(id: string, session?: ClientSession): Promise<Auction | null> {
+    return await this.auctionModel
+      .findById(new Types.ObjectId(id))
+      .session(session || null)
+      .exec();
   }
 
   async findAll(

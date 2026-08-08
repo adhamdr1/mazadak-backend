@@ -1,4 +1,5 @@
 import { NestFactory, HttpAdapterHost } from '@nestjs/core';
+import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 import { IncomingMessage, ServerResponse } from 'http';
 import { ValidationPipe } from '@nestjs/common';
@@ -38,7 +39,7 @@ async function bootstrap() {
     methods: ['GET', 'POST', 'OPTIONS'],
   });
 
-  // Increase payload limit for Base64 image uploads (Default is 100kb, we set it to 50mb)
+  // Set payload limit for request body (1mb)
   // We add verify hook to preserve rawBody for signature verification
   app.use(
     express.json({
@@ -79,7 +80,9 @@ async function bootstrap() {
   const { httpAdapter } = app.get(HttpAdapterHost);
   app.useGlobalFilters(new SentryExceptionFilter(httpAdapter));
 
-  await app.listen(3000);
+  const configService = app.get(ConfigService);
+  const port = configService.get<number>('PORT') || 3000;
+  await app.listen(port);
 }
 
 bootstrap().catch((err) => {

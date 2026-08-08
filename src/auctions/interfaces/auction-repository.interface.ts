@@ -41,7 +41,7 @@ export interface IAuctionRepository {
 
   create(data: CreateAuctionData): Promise<Auction>;
 
-  findById(id: string): Promise<Auction | null>;
+  findById(id: string, session?: ClientSession): Promise<Auction | null>;
 
   findAll(
     page: number,

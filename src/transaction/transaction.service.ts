@@ -77,13 +77,13 @@ export class TransactionService {
     }
 
     // 2. Prevent re-processing
-    if (transaction.status !== TransactionStatus.PENDING) {
+    if (transaction.hasChild) {
       return; // Already processed
     }
 
     // 3. Create status transition by appending a new transaction record
     try {
-      await this.transactionRepository.create(
+      await this.createTransaction(
         {
           walletId: transaction.walletId.toString(),
           type: transaction.type,
@@ -173,7 +173,7 @@ export class TransactionService {
       throw new TransactionNotFoundException();
     }
 
-    if (transaction.status !== TransactionStatus.PENDING) {
+    if (transaction.hasChild) {
       return;
     }
 

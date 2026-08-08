@@ -53,5 +53,6 @@ import { WalletModule } from '../wallet/wallet.module';
       useClass: MongoAuthRepository,
     },
   ],
+  exports: [JwtModule],
 })
 export class AuthModule {}
