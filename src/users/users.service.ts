@@ -19,15 +19,16 @@ import { PhoneAlreadyExistsException } from './exceptions/phone-already-exists.e
 import { EmailAlreadyVerifiedException } from './exceptions/email-already-verified.exception';
 import { UserForbiddenException } from './exceptions/user-forbidden.exception';
 import { CannotBanAdminException } from './exceptions/cannot-ban-admin.exception';
-import { WalletService } from '../wallet/wallet.service';
 import { WalletHasBalanceException } from '../wallet/exceptions/wallet-has-balance.exception';
+import { QueryBus } from '@nestjs/cqrs';
+import { GetWalletBalanceQuery } from '../wallet/queries/get-wallet-balance.query';
 
 @Injectable()
 export class UsersService {
   constructor(
     @Inject('IUserRepository')
     private readonly userRepository: IUserRepository,
-    private readonly walletService: WalletService,
+    private readonly queryBus: QueryBus,
     private readonly rabbitMQService: RabbitMQService,
   ) {}
 
@@ -190,7 +191,11 @@ export class UsersService {
     await this.findById(targetId);
 
     // Verify wallet has zero balance (available balance + held balance = 0) before deletion.
-    const wallet = await this.walletService.getWalletByUserId(targetId);
+    const wallet = await this.queryBus.execute<{
+      balance: number;
+      heldBalance: number;
+    }>(new GetWalletBalanceQuery(targetId));
+
     if (wallet.balance > 0 || wallet.heldBalance > 0) {
       throw new WalletHasBalanceException();
     }
@@ -198,9 +203,10 @@ export class UsersService {
     await this.userRepository.softDelete(targetId);
   }
 
-  async reactivateUser(id: string): Promise<void> {
+  async reactivateUser(id: string): Promise<User> {
     const updated = await this.userRepository.reactivate(id);
     if (!updated) throw new UserNotFoundException();
+    return updated;
   }
 
   async linkGoogleAccount(userId: string, googleId: string): Promise<User> {

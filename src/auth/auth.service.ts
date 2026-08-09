@@ -305,25 +305,23 @@ export class AuthService {
       throw new InvalidTokenException();
     }
 
-    const user = await this.usersService.findById(userId);
-    await this.usersService.reactivateUser(userId);
+    // reactivateUser searches in soft-deleted accounts and returns the user
+    const user = await this.usersService.reactivateUser(userId);
 
     // Publish AccountReactivated event
-    if (user) {
-      const name =
-        [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
-      this.rabbitMQService
-        .publish(RabbitMQEvent.AccountReactivated, {
-          userId,
-          email: user.email,
-          name,
-        })
-        .catch((err: unknown) => {
-          this.logger?.error(
-            `Failed to publish AccountReactivated event: ${err instanceof Error ? err.message : String(err)}`,
-          );
-        });
-    }
+    const name =
+      [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
+    this.rabbitMQService
+      .publish(RabbitMQEvent.AccountReactivated, {
+        userId,
+        email: user.email,
+        name,
+      })
+      .catch((err: unknown) => {
+        this.logger?.error(
+          `Failed to publish AccountReactivated event: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
 
     return true;
   }

@@ -8,6 +8,8 @@ import { MongoWalletRepository } from './repositories/mongo.wallet.repository';
 import { TransactionModule } from '../transaction/transaction.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { OutboxModule } from '../infrastructure/outbox/outbox.module';
+import { CqrsModule } from '@nestjs/cqrs';
+import { GetWalletBalanceHandler } from './queries/handlers/get-wallet-balance.handler';
 
 @Module({
   imports: [
@@ -15,11 +17,13 @@ import { OutboxModule } from '../infrastructure/outbox/outbox.module';
     TransactionModule,
     NotificationsModule,
     OutboxModule,
+    CqrsModule,
   ],
   providers: [
     WalletResolver,
     WalletService,
     WalletConsumer,
+    GetWalletBalanceHandler,
     {
       provide: 'IWalletRepository',
       useClass: MongoWalletRepository,
