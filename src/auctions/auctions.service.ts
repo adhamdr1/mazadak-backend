@@ -19,12 +19,9 @@ import { AuctionStartTimeTooSoonException } from './exceptions/auction-start-tim
 import { AuctionEndTimeInvalidException } from './exceptions/auction-end-time-invalid.exception';
 import { AuctionNotPendingException } from './exceptions/auction-not-pending.exception';
 import { UploadService } from '../upload/upload.service';
-import { NotificationsService } from '../notifications/notifications.service';
-import { UsersService } from '../users/users.service';
 import { WalletService } from '../wallet/wallet.service';
 import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
 import { RedisService } from '../infrastructure/redis/redis.service';
-import { RabbitMQService } from '../infrastructure/rabbitmq/rabbitmq.service';
 import { RabbitMQEvent } from '../infrastructure/rabbitmq/rabbitmq-event.types';
 import { OutboxService } from '../infrastructure/outbox/outbox.service';
 
@@ -49,12 +46,9 @@ export class AuctionsService {
     @Inject('IAuctionRepository')
     private readonly auctionRepository: IAuctionRepository,
     private readonly uploadService: UploadService,
-    private readonly notificationsService: NotificationsService,
-    private readonly usersService: UsersService,
     private readonly walletService: WalletService,
     private readonly realtimeService: RealtimeService,
     private readonly redisService: RedisService,
-    private readonly rabbitMQService: RabbitMQService,
     private readonly outboxService: OutboxService,
     @InjectRedis() private readonly redis: Redis,
   ) {}

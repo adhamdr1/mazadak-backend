@@ -12,7 +12,6 @@ import { Transaction } from '../transaction/entities/transaction.entity';
 import { WalletsPage } from './dto/wallets-page.type';
 import { PaginationInput } from '../common/dto/pagination.input';
 import { RabbitMQEvent } from '../infrastructure/rabbitmq/rabbitmq-event.types';
-import { UsersService } from '../users/users.service';
 import { OutboxService } from '../infrastructure/outbox/outbox.service';
 import Decimal from 'decimal.js';
 
@@ -24,7 +23,6 @@ export class WalletService {
     @Inject('IWalletRepository')
     private readonly walletRepository: IWalletRepository,
     private readonly transactionService: TransactionService,
-    private readonly usersService: UsersService,
     private readonly outboxService: OutboxService,
   ) {}
 
@@ -224,18 +222,10 @@ export class WalletService {
     transactionId?: string,
     session?: ClientSession,
   ): Promise<void> {
-    const user = await this.usersService.findById(userId);
-    if (!user) return;
-
-    const name =
-      [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
-
     await this.outboxService.saveEvent(
       RabbitMQEvent.WalletDeposited,
       {
         userId,
-        email: user.email,
-        name,
         amount,
         transactionId: transactionId || 'N/A',
       },
@@ -250,18 +240,10 @@ export class WalletService {
     transactionId?: string,
     session?: ClientSession,
   ): Promise<void> {
-    const user = await this.usersService.findById(userId);
-    if (!user) return;
-
-    const name =
-      [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
-
     await this.outboxService.saveEvent(
       RabbitMQEvent.WithdrawalCompleted,
       {
         userId,
-        email: user.email,
-        name,
         amount,
         transactionId: transactionId || 'N/A',
       },

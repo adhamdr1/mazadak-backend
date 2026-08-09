@@ -30,7 +30,6 @@ export class MongoUserRepository implements IUserRepository {
     return await this.userModel
       .findOne({
         email,
-        deletedAt: null,
       })
       .exec();
   }
@@ -39,7 +38,6 @@ export class MongoUserRepository implements IUserRepository {
     return await this.userModel
       .findOne({
         email,
-        deletedAt: null,
       })
       .select('+password')
       .exec();
@@ -59,7 +57,6 @@ export class MongoUserRepository implements IUserRepository {
     return await this.userModel
       .findOne({
         phoneNumber,
-        deletedAt: null,
       })
       .exec();
   }
@@ -148,6 +145,7 @@ export class MongoUserRepository implements IUserRepository {
         },
         {
           deletedAt: new Date(),
+          isEmailVerified: false,
         },
       )
       .exec();
@@ -164,6 +162,21 @@ export class MongoUserRepository implements IUserRepository {
           $set: {
             googleId,
             authProvider: AuthProvider.GOOGLE,
+            isEmailVerified: true,
+          },
+        },
+        { returnDocument: 'after' },
+      )
+      .exec();
+  }
+
+  async reactivate(id: string): Promise<User | null> {
+    return await this.userModel
+      .findOneAndUpdate(
+        { _id: id, deletedAt: { $ne: null } },
+        {
+          $set: {
+            deletedAt: null,
             isEmailVerified: true,
           },
         },

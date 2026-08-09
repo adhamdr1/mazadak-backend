@@ -53,6 +53,11 @@ type AuthResponse {
   user: User!
 }
 
+type RegisterResponse {
+  success: Boolean!
+  message: String!
+}
+
 type InAppNotification {
   _id: ID!
   userId: ID!
@@ -101,13 +106,6 @@ type Wallet {
   updatedAt: DateTime!
 }
 
-type WalletsPage {
-  items: [Wallet!]!
-  total: Int!
-  totalPages: Int!
-  hasNextPage: Boolean!
-}
-
 type Transaction {
   _id: ID!
   walletId: ID!
@@ -152,6 +150,13 @@ enum TransactionReferenceType {
 
 type TransactionsPage {
   items: [Transaction!]!
+  total: Int!
+  totalPages: Int!
+  hasNextPage: Boolean!
+}
+
+type WalletsPage {
+  items: [Wallet!]!
   total: Int!
   totalPages: Int!
   hasNextPage: Boolean!
@@ -392,12 +397,14 @@ enum BidsSortField {
 }
 
 type Mutation {
-  register(registerInput: RegisterInput!): AuthResponse!
+  register(registerInput: RegisterInput!): RegisterResponse!
   login(loginInput: LoginInput!): AuthResponse!
   googleRegister(googleRegisterInput: GoogleRegisterInput!): AuthResponse!
   googleLogin(googleLoginInput: GoogleLoginInput!): AuthResponse!
   confirmEmail(token: String!): Boolean!
   resendConfirmationEmail(email: String!): Boolean!
+  requestReactivation(email: String!): Boolean!
+  confirmReactivation(token: String!): Boolean!
   refreshToken(refreshToken: String!): AuthResponse!
   logout(refreshToken: String!): Boolean!
   logoutAll: Boolean!

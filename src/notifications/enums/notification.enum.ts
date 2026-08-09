@@ -12,6 +12,8 @@ export enum EmailTemplates {
   WITHDRAWAL_COMPLETED = 'withdrawal-completed',
   AUCTION_CANCELLED_BY_ADMIN = 'auction-cancelled-by-admin',
   AUCTION_CANCELLED = 'auction-cancelled',
+  ACCOUNT_REACTIVATION = 'account-reactivation',
+  ACCOUNT_ACTIVATED = 'account-activated',
 }
 
 export enum EmailSubjects {
@@ -27,4 +29,6 @@ export enum EmailSubjects {
   WITHDRAWAL_COMPLETED = 'Wallet Withdrawal Completed - Mazadak',
   AUCTION_CANCELLED_BY_ADMIN = 'Notice: Your auction has been cancelled by an Admin',
   AUCTION_CANCELLED = 'Your auction has been cancelled on Mazadak',
+  ACCOUNT_REACTIVATION = 'Reactivate your Mazadak account',
+  ACCOUNT_ACTIVATED = 'Welcome back! Your Mazadak account is reactivated',
 }

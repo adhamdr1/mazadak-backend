@@ -18,6 +18,7 @@ import { EmailNotVerifiedException } from './exceptions/email-not-verified.excep
 import { InvalidTokenException } from './exceptions/invalid-token.exception';
 import { AccountDisabledException } from './exceptions/account-disabled.exception';
 import { GoogleAccountNoPasswordException } from './exceptions/google-account-no-password.exception';
+import { AccountSoftDeletedException } from './exceptions/account-soft-deleted.exception';
 import { SamePasswordException } from './exceptions/same-password.exception';
 import { RegistrationRequiredException } from './exceptions/registration-required.exception';
 import * as bcrypt from 'bcrypt';
@@ -142,6 +143,7 @@ function createMockUser(overrides: Partial<User> = {}): User {
  * أي test بيتوقع AuthResponse كنتيجة لازم ينادي الدالة دي الأول.
  */
 function setupIssueAuthTokensMocks() {
+  mockJwtService.sign.mockReset();
   mockJwtService.sign
     .mockReturnValueOnce(MOCK_ACCESS_TOKEN) // أول sign → access token
     .mockReturnValueOnce(MOCK_REFRESH_TOKEN); // تاني sign → refresh token
@@ -207,9 +209,9 @@ describe('AuthService', () => {
 
       // Assert
       expect(result).toEqual({
-        accessToken: MOCK_ACCESS_TOKEN,
-        refreshToken: MOCK_REFRESH_TOKEN,
-        user: mockUser,
+        success: true,
+        message:
+          'Verification email sent. Please check your inbox to verify your account.',
       });
       expect(mockUsersService.findByEmail).toHaveBeenCalledWith(
         registerInput.email,
@@ -301,7 +303,7 @@ describe('AuthService', () => {
       mockUsersService.findByEmailWithPassword.mockResolvedValue(deletedUser);
 
       await expect(service.login(loginInput)).rejects.toThrow(
-        InvalidCredentialsException,
+        AccountSoftDeletedException,
       );
     });
 
@@ -459,7 +461,7 @@ describe('AuthService', () => {
 
       await expect(
         service.googleLogin({ token: 'google-id-token' }),
-      ).rejects.toThrow(AccountDisabledException);
+      ).rejects.toThrow(AccountSoftDeletedException);
     });
 
     it('should link Google account if user exists with LOCAL provider and no googleId', async () => {

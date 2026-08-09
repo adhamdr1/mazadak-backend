@@ -9,6 +9,8 @@ import {
   RETRY_QUEUE_30S,
   RETRY_QUEUE_2M,
   PAYMENTS_WEBHOOK_QUEUE,
+  AUTH_QUEUE,
+  WALLET_QUEUE,
 } from './rabbitmq.constants';
 
 /**
@@ -85,6 +87,30 @@ export class RabbitMQSetupService implements OnApplicationBootstrap {
         PAYMENTS_WEBHOOK_QUEUE,
         MAZADAK_EXCHANGE,
         'PaymentWebhookReceived',
+      );
+
+      // ── 7. Auth Queue ─────────────────────────────────────────────────────
+      await channel.assertQueue(AUTH_QUEUE, {
+        durable: true,
+        arguments: {
+          'x-dead-letter-exchange': '',
+          'x-dead-letter-routing-key': DEAD_LETTER_QUEUE,
+        },
+      });
+      await channel.bindQueue(AUTH_QUEUE, MAZADAK_EXCHANGE, 'UserBanned');
+
+      // ── 8. Wallet Queue ───────────────────────────────────────────────────
+      await channel.assertQueue(WALLET_QUEUE, {
+        durable: true,
+        arguments: {
+          'x-dead-letter-exchange': '',
+          'x-dead-letter-routing-key': DEAD_LETTER_QUEUE,
+        },
+      });
+      await channel.bindQueue(
+        WALLET_QUEUE,
+        MAZADAK_EXCHANGE,
+        'WalletDepositInitiated',
       );
 
       this.logger.log('RabbitMQ topology asserted successfully');

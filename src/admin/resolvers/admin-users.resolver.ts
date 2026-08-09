@@ -51,9 +51,11 @@ export class AdminUsersResolver {
       .findMyAuctions(userId, defaultPagination, {})
       .catch(() => undefined);
 
-    const recentTransactions = await this.transactionService
-      .getMyTransactions(userId, defaultPagination)
-      .catch(() => undefined);
+    const recentTransactions = wallet
+      ? await this.transactionService
+          .getTransactionsByWalletId(wallet._id.toString(), defaultPagination)
+          .catch(() => undefined)
+      : undefined;
 
     return {
       user,

@@ -16,12 +16,12 @@ import { AuctionInvalidStateException } from './exceptions/auction-invalid-state
 import { AuctionNotPendingException } from './exceptions/auction-not-pending.exception';
 import { PaginationInput } from '../common/dto/pagination.input';
 import { NotificationsService } from '../notifications/notifications.service';
-import { UsersService } from '../users/users.service';
 import { WalletService } from '../wallet/wallet.service';
 import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
 import { RedisService } from '../infrastructure/redis/redis.service';
 import { RabbitMQService } from '../infrastructure/rabbitmq/rabbitmq.service';
 import { OutboxService } from '../infrastructure/outbox/outbox.service';
+import { getRedisConnectionToken } from '@nestjs-modules/ioredis';
 
 const mockWalletService = {
   release: jest.fn(),
@@ -69,10 +69,6 @@ const mockNotificationsService = {
   createInAppNotification: jest.fn().mockResolvedValue(undefined),
 };
 
-const mockUsersService = {
-  findById: jest.fn(),
-};
-
 describe('AuctionsService', () => {
   let service: AuctionsService;
 
@@ -86,7 +82,6 @@ describe('AuctionsService', () => {
           useValue: { uploadImage: jest.fn(), deleteImage: jest.fn() },
         },
         { provide: NotificationsService, useValue: mockNotificationsService },
-        { provide: UsersService, useValue: mockUsersService },
         { provide: WalletService, useValue: mockWalletService },
         {
           provide: RealtimeService,
@@ -104,6 +99,15 @@ describe('AuctionsService', () => {
         {
           provide: OutboxService,
           useValue: { saveEvent: jest.fn().mockResolvedValue(undefined) },
+        },
+        {
+          provide: getRedisConnectionToken(),
+          useValue: {
+            get: jest.fn().mockResolvedValue(null),
+            set: jest.fn().mockResolvedValue('OK'),
+            del: jest.fn().mockResolvedValue(1),
+            setex: jest.fn().mockResolvedValue('OK'),
+          },
         },
       ],
     }).compile();

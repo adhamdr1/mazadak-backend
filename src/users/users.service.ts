@@ -1,6 +1,7 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { ClientSession } from 'mongoose';
-import type { IAuthRepository } from '../auth/interfaces/auth-repository.interface';
+import { RabbitMQService } from '../infrastructure/rabbitmq/rabbitmq.service';
+import { RabbitMQEvent } from '../infrastructure/rabbitmq/rabbitmq-event.types';
 import { UpdateUserInput } from './dto/update-user.input';
 import { PaginationInput } from '../common/dto/pagination.input';
 import { CreateUserInput } from './dto/create-user.input';
@@ -18,14 +19,17 @@ import { PhoneAlreadyExistsException } from './exceptions/phone-already-exists.e
 import { EmailAlreadyVerifiedException } from './exceptions/email-already-verified.exception';
 import { UserForbiddenException } from './exceptions/user-forbidden.exception';
 import { CannotBanAdminException } from './exceptions/cannot-ban-admin.exception';
+import { WalletHasBalanceException } from '../wallet/exceptions/wallet-has-balance.exception';
+import { QueryBus } from '@nestjs/cqrs';
+import { GetWalletBalanceQuery } from '../wallet/queries/get-wallet-balance.query';
 
 @Injectable()
 export class UsersService {
   constructor(
     @Inject('IUserRepository')
     private readonly userRepository: IUserRepository,
-    @Inject('IAuthRepository')
-    private readonly authRepository: IAuthRepository,
+    private readonly queryBus: QueryBus,
+    private readonly rabbitMQService: RabbitMQService,
   ) {}
 
   async startSession(): Promise<ClientSession> {
@@ -185,7 +189,24 @@ export class UsersService {
       throw new UserForbiddenException();
     }
     await this.findById(targetId);
+
+    // Verify wallet has zero balance (available balance + held balance = 0) before deletion.
+    const wallet = await this.queryBus.execute<{
+      balance: number;
+      heldBalance: number;
+    }>(new GetWalletBalanceQuery(targetId));
+
+    if (wallet.balance > 0 || wallet.heldBalance > 0) {
+      throw new WalletHasBalanceException();
+    }
+
     await this.userRepository.softDelete(targetId);
+  }
+
+  async reactivateUser(id: string): Promise<User> {
+    const updated = await this.userRepository.reactivate(id);
+    if (!updated) throw new UserNotFoundException();
+    return updated;
   }
 
   async linkGoogleAccount(userId: string, googleId: string): Promise<User> {
@@ -217,8 +238,10 @@ export class UsersService {
     })) as User;
 
     if (updatedUser.isBanned) {
-      // Revoke all refresh tokens for this user
-      await this.authRepository.deleteAllUserTokens(userId);
+      // Publish UserBanned event to revoke tokens asynchronously
+      await this.rabbitMQService.publish(RabbitMQEvent.UserBanned, {
+        userId,
+      });
     }
 
     return updatedUser;

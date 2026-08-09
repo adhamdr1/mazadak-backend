@@ -15,6 +15,7 @@ import { PassportModule } from '@nestjs/passport';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { WalletModule } from '../wallet/wallet.module';
+import { AuthConsumer } from './consumers/auth.consumer';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { WalletModule } from '../wallet/wallet.module';
     AuthResolver,
     AuthService,
     JwtStrategy,
+    AuthConsumer,
     {
       provide: 'IAuthRepository',
       useClass: MongoAuthRepository,

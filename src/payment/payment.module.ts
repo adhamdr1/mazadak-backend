@@ -17,7 +17,6 @@ import { WebhookConsumer } from './consumers/webhook.consumer';
 import { ReconciliationService } from './reconciliation.service';
 import { PaymentExpirationService } from './payment-expiration.service';
 import { MongoWebhookEventRepository } from './repositories/mongo.webhook-event.repository';
-import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
@@ -28,7 +27,6 @@ import { UsersModule } from '../users/users.module';
     TransactionModule,
     OutboxModule,
     WalletModule,
-    UsersModule,
   ],
   controllers: [PaymentController],
   providers: [

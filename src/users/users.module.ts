@@ -4,18 +4,14 @@ import { UsersService } from './users.service';
 import { UsersResolver } from './users.resolver';
 import { User, UserSchema } from './entities/user.entity';
 import { MongoUserRepository } from './repositories/mongo.user.repository';
-import {
-  RefreshToken,
-  RefreshTokenSchema,
-} from '../auth/entities/refresh-token.entity';
-import { MongoAuthRepository } from '../auth/repositories/mongo.auth.repository';
+import { RabbitMQModule } from '../infrastructure/rabbitmq/rabbitmq.module';
+import { CqrsModule } from '@nestjs/cqrs';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([
-      { name: User.name, schema: UserSchema },
-      { name: RefreshToken.name, schema: RefreshTokenSchema },
-    ]),
+    MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
+    RabbitMQModule,
+    CqrsModule,
   ],
   providers: [
     UsersResolver,
@@ -23,10 +19,6 @@ import { MongoAuthRepository } from '../auth/repositories/mongo.auth.repository'
     {
       provide: 'IUserRepository',
       useClass: MongoUserRepository,
-    },
-    {
-      provide: 'IAuthRepository',
-      useClass: MongoAuthRepository,
     },
   ],
   exports: [UsersService], // عملنا Export للـ Service عشان الـ AuthModule يقدر يستخدمها بعدين

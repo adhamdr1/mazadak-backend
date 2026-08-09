@@ -15,6 +15,9 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '../users/enums/user-role.enum';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
+import { TransactionService } from '../transaction/transaction.service';
+import { TransactionsPage } from '../transaction/dto/transactions-page.type';
+import { TransactionsFilterInput } from '../transaction/dto/transactions-filter.input';
 import { DepositInput } from './dto/deposit.input';
 import { WithdrawInput } from './dto/withdraw.input';
 import { WalletsPage } from './dto/wallets-page.type';
@@ -24,7 +27,10 @@ import Decimal from 'decimal.js';
 @Resolver(() => Wallet)
 @UseGuards(JwtAuthGuard)
 export class WalletResolver {
-  constructor(private readonly walletService: WalletService) {}
+  constructor(
+    private readonly walletService: WalletService,
+    private readonly transactionService: TransactionService,
+  ) {}
 
   // ─── Queries ──────────────────────────────────────────────────────────────
 
@@ -45,6 +51,22 @@ export class WalletResolver {
   @Query(() => Wallet, { name: 'myWallet' })
   async myWallet(@CurrentUser() currentUser: JwtPayload): Promise<Wallet> {
     return this.walletService.getMyWallet(currentUser.sub);
+  }
+
+  @Query(() => TransactionsPage, { name: 'myTransactions' })
+  async myTransactions(
+    @CurrentUser() currentUser: JwtPayload,
+    @Args('input', { nullable: true })
+    input: PaginationInput = new PaginationInput(),
+    @Args('filter', { nullable: true })
+    filter?: TransactionsFilterInput,
+  ): Promise<TransactionsPage> {
+    const wallet = await this.walletService.getMyWallet(currentUser.sub);
+    return this.transactionService.getTransactionsByWalletId(
+      wallet._id.toString(),
+      input,
+      filter,
+    );
   }
 
   // ─── Computed Fields ──────────────────────────────────────────────────────

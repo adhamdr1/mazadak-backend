@@ -77,6 +77,36 @@ export class NotificationsService {
     );
   }
 
+  async sendAccountReactivationEmail(
+    email: string,
+    token: string,
+    name: string,
+  ): Promise<void> {
+    const confirmLink = `${this.configService.getOrThrow('FRONTEND_URL')}/auth/confirm-reactivation?token=${token}`;
+
+    await this.emailService.send(
+      email,
+      EmailSubjects.ACCOUNT_REACTIVATION,
+      EmailTemplates.ACCOUNT_REACTIVATION,
+      { confirmLink, name },
+    );
+  }
+
+  async sendAccountReactivatedEmail(
+    email: string,
+    name: string,
+  ): Promise<void> {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'https://mazadak.com';
+
+    await this.emailService.send(
+      email,
+      EmailSubjects.ACCOUNT_ACTIVATED,
+      EmailTemplates.ACCOUNT_ACTIVATED,
+      { name, frontendUrl },
+    );
+  }
+
   async sendPasswordChangedEmail(
     email: string,
     name: string,
