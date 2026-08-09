@@ -8,6 +8,8 @@ export const MAZADAK_EXCHANGE = 'mazadak.events';
 export const NOTIFICATIONS_QUEUE = 'notifications.queue';
 export const DEAD_LETTER_QUEUE = 'dead.letter.queue';
 export const PAYMENTS_WEBHOOK_QUEUE = 'payments.webhook.queue';
+export const AUTH_QUEUE = 'auth.queue';
+export const WALLET_QUEUE = 'wallet.queue';
 
 // Retry queues (TTL-based Exponential Backoff)
 export const RETRY_QUEUE_5S = 'retry.queue.5s';

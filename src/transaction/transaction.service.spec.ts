@@ -1,13 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { TransactionService } from './transaction.service';
-import { WalletNotFoundException } from '../wallet/exceptions/wallet-not-found.exception';
 import { TransactionType } from './enums/transaction-type.enum';
 import { TransactionStatus } from './enums/transaction-status.enum';
 import { Types } from 'mongoose';
 import { TransactionsFilterInput } from './dto/transactions-filter.input';
 import { PaginationInput } from '../common/dto/pagination.input';
-import { UsersService } from '../users/users.service';
 import { OutboxService } from '../infrastructure/outbox/outbox.service';
+import { RabbitMQEvent } from '../infrastructure/rabbitmq/rabbitmq-event.types';
 
 const mockTransactionRepository = {
   create: jest.fn(),
@@ -17,16 +16,6 @@ const mockTransactionRepository = {
   countAll: jest.fn(),
   findById: jest.fn(),
   markHasChild: jest.fn(),
-};
-
-const mockWalletRepository = {
-  findByUserId: jest.fn(),
-  findById: jest.fn(),
-  creditBalance: jest.fn(),
-};
-
-const mockUsersService = {
-  findById: jest.fn(),
 };
 
 const mockOutboxService = {
@@ -44,8 +33,6 @@ describe('TransactionService', () => {
           provide: 'ITransactionRepository',
           useValue: mockTransactionRepository,
         },
-        { provide: 'IWalletRepository', useValue: mockWalletRepository },
-        { provide: UsersService, useValue: mockUsersService },
         { provide: OutboxService, useValue: mockOutboxService },
       ],
     }).compile();
@@ -83,25 +70,15 @@ describe('TransactionService', () => {
     });
   });
 
-  describe('getMyTransactions', () => {
-    const userId = new Types.ObjectId().toString();
+  describe('getTransactionsByWalletId', () => {
     const walletId = new Types.ObjectId().toString();
-    const mockWallet = { _id: walletId, userId, balance: 100, heldBalance: 0 };
-
-    it('should throw WalletNotFoundException if user has no wallet', async () => {
-      mockWalletRepository.findByUserId.mockResolvedValue(null);
-      await expect(
-        service.getMyTransactions(userId, { page: 1, limit: 10 }),
-      ).rejects.toThrow(WalletNotFoundException);
-    });
 
     it('should return transactions page with default pagination', async () => {
-      mockWalletRepository.findByUserId.mockResolvedValue(mockWallet);
       const items = [{ _id: 'tx1' }, { _id: 'tx2' }];
       mockTransactionRepository.findByWalletId.mockResolvedValue(items);
       mockTransactionRepository.countByWalletId.mockResolvedValue(15);
 
-      const result = await service.getMyTransactions(userId, {
+      const result = await service.getTransactionsByWalletId(walletId, {
         page: 1,
         limit: 10,
       });
@@ -125,14 +102,17 @@ describe('TransactionService', () => {
     });
 
     it('should respect provided pagination and filter', async () => {
-      mockWalletRepository.findByUserId.mockResolvedValue(mockWallet);
       const items = [{ _id: 'tx1' }];
       mockTransactionRepository.findByWalletId.mockResolvedValue(items);
       mockTransactionRepository.countByWalletId.mockResolvedValue(5);
 
       const input = { page: 2, limit: 5 };
       const filter: TransactionsFilterInput = { type: TransactionType.DEPOSIT };
-      const result = await service.getMyTransactions(userId, input, filter);
+      const result = await service.getTransactionsByWalletId(
+        walletId,
+        input,
+        filter,
+      );
 
       expect(result).toEqual({
         items,
@@ -181,16 +161,14 @@ describe('TransactionService', () => {
   });
 
   describe('updateTransactionStatusAndEmitOutbox', () => {
-    const mockOutboxService = {
-      saveEvent: jest.fn(),
-    };
+    const txId = new Types.ObjectId().toString();
 
     it('should throw TransactionNotFoundException if transaction does not exist', async () => {
       mockTransactionRepository.findById.mockResolvedValue(null);
 
       await expect(
         service.updateTransactionStatusAndEmitOutbox(
-          'tx1',
+          txId,
           TransactionStatus.SUCCESS,
           1000,
           'EGP',
@@ -201,12 +179,13 @@ describe('TransactionService', () => {
 
     it('should return early if transaction status is not PENDING', async () => {
       mockTransactionRepository.findById.mockResolvedValue({
-        _id: 'tx1',
+        _id: txId,
         status: TransactionStatus.SUCCESS,
+        hasChild: true,
       });
 
       await service.updateTransactionStatusAndEmitOutbox(
-        'tx1',
+        txId,
         TransactionStatus.SUCCESS,
         1000,
         'EGP',
@@ -218,7 +197,7 @@ describe('TransactionService', () => {
 
     it('should throw TransactionAmountMismatchException if amount mismatch', async () => {
       mockTransactionRepository.findById.mockResolvedValue({
-        _id: 'tx1',
+        _id: txId,
         status: TransactionStatus.PENDING,
         amount: 50,
         currency: 'EGP',
@@ -226,7 +205,7 @@ describe('TransactionService', () => {
 
       await expect(
         service.updateTransactionStatusAndEmitOutbox(
-          'tx1',
+          txId,
           TransactionStatus.SUCCESS,
           1000, // 10 EGP
           'EGP',
@@ -237,7 +216,7 @@ describe('TransactionService', () => {
 
     it('should throw TransactionCurrencyMismatchException if currency mismatch', async () => {
       mockTransactionRepository.findById.mockResolvedValue({
-        _id: 'tx1',
+        _id: txId,
         status: TransactionStatus.PENDING,
         amount: 10,
         currency: 'EGP',
@@ -245,7 +224,7 @@ describe('TransactionService', () => {
 
       await expect(
         service.updateTransactionStatusAndEmitOutbox(
-          'tx1',
+          txId,
           TransactionStatus.SUCCESS,
           1000,
           'USD',
@@ -256,7 +235,7 @@ describe('TransactionService', () => {
 
     it('should return early if duplicate key mongo error (11000) occurs', async () => {
       mockTransactionRepository.findById.mockResolvedValue({
-        _id: 'tx1',
+        _id: txId,
         walletId: new Types.ObjectId(),
         type: TransactionType.DEPOSIT,
         amount: 10,
@@ -268,7 +247,7 @@ describe('TransactionService', () => {
       mockTransactionRepository.create.mockRejectedValue(mongoError);
 
       await service.updateTransactionStatusAndEmitOutbox(
-        'tx1',
+        txId,
         TransactionStatus.SUCCESS,
         1000,
         'EGP',
@@ -289,19 +268,7 @@ describe('TransactionService', () => {
         currency: 'EGP',
         status: TransactionStatus.PENDING,
       });
-      mockWalletRepository.findById.mockResolvedValue({
-        _id: walletId,
-        userId: 'user1',
-      });
-      mockUsersService.findById.mockResolvedValue({
-        email: 'realuser@example.com',
-        firstName: 'John',
-        lastName: 'Doe',
-      });
-      mockWalletRepository.creditBalance.mockResolvedValue({
-        _id: walletId,
-        userId: 'user1',
-      });
+
       mockTransactionRepository.create.mockResolvedValue({} as any);
 
       await service.updateTransactionStatusAndEmitOutbox(
@@ -320,7 +287,16 @@ describe('TransactionService', () => {
         }),
         expect.any(Object),
       );
-      expect(mockOutboxService.saveEvent).toHaveBeenCalled();
+      expect(mockOutboxService.saveEvent).toHaveBeenCalledWith(
+        RabbitMQEvent.WalletDepositInitiated,
+        {
+          walletId: walletId.toString(),
+          amount: 10,
+          transactionId: transactionId.toString(),
+        },
+        expect.any(Object),
+        transactionId.toString(),
+      );
     });
   });
 });

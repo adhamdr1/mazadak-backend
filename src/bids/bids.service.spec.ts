@@ -17,6 +17,7 @@ import { OutboxService } from '../infrastructure/outbox/outbox.service';
 
 import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
 import { RedisService } from '../infrastructure/redis/redis.service';
+import { getRedisConnectionToken } from '@nestjs-modules/ioredis';
 
 const mockSession = {
   startTransaction: jest.fn(),
@@ -98,6 +99,15 @@ describe('BidsService', () => {
           },
         },
         { provide: RedisService, useValue: mockRedisService },
+        {
+          provide: getRedisConnectionToken(),
+          useValue: {
+            get: jest.fn().mockResolvedValue(null),
+            set: jest.fn().mockResolvedValue('OK'),
+            del: jest.fn().mockResolvedValue(1),
+            setex: jest.fn().mockResolvedValue('OK'),
+          },
+        },
       ],
     }).compile();
 

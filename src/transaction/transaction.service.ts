@@ -12,10 +12,7 @@ import { Transaction } from './entities/transaction.entity';
 import { TransactionsPage } from './dto/transactions-page.type';
 import { TransactionsFilterInput } from './dto/transactions-filter.input';
 import { PaginationInput } from '../common/dto/pagination.input';
-import type { IWalletRepository } from '../wallet/interfaces/wallet.repository.interface';
-import { WalletNotFoundException } from '../wallet/exceptions/wallet-not-found.exception';
 import { TransactionNotFoundException } from '../payment/exceptions/transaction-not-found.exception';
-import { UsersService } from '../users/users.service';
 import { TransactionAmountMismatchException } from '../payment/exceptions/transaction-amount-mismatch.exception';
 import { TransactionCurrencyMismatchException } from '../payment/exceptions/transaction-currency-mismatch.exception';
 import Decimal from 'decimal.js';
@@ -25,9 +22,6 @@ export class TransactionService {
   constructor(
     @Inject('ITransactionRepository')
     private readonly transactionRepository: ITransactionRepository,
-    @Inject('IWalletRepository')
-    private readonly walletRepository: IWalletRepository,
-    private readonly usersService: UsersService,
     private readonly outboxService: OutboxService,
   ) {}
 
@@ -101,21 +95,6 @@ export class TransactionService {
         },
         session,
       );
-
-      // Credit the wallet if the transaction is a successful deposit
-      if (
-        status === TransactionStatus.SUCCESS &&
-        transaction.type === TransactionType.DEPOSIT
-      ) {
-        const wallet = await this.walletRepository.creditBalance(
-          transaction.walletId.toString(),
-          transaction.amount,
-          session,
-        );
-        if (!wallet) {
-          throw new WalletNotFoundException();
-        }
-      }
     } catch (err) {
       const errorWithCode = err as { code?: number };
       if (errorWithCode && errorWithCode.code === 11000) {
@@ -129,29 +108,16 @@ export class TransactionService {
       status === TransactionStatus.SUCCESS &&
       transaction.type === TransactionType.DEPOSIT
     ) {
-      const wallet = await this.walletRepository.findById(
-        transaction.walletId.toString(),
+      await this.outboxService.saveEvent(
+        RabbitMQEvent.WalletDepositInitiated,
+        {
+          walletId: transaction.walletId.toString(),
+          amount: transaction.amount,
+          transactionId: transaction._id.toString(),
+        },
+        session,
+        transactionId, // correlationId
       );
-      if (wallet) {
-        const user = await this.usersService.findById(wallet.userId.toString());
-        const email = user?.email ?? 'user@example.com';
-        const name = user
-          ? [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User'
-          : 'User';
-
-        await this.outboxService.saveEvent(
-          RabbitMQEvent.WalletDeposited,
-          {
-            userId: wallet.userId.toString(),
-            email,
-            name,
-            amount: transaction.amount,
-            transactionId: transaction._id.toString(),
-          },
-          session,
-          transactionId, // correlationId
-        );
-      }
     }
   }
 
@@ -198,17 +164,12 @@ export class TransactionService {
 
   // ─── Resolver ────────────────────────────────────────────────────────────────
 
-  async getMyTransactions(
-    userId: string,
+  async getTransactionsByWalletId(
+    walletId: string,
     input: PaginationInput,
     filter?: TransactionsFilterInput,
   ): Promise<TransactionsPage> {
     const { page, limit } = input;
-
-    const wallet = await this.walletRepository.findByUserId(userId);
-    if (!wallet) throw new WalletNotFoundException();
-
-    const walletId = wallet._id.toString();
 
     const [items, total] = await Promise.all([
       this.transactionRepository.findByWalletId(walletId, page, limit, filter),

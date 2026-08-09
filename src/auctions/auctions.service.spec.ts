@@ -21,6 +21,7 @@ import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
 import { RedisService } from '../infrastructure/redis/redis.service';
 import { RabbitMQService } from '../infrastructure/rabbitmq/rabbitmq.service';
 import { OutboxService } from '../infrastructure/outbox/outbox.service';
+import { getRedisConnectionToken } from '@nestjs-modules/ioredis';
 
 const mockWalletService = {
   release: jest.fn(),
@@ -98,6 +99,15 @@ describe('AuctionsService', () => {
         {
           provide: OutboxService,
           useValue: { saveEvent: jest.fn().mockResolvedValue(undefined) },
+        },
+        {
+          provide: getRedisConnectionToken(),
+          useValue: {
+            get: jest.fn().mockResolvedValue(null),
+            set: jest.fn().mockResolvedValue('OK'),
+            del: jest.fn().mockResolvedValue(1),
+            setex: jest.fn().mockResolvedValue('OK'),
+          },
         },
       ],
     }).compile();

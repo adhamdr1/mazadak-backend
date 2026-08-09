@@ -17,6 +17,8 @@ export enum RabbitMQEvent {
   PaymentWebhookReceived = 'PaymentWebhookReceived',
   AccountReactivationRequested = 'AccountReactivationRequested',
   AccountReactivated = 'AccountReactivated',
+  UserBanned = 'UserBanned',
+  WalletDepositInitiated = 'WalletDepositInitiated',
 }
 
 // ─── Event Payloads ────────────────────────────────────────────────────────────
@@ -99,6 +101,12 @@ export interface WalletDepositedPayload {
   transactionId: string;
 }
 
+export interface WalletDepositInitiatedPayload {
+  walletId: string;
+  amount: number;
+  transactionId: string;
+}
+
 export interface WithdrawalCompletedPayload {
   userId: string;
   amount: number;
@@ -125,6 +133,10 @@ export interface AccountReactivatedPayload {
   name: string;
 }
 
+export interface UserBannedPayload {
+  userId: string;
+}
+
 /** Union type of all event payloads */
 export type RabbitMQEventPayload =
   | BidPlacedPayload
@@ -140,7 +152,9 @@ export type RabbitMQEventPayload =
   | AuctionCancelledByAdminPayload
   | PaymentWebhookReceivedPayload
   | AccountReactivationRequestedPayload
-  | AccountReactivatedPayload;
+  | AccountReactivatedPayload
+  | UserBannedPayload
+  | WalletDepositInitiatedPayload;
 
 /** Map for Discriminated Union Type Safety */
 export type RabbitMQEventMap = {
@@ -158,6 +172,8 @@ export type RabbitMQEventMap = {
   [RabbitMQEvent.PaymentWebhookReceived]: PaymentWebhookReceivedPayload;
   [RabbitMQEvent.AccountReactivationRequested]: AccountReactivationRequestedPayload;
   [RabbitMQEvent.AccountReactivated]: AccountReactivatedPayload;
+  [RabbitMQEvent.UserBanned]: UserBannedPayload;
+  [RabbitMQEvent.WalletDepositInitiated]: WalletDepositInitiatedPayload;
 };
 
 /** The parsed message with full type inference based on eventType */

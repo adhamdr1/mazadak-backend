@@ -47,50 +47,6 @@ type UsersPage {
   hasNextPage: Boolean!
 }
 
-type AuthResponse {
-  accessToken: String!
-  refreshToken: String!
-  user: User!
-}
-
-type InAppNotification {
-  _id: ID!
-  userId: ID!
-  type: InAppNotificationType!
-  title: String!
-  body: String!
-  isRead: Boolean!
-  referenceId: String
-  referenceType: NotificationReferenceType
-  createdAt: DateTime!
-}
-
-enum InAppNotificationType {
-  OUTBID
-  AUCTION_WON
-  AUCTION_ENDED_SELLER
-  DEPOSIT_SUCCESSFUL
-  WITHDRAWAL_COMPLETED
-  AUCTION_STARTED
-  WELCOME
-  NEW_BID
-  AUCTION_CANCELLED
-  AUCTION_CANCELLED_BY_ADMIN
-}
-
-enum NotificationReferenceType {
-  AUCTION
-  TRANSACTION
-  WALLET
-}
-
-type InAppNotificationsPage {
-  items: [InAppNotification!]!
-  total: Int!
-  totalPages: Int!
-  hasNextPage: Boolean!
-}
-
 type Wallet {
   _id: ID!
   userId: ID!
@@ -99,13 +55,6 @@ type Wallet {
   availableBalance: Float!
   createdAt: DateTime!
   updatedAt: DateTime!
-}
-
-type WalletsPage {
-  items: [Wallet!]!
-  total: Int!
-  totalPages: Int!
-  hasNextPage: Boolean!
 }
 
 type Transaction {
@@ -155,6 +104,62 @@ type TransactionsPage {
   total: Int!
   totalPages: Int!
   hasNextPage: Boolean!
+}
+
+type WalletsPage {
+  items: [Wallet!]!
+  total: Int!
+  totalPages: Int!
+  hasNextPage: Boolean!
+}
+
+type InAppNotification {
+  _id: ID!
+  userId: ID!
+  type: InAppNotificationType!
+  title: String!
+  body: String!
+  isRead: Boolean!
+  referenceId: String
+  referenceType: NotificationReferenceType
+  createdAt: DateTime!
+}
+
+enum InAppNotificationType {
+  OUTBID
+  AUCTION_WON
+  AUCTION_ENDED_SELLER
+  DEPOSIT_SUCCESSFUL
+  WITHDRAWAL_COMPLETED
+  AUCTION_STARTED
+  WELCOME
+  NEW_BID
+  AUCTION_CANCELLED
+  AUCTION_CANCELLED_BY_ADMIN
+}
+
+enum NotificationReferenceType {
+  AUCTION
+  TRANSACTION
+  WALLET
+}
+
+type InAppNotificationsPage {
+  items: [InAppNotification!]!
+  total: Int!
+  totalPages: Int!
+  hasNextPage: Boolean!
+}
+
+type AuthResponse {
+  accessToken: String!
+  refreshToken: String!
+  user: User!
+}
+
+type RegisterResponse {
+  success: Boolean!
+  message: String!
 }
 
 type Auction {
@@ -278,13 +283,13 @@ type Query {
   me: User!
   findUser(input: FindUserInput!): User!
   users(input: PaginationInput!, filter: UsersFilterInput): UsersPage!
-  myNotifications(input: PaginationInput!): InAppNotificationsPage!
-  unreadNotificationsCount: Int!
   wallets(input: PaginationInput!): WalletsPage!
   adminGetWallet(userId: String!): Wallet!
   myWallet: Wallet!
   myTransactions(input: PaginationInput, filter: TransactionsFilterInput): TransactionsPage!
   transactions(input: PaginationInput, filter: TransactionsFilterInput): TransactionsPage!
+  myNotifications(input: PaginationInput!): InAppNotificationsPage!
+  unreadNotificationsCount: Int!
   auctions(input: PaginationInput!, filter: AuctionsFilterInput): AuctionsPage!
   adminAuctions(input: PaginationInput!, filter: AuctionsFilterInput): AuctionsPage!
   auction(id: ID!): Auction!
@@ -392,12 +397,14 @@ enum BidsSortField {
 }
 
 type Mutation {
-  register(registerInput: RegisterInput!): AuthResponse!
+  register(registerInput: RegisterInput!): RegisterResponse!
   login(loginInput: LoginInput!): AuthResponse!
   googleRegister(googleRegisterInput: GoogleRegisterInput!): AuthResponse!
   googleLogin(googleLoginInput: GoogleLoginInput!): AuthResponse!
   confirmEmail(token: String!): Boolean!
   resendConfirmationEmail(email: String!): Boolean!
+  requestReactivation(email: String!): Boolean!
+  confirmReactivation(token: String!): Boolean!
   refreshToken(refreshToken: String!): AuthResponse!
   logout(refreshToken: String!): Boolean!
   logoutAll: Boolean!
@@ -408,10 +415,10 @@ type Mutation {
   deleteAccount: Boolean!
   adminUpdateUser(targetUser: FindUserInput!, input: UpdateUserInput!): User!
   adminDeleteUser(targetUser: FindUserInput!): Boolean!
-  markNotificationAsRead(notificationId: ID!): InAppNotification!
-  markAllNotificationsAsRead: Boolean!
   deposit(input: DepositInput!): Wallet!
   withdraw(input: WithdrawInput!): Wallet!
+  markNotificationAsRead(notificationId: ID!): InAppNotification!
+  markAllNotificationsAsRead: Boolean!
   createAuction(input: CreateAuctionInput!): Auction!
   updateAuction(id: ID!, input: UpdateAuctionInput!): Auction!
   cancelAuction(id: ID!): Boolean!

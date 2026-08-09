@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { WalletResolver } from './wallet.resolver';
 import { WalletService } from './wallet.service';
+import { TransactionService } from '../transaction/transaction.service';
 import { Wallet } from './entities/wallet.entity';
 import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { UserRole } from '../users/enums/user-role.enum';
@@ -18,6 +19,10 @@ const mockWalletService = {
   getWalletByUserId: jest.fn(),
 };
 
+const mockTransactionService = {
+  getTransactionsByWalletId: jest.fn(),
+};
+
 describe('WalletResolver', () => {
   let resolver: WalletResolver;
 
@@ -26,6 +31,7 @@ describe('WalletResolver', () => {
       providers: [
         WalletResolver,
         { provide: WalletService, useValue: mockWalletService },
+        { provide: TransactionService, useValue: mockTransactionService },
       ],
     }).compile();
 
@@ -62,6 +68,33 @@ describe('WalletResolver', () => {
       expect(mockWalletService.getMyWallet).toHaveBeenCalledWith(
         currentUser.sub,
       );
+    });
+  });
+
+  describe('myTransactions', () => {
+    it('should call getTransactionsByWalletId on transaction service with walletId', async () => {
+      mockWalletService.getMyWallet.mockResolvedValue(mockWallet);
+      const expectedPage = {
+        items: [],
+        total: 0,
+        totalPages: 0,
+        hasNextPage: false,
+      };
+      mockTransactionService.getTransactionsByWalletId.mockResolvedValue(
+        expectedPage,
+      );
+
+      const input = { page: 1, limit: 10 };
+      const filter = { search: 'tx123' };
+      const result = await resolver.myTransactions(currentUser, input, filter);
+
+      expect(result).toEqual(expectedPage);
+      expect(mockWalletService.getMyWallet).toHaveBeenCalledWith(
+        currentUser.sub,
+      );
+      expect(
+        mockTransactionService.getTransactionsByWalletId,
+      ).toHaveBeenCalledWith(mockWallet._id.toString(), input, filter);
     });
   });
 

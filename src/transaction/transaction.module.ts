@@ -4,19 +4,13 @@ import { TransactionService } from './transaction.service';
 import { TransactionResolver } from './transaction.resolver';
 import { Transaction, TransactionSchema } from './entities/transaction.entity';
 import { MongoTransactionRepository } from './repositories/mongo.transaction.repository';
-import { Wallet, WalletSchema } from '../wallet/entities/wallet.entity';
-import { MongoWalletRepository } from '../wallet/repositories/mongo.wallet.repository';
-import { UsersModule } from '../users/users.module';
 import { OutboxModule } from '../infrastructure/outbox/outbox.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: Transaction.name, schema: TransactionSchema },
-      // مطلوب لـ MongoWalletRepository لجلب walletId من userId
-      { name: Wallet.name, schema: WalletSchema },
     ]),
-    UsersModule,
     OutboxModule,
   ],
   providers: [
@@ -25,10 +19,6 @@ import { OutboxModule } from '../infrastructure/outbox/outbox.module';
     {
       provide: 'ITransactionRepository',
       useClass: MongoTransactionRepository,
-    },
-    {
-      provide: 'IWalletRepository',
-      useClass: MongoWalletRepository,
     },
   ],
   exports: [TransactionService, 'ITransactionRepository'],

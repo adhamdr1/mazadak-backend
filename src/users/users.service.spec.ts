@@ -1,5 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UsersService } from './users.service';
+import { WalletService } from '../wallet/wallet.service';
+import { RabbitMQService } from '../infrastructure/rabbitmq/rabbitmq.service';
 import {
   NotFoundException,
   ConflictException,
@@ -25,6 +27,14 @@ const mockUserRepository = {
   linkGoogleAccount: jest.fn(),
 };
 
+const mockWalletService = {
+  getWalletByUserId: jest.fn(),
+};
+
+const mockRabbitMQService = {
+  publish: jest.fn(),
+};
+
 describe('UsersService', () => {
   let service: UsersService;
 
@@ -36,6 +46,14 @@ describe('UsersService', () => {
         {
           provide: 'IUserRepository',
           useValue: mockUserRepository, // حقن الـ Mock
+        },
+        {
+          provide: WalletService,
+          useValue: mockWalletService,
+        },
+        {
+          provide: RabbitMQService,
+          useValue: mockRabbitMQService,
         },
       ],
     }).compile();

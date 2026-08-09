@@ -1,6 +1,7 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { ClientSession } from 'mongoose';
-import type { IAuthRepository } from '../auth/interfaces/auth-repository.interface';
+import { RabbitMQService } from '../infrastructure/rabbitmq/rabbitmq.service';
+import { RabbitMQEvent } from '../infrastructure/rabbitmq/rabbitmq-event.types';
 import { UpdateUserInput } from './dto/update-user.input';
 import { PaginationInput } from '../common/dto/pagination.input';
 import { CreateUserInput } from './dto/create-user.input';
@@ -26,9 +27,8 @@ export class UsersService {
   constructor(
     @Inject('IUserRepository')
     private readonly userRepository: IUserRepository,
-    @Inject('IAuthRepository')
-    private readonly authRepository: IAuthRepository,
     private readonly walletService: WalletService,
+    private readonly rabbitMQService: RabbitMQService,
   ) {}
 
   async startSession(): Promise<ClientSession> {
@@ -232,8 +232,10 @@ export class UsersService {
     })) as User;
 
     if (updatedUser.isBanned) {
-      // Revoke all refresh tokens for this user
-      await this.authRepository.deleteAllUserTokens(userId);
+      // Publish UserBanned event to revoke tokens asynchronously
+      await this.rabbitMQService.publish(RabbitMQEvent.UserBanned, {
+        userId,
+      });
     }
 
     return updatedUser;
