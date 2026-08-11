@@ -16,9 +16,9 @@ import { UsersService } from '../users/users.service';
 import {
   IDEMPOTENCY_KEY_PREFIX,
   IDEMPOTENCY_TTL_S,
-  RETRY_QUEUE_5S,
-  RETRY_QUEUE_30S,
-  RETRY_QUEUE_2M,
+  NOTIFICATIONS_RETRY_QUEUE_5S,
+  NOTIFICATIONS_RETRY_QUEUE_30S,
+  NOTIFICATIONS_RETRY_QUEUE_2M,
   X_RETRY_COUNT,
 } from '../infrastructure/rabbitmq/rabbitmq.constants';
 import {
@@ -109,19 +109,25 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
     msg: ConsumeMessage,
     channel: amqplib.Channel,
   ): Promise<void> {
+    let parsed: RabbitMQParsedMessage;
     try {
       const content = msg.content.toString();
       const raw = JSON.parse(content) as unknown;
-
-      // NestJS ClientProxy wraps the payload in a { pattern, data } structure by default.
-      // We extract the inner data if it exists.
-      const parsed = (
+      parsed = (
         raw && typeof raw === 'object' && 'data' in raw ? raw.data : raw
       ) as RabbitMQParsedMessage;
+    } catch (parseError) {
+      this.logger.error(
+        `NotificationsConsumer failed to parse message JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}. Rejecting to DLQ immediately.`,
+      );
+      channel.reject(msg, false);
+      return;
+    }
 
+    try {
       if (!parsed) {
         this.logger.warn('Received empty or invalid message payload');
-        this.channelWrapper!.ack(msg);
+        channel.ack(msg);
         return;
       }
 
@@ -220,11 +226,11 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
 
     let targetQueue: string | null = null;
     if (retryCount === 1) {
-      targetQueue = RETRY_QUEUE_5S;
+      targetQueue = NOTIFICATIONS_RETRY_QUEUE_5S;
     } else if (retryCount === 2) {
-      targetQueue = RETRY_QUEUE_30S;
+      targetQueue = NOTIFICATIONS_RETRY_QUEUE_30S;
     } else if (retryCount === 3) {
-      targetQueue = RETRY_QUEUE_2M;
+      targetQueue = NOTIFICATIONS_RETRY_QUEUE_2M;
     }
 
     if (targetQueue) {

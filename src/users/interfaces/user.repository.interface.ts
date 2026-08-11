@@ -64,6 +64,8 @@ export interface IUserRepository {
 
   countVerified(): Promise<number>;
 
+  countAll(filter?: UsersFilter): Promise<number>;
+
   softDelete(id: string): Promise<void>;
 
   linkGoogleAccount(userId: string, googleId: string): Promise<User | null>;

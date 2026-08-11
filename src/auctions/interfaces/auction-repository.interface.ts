@@ -97,4 +97,9 @@ export interface IAuctionRepository {
     auctionId: string,
     session?: ClientSession,
   ): Promise<{ bidderId: string; amount: number } | null>;
+
+  count(
+    filter: AuctionsFilter,
+    excludeStatuses?: AuctionStatus[],
+  ): Promise<number>;
 }

@@ -71,9 +71,11 @@ export class WalletResolver {
 
   // ─── Computed Fields ──────────────────────────────────────────────────────
 
-  @ResolveField(() => Number, { name: 'availableBalance' })
-  availableBalance(@Parent() wallet: Wallet): number {
-    return new Decimal(wallet.balance).minus(wallet.heldBalance).toNumber();
+  @ResolveField(() => String, { name: 'availableBalance' })
+  availableBalance(@Parent() wallet: Wallet): string {
+    return new Decimal(wallet.balance.toString())
+      .minus(wallet.heldBalance.toString())
+      .toString();
   }
 
   // ─── Mutations (Mock — Stripe integration pending) ────────────────────────

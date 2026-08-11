@@ -48,6 +48,10 @@ export class TransactionsFilterInput {
   @Type(() => Date)
   expiresAtBefore?: Date;
 
+  @Field(() => Boolean, { nullable: true })
+  @IsOptional()
+  hasChild?: boolean;
+
   @Field(() => TransactionsSortInput, { nullable: true })
   @IsOptional()
   @ValidateNested()

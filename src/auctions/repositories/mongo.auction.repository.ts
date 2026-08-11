@@ -246,7 +246,15 @@ export class MongoAuctionRepository implements IAuctionRepository {
 
     return {
       bidderId: winningBid.bidderId.toString(),
-      amount: winningBid.amount,
+      amount: Number(winningBid.amount.toString()),
     };
+  }
+
+  async count(
+    filter: AuctionsFilter,
+    excludeStatuses?: AuctionStatus[],
+  ): Promise<number> {
+    const query = this.buildQuery(filter, excludeStatuses);
+    return await this.auctionModel.countDocuments(query).exec();
   }
 }

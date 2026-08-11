@@ -2,7 +2,9 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';
+import { randomUUID } from 'crypto';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { RELEASE_LOCK_LUA_SCRIPT } from '../infrastructure/redis/redis.constants';
 import { PlaceBidInput } from './dto/place-bid.input';
 import { BidsFilterInput } from './dto/bids-filter.input';
 import { BidsPage } from './dto/bids-page.type';
@@ -81,10 +83,10 @@ export class BidsService {
       }
 
       const minimumRequired = currentWinner
-        ? new Decimal(auction.currentPrice)
-            .plus(auction.minimumBidIncrement)
+        ? new Decimal(auction.currentPrice.toString())
+            .plus(auction.minimumBidIncrement.toString())
             .toNumber()
-        : auction.startingPrice;
+        : Number(auction.startingPrice.toString());
 
       if (input.amount < minimumRequired) {
         throw new BidAmountTooLowException();
@@ -103,7 +105,7 @@ export class BidsService {
       if (currentWinner) {
         const { transaction } = await this.walletService.release(
           currentWinner.bidderId.toString(),
-          currentWinner.amount,
+          Number(currentWinner.amount.toString()),
           input.auctionId,
           session,
         );
@@ -185,9 +187,16 @@ export class BidsService {
   @Cron(CronExpression.EVERY_MINUTE)
   async finalizeEndedAuctions(): Promise<void> {
     let acquiredLock = false;
+    const lockValue = randomUUID();
     try {
       const lockResult = await this.redis
-        .set(FINALIZE_AUCTIONS_LOCK_KEY, '1', 'EX', LOCK_TTL_SECONDS, 'NX')
+        .set(
+          FINALIZE_AUCTIONS_LOCK_KEY,
+          lockValue,
+          'EX',
+          LOCK_TTL_SECONDS,
+          'NX',
+        )
         .catch((err) => {
           this.logger.warn(
             `Redis finalize auctions lock error: ${err instanceof Error ? err.message : String(err)}`,
@@ -235,7 +244,7 @@ export class BidsService {
                 auctionId,
                 auctionTitle: auction.title,
                 sellerId: auction.sellerId.toString(),
-                finalPrice: auction.currentPrice,
+                finalPrice: Number(auction.currentPrice.toString()),
               },
               session,
             );
@@ -251,7 +260,7 @@ export class BidsService {
           const { transaction: captureTransaction } =
             await this.walletService.capture(
               winnerId,
-              winningBid.amount,
+              Number(winningBid.amount.toString()),
               auctionId,
               session,
             );
@@ -260,7 +269,7 @@ export class BidsService {
           const { transaction: depositTransaction } =
             await this.walletService.deposit(
               sellerId,
-              winningBid.amount,
+              Number(winningBid.amount.toString()),
               auctionId,
               session,
             );
@@ -279,7 +288,7 @@ export class BidsService {
               auctionId,
               auctionTitle: auction.title,
               sellerId,
-              finalPrice: auction.currentPrice,
+              finalPrice: Number(auction.currentPrice.toString()),
               winnerId,
               captureTransactionId: captureTransaction._id.toString(),
               depositTransactionId: depositTransaction._id.toString(),
@@ -290,7 +299,7 @@ export class BidsService {
           await session.commitTransaction();
 
           this.logger.log(
-            `Successfully finalized auction ${auctionId}. Winner: ${winnerId}, Seller: ${sellerId}, Amount: ${winningBid.amount}`,
+            `Successfully finalized auction ${auctionId}. Winner: ${winnerId}, Seller: ${sellerId}, Amount: ${winningBid.amount.toString()}`,
           );
         } catch (error) {
           await session.abortTransaction();
@@ -307,7 +316,14 @@ export class BidsService {
       );
     } finally {
       if (acquiredLock) {
-        await this.redis.del(FINALIZE_AUCTIONS_LOCK_KEY).catch(() => undefined);
+        await this.redis
+          .eval(
+            RELEASE_LOCK_LUA_SCRIPT,
+            1,
+            FINALIZE_AUCTIONS_LOCK_KEY,
+            lockValue,
+          )
+          .catch(() => undefined);
       }
     }
   }

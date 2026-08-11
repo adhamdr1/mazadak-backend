@@ -1,16 +1,23 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as amqplib from 'amqplib';
+import { RabbitMQEvent } from './rabbitmq-event.types';
 import {
   MAZADAK_EXCHANGE,
   NOTIFICATIONS_QUEUE,
   DEAD_LETTER_QUEUE,
-  RETRY_QUEUE_5S,
-  RETRY_QUEUE_30S,
-  RETRY_QUEUE_2M,
   PAYMENTS_WEBHOOK_QUEUE,
   AUTH_QUEUE,
   WALLET_QUEUE,
+  WALLET_RETRY_QUEUE_5S,
+  AUTH_RETRY_QUEUE_5S,
+  WEBHOOK_RETRY_QUEUE_5S,
+  WEBHOOK_RETRY_QUEUE_30S,
+  WEBHOOK_RETRY_QUEUE_2M,
+  NOTIFICATIONS_RETRY_QUEUE_5S,
+  NOTIFICATIONS_RETRY_QUEUE_30S,
+  NOTIFICATIONS_RETRY_QUEUE_2M,
+  NOTIFICATIONS_RETRY_ROUTING_KEY,
 } from './rabbitmq.constants';
 
 /**
@@ -43,21 +50,61 @@ export class RabbitMQSetupService implements OnApplicationBootstrap {
         durable: true,
       });
 
-      // ── 3. Retry Queues (TTL → DLX back to main exchange) ─────────────────
-      // Each retry queue has a TTL; expired messages re-enter the main exchange.
-      const retryQueues: [string, number][] = [
-        [RETRY_QUEUE_5S, 5_000],
-        [RETRY_QUEUE_30S, 30_000],
-        [RETRY_QUEUE_2M, 120_000],
+      // ── 3. Queue-Specific Retry Queues (TTL → DLX back to main exchange with proper routing keys) ──
+      const queueRetryConfigs: { queue: string; ttl: number; dlk: string }[] = [
+        // Wallet Retry
+        {
+          queue: WALLET_RETRY_QUEUE_5S,
+          ttl: 5_000,
+          dlk: RabbitMQEvent.WalletDepositInitiated,
+        },
+        // Auth Retry
+        {
+          queue: AUTH_RETRY_QUEUE_5S,
+          ttl: 5_000,
+          dlk: RabbitMQEvent.UserBanned,
+        },
+        // Webhook Retries
+        {
+          queue: WEBHOOK_RETRY_QUEUE_5S,
+          ttl: 5_000,
+          dlk: RabbitMQEvent.PaymentWebhookReceived,
+        },
+        {
+          queue: WEBHOOK_RETRY_QUEUE_30S,
+          ttl: 30_000,
+          dlk: RabbitMQEvent.PaymentWebhookReceived,
+        },
+        {
+          queue: WEBHOOK_RETRY_QUEUE_2M,
+          ttl: 120_000,
+          dlk: RabbitMQEvent.PaymentWebhookReceived,
+        },
+        // Notifications Retries
+        {
+          queue: NOTIFICATIONS_RETRY_QUEUE_5S,
+          ttl: 5_000,
+          dlk: NOTIFICATIONS_RETRY_ROUTING_KEY,
+        },
+        {
+          queue: NOTIFICATIONS_RETRY_QUEUE_30S,
+          ttl: 30_000,
+          dlk: NOTIFICATIONS_RETRY_ROUTING_KEY,
+        },
+        {
+          queue: NOTIFICATIONS_RETRY_QUEUE_2M,
+          ttl: 120_000,
+          dlk: NOTIFICATIONS_RETRY_ROUTING_KEY,
+        },
       ];
 
-      for (const [queueName, ttl] of retryQueues) {
-        await channel.assertQueue(queueName, {
+      for (const config of queueRetryConfigs) {
+        await channel.assertQueue(config.queue, {
           durable: true,
           arguments: {
-            // After TTL expires, re-route to the main exchange
             'x-dead-letter-exchange': MAZADAK_EXCHANGE,
-            'x-message-ttl': ttl,
+            'x-dead-letter-routing-key': config.dlk,
+            'x-message-ttl': config.ttl,
           },
         });
       }
@@ -74,6 +121,11 @@ export class RabbitMQSetupService implements OnApplicationBootstrap {
 
       // ── 5. Bindings ───────────────────────────────────────────────────────
       await channel.bindQueue(NOTIFICATIONS_QUEUE, MAZADAK_EXCHANGE, '#');
+      await channel.bindQueue(
+        NOTIFICATIONS_QUEUE,
+        MAZADAK_EXCHANGE,
+        NOTIFICATIONS_RETRY_ROUTING_KEY,
+      );
 
       // ── 6. Payments Webhook Queue ─────────────────────────────────────────
       await channel.assertQueue(PAYMENTS_WEBHOOK_QUEUE, {
@@ -86,7 +138,7 @@ export class RabbitMQSetupService implements OnApplicationBootstrap {
       await channel.bindQueue(
         PAYMENTS_WEBHOOK_QUEUE,
         MAZADAK_EXCHANGE,
-        'PaymentWebhookReceived',
+        RabbitMQEvent.PaymentWebhookReceived,
       );
 
       // ── 7. Auth Queue ─────────────────────────────────────────────────────
@@ -97,7 +149,11 @@ export class RabbitMQSetupService implements OnApplicationBootstrap {
           'x-dead-letter-routing-key': DEAD_LETTER_QUEUE,
         },
       });
-      await channel.bindQueue(AUTH_QUEUE, MAZADAK_EXCHANGE, 'UserBanned');
+      await channel.bindQueue(
+        AUTH_QUEUE,
+        MAZADAK_EXCHANGE,
+        RabbitMQEvent.UserBanned,
+      );
 
       // ── 8. Wallet Queue ───────────────────────────────────────────────────
       await channel.assertQueue(WALLET_QUEUE, {
@@ -110,7 +166,7 @@ export class RabbitMQSetupService implements OnApplicationBootstrap {
       await channel.bindQueue(
         WALLET_QUEUE,
         MAZADAK_EXCHANGE,
-        'WalletDepositInitiated',
+        RabbitMQEvent.WalletDepositInitiated,
       );
 
       this.logger.log('RabbitMQ topology asserted successfully');

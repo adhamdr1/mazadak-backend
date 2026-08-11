@@ -13,7 +13,6 @@ import { UsersModule } from '../users/users.module';
 import { StringValue } from 'ms';
 import { PassportModule } from '@nestjs/passport';
 import { JwtStrategy } from './strategies/jwt.strategy';
-import { NotificationsModule } from '../notifications/notifications.module';
 import { WalletModule } from '../wallet/wallet.module';
 import { AuthConsumer } from './consumers/auth.consumer';
 
@@ -21,7 +20,6 @@ import { AuthConsumer } from './consumers/auth.consumer';
   imports: [
     // Gives AuthService access to UsersService (exported from UsersModule).
     UsersModule,
-    NotificationsModule,
     WalletModule,
 
     // Adds JWT authentication functionality.

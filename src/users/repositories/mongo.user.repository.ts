@@ -136,6 +136,18 @@ export class MongoUserRepository implements IUserRepository {
       .exec();
   }
 
+  async countAll(filter?: UsersFilter): Promise<number> {
+    const query: Record<string, any> = {
+      deletedAt: null,
+    };
+
+    if (filter?.search) {
+      query.$text = { $search: filter.search };
+    }
+
+    return await this.userModel.countDocuments(query).exec();
+  }
+
   async softDelete(id: string): Promise<void> {
     await this.userModel
       .findOneAndUpdate(

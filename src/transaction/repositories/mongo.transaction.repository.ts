@@ -28,7 +28,7 @@ export class MongoTransactionRepository implements ITransactionRepository {
     const transaction = new this.transactionModel({
       walletId: new Types.ObjectId(data.walletId),
       type: data.type,
-      amount: data.amount,
+      amount: Types.Decimal128.fromString(data.amount.toString()),
       status: data.status,
       referenceId: data.referenceId ?? null,
       idempotencyKey: data.idempotencyKey ?? null,
@@ -115,6 +115,10 @@ export class MongoTransactionRepository implements ITransactionRepository {
 
     if (filter.expiresAtBefore) {
       query['expiresAt'] = { $lte: filter.expiresAtBefore, $ne: null };
+    }
+
+    if (filter.hasChild !== undefined) {
+      query['hasChild'] = filter.hasChild;
     }
 
     return query;

@@ -1,4 +1,4 @@
-﻿import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
 import { randomUUID } from 'crypto';
 import { RabbitMQEvent } from '../rabbitmq/rabbitmq-event.types';
@@ -42,3 +42,10 @@ export class OutboxEvent {
 }
 
 export const OutboxEventSchema = SchemaFactory.createForClass(OutboxEvent);
+
+// Auto-delete successfully dispatched outbox events after 7 days to prevent collection bloat.
+// Since MongoDB TTL index ignores null/non-date values, pending events (publishedAt: null) are never deleted.
+OutboxEventSchema.index(
+  { publishedAt: 1 },
+  { expireAfterSeconds: 60 * 60 * 24 * 7 },
+);

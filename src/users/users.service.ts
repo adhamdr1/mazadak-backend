@@ -22,6 +22,7 @@ import { CannotBanAdminException } from './exceptions/cannot-ban-admin.exception
 import { WalletHasBalanceException } from '../wallet/exceptions/wallet-has-balance.exception';
 import { QueryBus } from '@nestjs/cqrs';
 import { GetWalletBalanceQuery } from '../wallet/queries/get-wallet-balance.query';
+import Decimal from 'decimal.js';
 
 @Injectable()
 export class UsersService {
@@ -192,11 +193,14 @@ export class UsersService {
 
     // Verify wallet has zero balance (available balance + held balance = 0) before deletion.
     const wallet = await this.queryBus.execute<{
-      balance: number;
-      heldBalance: number;
+      balance: string;
+      heldBalance: string;
     }>(new GetWalletBalanceQuery(targetId));
 
-    if (wallet.balance > 0 || wallet.heldBalance > 0) {
+    if (
+      new Decimal(wallet.balance).greaterThan(0) ||
+      new Decimal(wallet.heldBalance).greaterThan(0)
+    ) {
       throw new WalletHasBalanceException();
     }
 
@@ -249,5 +253,9 @@ export class UsersService {
 
   async countVerifiedUsers(): Promise<number> {
     return this.userRepository.countVerified();
+  }
+
+  async countAll(filter?: UsersFilterInput): Promise<number> {
+    return this.userRepository.countAll(filter);
   }
 }

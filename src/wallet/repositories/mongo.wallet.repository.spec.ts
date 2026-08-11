@@ -79,10 +79,13 @@ describe('MongoWalletRepository', () => {
         {
           _id: new Types.ObjectId(walletId),
           $expr: {
-            $gte: [{ $subtract: ['$balance', '$heldBalance'] }, 100],
+            $gte: [
+              { $subtract: ['$balance', '$heldBalance'] },
+              Types.Decimal128.fromString('100'),
+            ],
           },
         },
-        { $inc: { heldBalance: 100 } },
+        { $inc: { heldBalance: Types.Decimal128.fromString('100') } },
         { returnDocument: 'after', session: undefined },
       );
     });
@@ -101,9 +104,9 @@ describe('MongoWalletRepository', () => {
       expect(mockWalletModel.findOneAndUpdate).toHaveBeenCalledWith(
         {
           _id: new Types.ObjectId(walletId),
-          $expr: { $gte: ['$heldBalance', 100] },
+          $expr: { $gte: ['$heldBalance', Types.Decimal128.fromString('100')] },
         },
-        { $inc: { heldBalance: -100 } },
+        { $inc: { heldBalance: Types.Decimal128.fromString('-100') } },
         { returnDocument: 'after', session: undefined },
       );
     });
@@ -123,9 +126,14 @@ describe('MongoWalletRepository', () => {
       expect(mockWalletModel.findOneAndUpdate).toHaveBeenCalledWith(
         {
           _id: new Types.ObjectId(walletId),
-          $expr: { $gte: ['$heldBalance', 100] },
+          $expr: { $gte: ['$heldBalance', Types.Decimal128.fromString('100')] },
         },
-        { $inc: { balance: -100, heldBalance: -100 } },
+        {
+          $inc: {
+            balance: Types.Decimal128.fromString('-100'),
+            heldBalance: Types.Decimal128.fromString('-100'),
+          },
+        },
         { returnDocument: 'after', session: undefined },
       );
     });

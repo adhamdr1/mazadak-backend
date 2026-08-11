@@ -23,7 +23,6 @@ import { CreateUserInput } from '../users/dto/create-user.input';
 import { createHash, randomBytes } from 'crypto';
 import { StringValue } from 'ms';
 import { LoginInput } from './dto/login.input';
-import { NotificationsService } from '../notifications/notifications.service';
 import { OAuth2Client } from 'google-auth-library';
 import { RegistrationRequiredException } from './exceptions/registration-required.exception';
 import { User } from '../users/entities/user.entity';
@@ -39,6 +38,7 @@ import { ClientSession } from 'mongoose';
 import { WalletService } from '../wallet/wallet.service';
 import { RabbitMQService } from '../infrastructure/rabbitmq/rabbitmq.service';
 import { RabbitMQEvent } from '../infrastructure/rabbitmq/rabbitmq-event.types';
+import { OutboxService } from '../infrastructure/outbox/outbox.service';
 
 const SALT_ROUNDS = 12;
 
@@ -61,10 +61,10 @@ export class AuthService {
     private readonly configService: ConfigService,
     @Inject('IAuthRepository')
     private readonly authRepository: IAuthRepository,
-    private readonly notificationsService: NotificationsService,
     @InjectRedis() private readonly redis: Redis,
     private readonly walletService: WalletService,
     private readonly rabbitMQService: RabbitMQService,
+    private readonly outboxService: OutboxService,
   ) {
     this.googleClient = new OAuth2Client(
       this.configService.getOrThrow<string>('GOOGLE_CLIENT_ID'),
@@ -100,24 +100,29 @@ export class AuthService {
       dateOfBirth: registerInput.dateOfBirth,
       address: registerInput.address,
     };
-    // 3. Create user + wallet in a single atomic transaction.
-    const user = await this.withTransaction(async (session) => {
+    // 3. Create user + wallet + outbox event in a single atomic transaction.
+    await this.withTransaction(async (session) => {
       const u = await this.usersService.create(createInput, session);
       await this.walletService.createWallet(u._id.toString(), session);
+
+      const verificationToken = this.generateEmailVerificationToken(
+        u._id.toString(),
+      );
+
+      // Save UserRegistered event atomically in Outbox table
+      await this.outboxService.saveEvent(
+        RabbitMQEvent.UserRegistered,
+        {
+          userId: u._id.toString(),
+          email: u.email,
+          name: u.firstName,
+          phone: u.phoneNumber,
+          verificationToken,
+        },
+        session,
+      );
+
       return u;
-    });
-
-    const verificationToken = this.generateEmailVerificationToken(
-      user._id.toString(),
-    );
-
-    // Publish UserRegistered event to RabbitMQ
-    await this.rabbitMQService.publish(RabbitMQEvent.UserRegistered, {
-      userId: user._id.toString(),
-      email: user.email,
-      name: user.firstName,
-      phone: user.phoneNumber,
-      verificationToken,
     });
 
     return {

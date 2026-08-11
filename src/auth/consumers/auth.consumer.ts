@@ -18,7 +18,7 @@ import {
   IDEMPOTENCY_TTL_S,
   AUTH_QUEUE,
   X_RETRY_COUNT,
-  RETRY_QUEUE_5S,
+  AUTH_RETRY_QUEUE_5S,
 } from '../../infrastructure/rabbitmq/rabbitmq.constants';
 import {
   RabbitMQEvent,
@@ -92,19 +92,27 @@ export class AuthConsumer implements OnModuleInit, OnModuleDestroy {
     msg: ConsumeMessage,
     channel: amqplib.Channel,
   ): Promise<void> {
+    let parsed: RabbitMQParsedMessage;
     try {
       const content = msg.content.toString();
       const raw = JSON.parse(content) as unknown;
-
-      const parsed = (
+      parsed = (
         raw && typeof raw === 'object' && 'data' in raw ? raw.data : raw
       ) as RabbitMQParsedMessage;
+    } catch (parseError) {
+      this.logger.error(
+        `AuthConsumer failed to parse message JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}. Rejecting to DLQ immediately.`,
+      );
+      channel.reject(msg, false);
+      return;
+    }
 
+    try {
       if (!parsed) {
         this.logger.warn(
           'AuthConsumer received empty or invalid message payload',
         );
-        this.channelWrapper!.ack(msg);
+        channel.ack(msg);
         return;
       }
 
@@ -176,7 +184,7 @@ export class AuthConsumer implements OnModuleInit, OnModuleDestroy {
         `AuthConsumer processing failed (attempt ${retryCount}). Retrying in 5 seconds...`,
       );
       channel.ack(msg); // Acknowledge first before republishing to retry queue
-      channel.sendToQueue(RETRY_QUEUE_5S, msg.content, {
+      channel.sendToQueue(AUTH_RETRY_QUEUE_5S, msg.content, {
         headers: {
           ...headers,
           [X_RETRY_COUNT]: retryCount,

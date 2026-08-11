@@ -81,7 +81,7 @@ export class TransactionService {
         {
           walletId: transaction.walletId.toString(),
           type: transaction.type,
-          amount: transaction.amount,
+          amount: Number(transaction.amount.toString()),
           currency: transaction.currency,
           status,
           referenceId: transaction._id.toString(), // reference the original PENDING transaction
@@ -112,7 +112,7 @@ export class TransactionService {
         RabbitMQEvent.WalletDepositInitiated,
         {
           walletId: transaction.walletId.toString(),
-          amount: transaction.amount,
+          amount: Number(transaction.amount.toString()),
           transactionId: transaction._id.toString(),
         },
         session,
@@ -145,9 +145,9 @@ export class TransactionService {
 
     // Validate amount and currency (converting webhook minor units to major units)
     const expectedAmount = new Decimal(webhookAmount).div(100).toNumber();
-    if (!new Decimal(transaction.amount).equals(expectedAmount)) {
+    if (!new Decimal(transaction.amount.toString()).equals(expectedAmount)) {
       throw new TransactionAmountMismatchException(
-        transaction.amount,
+        Number(transaction.amount.toString()),
         expectedAmount,
       );
     }
@@ -203,6 +203,10 @@ export class TransactionService {
       totalPages,
       hasNextPage: page < totalPages,
     };
+  }
+
+  async countTransactions(filter?: TransactionsFilterInput): Promise<number> {
+    return this.transactionRepository.countAll(filter);
   }
 
   async sumTodayRevenue(): Promise<number> {

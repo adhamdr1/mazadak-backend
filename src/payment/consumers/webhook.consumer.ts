@@ -10,9 +10,9 @@ import * as amqpManager from 'amqp-connection-manager';
 import { AmqpConnectionManager, ChannelWrapper } from 'amqp-connection-manager';
 import {
   PAYMENTS_WEBHOOK_QUEUE,
-  RETRY_QUEUE_5S,
-  RETRY_QUEUE_30S,
-  RETRY_QUEUE_2M,
+  WEBHOOK_RETRY_QUEUE_5S,
+  WEBHOOK_RETRY_QUEUE_30S,
+  WEBHOOK_RETRY_QUEUE_2M,
   X_RETRY_COUNT,
 } from '../../infrastructure/rabbitmq/rabbitmq.constants';
 import {
@@ -74,16 +74,24 @@ export class WebhookConsumer implements OnModuleInit, OnModuleDestroy {
     msg: amqplib.ConsumeMessage,
     channel: amqplib.Channel,
   ): Promise<void> {
+    let parsedMessage: RabbitMQParsedMessage;
     try {
       const content = msg.content.toString();
       const raw = JSON.parse(content) as unknown;
-
-      const parsedMessage = (
+      parsedMessage = (
         raw && typeof raw === 'object' && 'data' in raw
           ? (raw as { data: RabbitMQParsedMessage }).data
           : raw
       ) as RabbitMQParsedMessage;
+    } catch (parseError) {
+      this.logger.error(
+        `WebhookConsumer failed to parse message JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}. Rejecting to DLQ immediately.`,
+      );
+      channel.reject(msg, false);
+      return;
+    }
 
+    try {
       if (parsedMessage.eventType === RabbitMQEvent.PaymentWebhookReceived) {
         await this.paymentService.processPaymentWebhookEvent(
           parsedMessage.payload,
@@ -111,11 +119,11 @@ export class WebhookConsumer implements OnModuleInit, OnModuleDestroy {
 
     let targetQueue: string | null = null;
     if (retryCount === 1) {
-      targetQueue = RETRY_QUEUE_5S;
+      targetQueue = WEBHOOK_RETRY_QUEUE_5S;
     } else if (retryCount === 2) {
-      targetQueue = RETRY_QUEUE_30S;
+      targetQueue = WEBHOOK_RETRY_QUEUE_30S;
     } else if (retryCount === 3) {
-      targetQueue = RETRY_QUEUE_2M;
+      targetQueue = WEBHOOK_RETRY_QUEUE_2M;
     }
 
     if (targetQueue) {
