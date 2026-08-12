@@ -57,6 +57,7 @@ export class ReconciliationService {
       let page = 1;
       const limit = 100;
       let hasMore = true;
+      const processedIds = new Set<string>();
 
       while (hasMore) {
         // Find PENDING deposits that are older than 15 minutes and not resolved
@@ -79,7 +80,15 @@ export class ReconciliationService {
           `Reconciliation page ${page}: Processing ${pendingTransactions.length} pending deposit(s)`,
         );
 
+        let updatedCount = 0;
+
         for (const transaction of pendingTransactions) {
+          const txId = transaction._id.toString();
+          if (processedIds.has(txId)) {
+            continue;
+          }
+          processedIds.add(txId);
+
           if (
             !transaction.gatewayPaymentIntentId ||
             !transaction.gatewayProvider
@@ -109,43 +118,44 @@ export class ReconciliationService {
 
               if (result.status === PaymentStatus.SUCCESS) {
                 this.logger.log(
-                  `Reconciliation: Transaction ${transaction._id.toString()} was SUCCESSFUL on gateway. Crediting wallet.`,
+                  `Reconciliation: Transaction ${txId} was SUCCESSFUL on gateway. Crediting wallet.`,
                 );
                 await this.transactionService.updateTransactionStatusDirect(
-                  transaction._id.toString(),
+                  txId,
                   TransactionStatus.SUCCESS,
                   session,
                 );
               } else if (result.status === PaymentStatus.FAILED) {
                 this.logger.log(
-                  `Reconciliation: Transaction ${transaction._id.toString()} was FAILED/CANCELED on gateway.`,
+                  `Reconciliation: Transaction ${txId} was FAILED/CANCELED on gateway.`,
                 );
                 await this.transactionService.updateTransactionStatusDirect(
-                  transaction._id.toString(),
+                  txId,
                   TransactionStatus.FAILED,
                   session,
                 );
               }
 
               await session.commitTransaction();
+              updatedCount++;
             } catch (err) {
               await session.abortTransaction();
               this.logger.error(
-                `Failed to reconcile transaction ${transaction._id.toString()}: ${err instanceof Error ? err.message : String(err)}`,
+                `Failed to reconcile transaction ${txId}: ${err instanceof Error ? err.message : String(err)}`,
               );
             } finally {
               await session.endSession();
             }
           } catch (err) {
             this.logger.error(
-              `Failed to get payment status for transaction ${transaction._id.toString()}: ${err instanceof Error ? err.message : String(err)}`,
+              `Failed to get payment status for transaction ${txId}: ${err instanceof Error ? err.message : String(err)}`,
             );
           }
         }
 
         if (pendingTransactions.length < limit) {
           hasMore = false;
-        } else {
+        } else if (updatedCount === 0) {
           page++;
         }
       }

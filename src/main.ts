@@ -1,4 +1,5 @@
 import { NestFactory, HttpAdapterHost } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 import { IncomingMessage, ServerResponse } from 'http';
@@ -17,10 +18,13 @@ async function bootstrap() {
     tracesSampleRate: 1.0,
   });
 
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: true,
     rawBody: true,
   });
+
+  // Enable trust proxy to parse X-Forwarded-For headers correctly in proxy environments
+  app.set('trust proxy', true);
 
   // Set Winston as global logger
   app.useLogger(app.get(WINSTON_MODULE_NEST_PROVIDER));

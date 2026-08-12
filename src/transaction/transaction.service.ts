@@ -51,6 +51,22 @@ export class TransactionService {
     );
   }
 
+  async findByIdWithinSession(
+    id: string,
+    session?: ClientSession,
+  ): Promise<Transaction | null> {
+    if (!Types.ObjectId.isValid(id)) return null;
+    return this.transactionRepository.findById(id, session);
+  }
+
+  async markWalletCredited(
+    id: string,
+    session?: ClientSession,
+  ): Promise<Transaction | null> {
+    if (!Types.ObjectId.isValid(id)) return null;
+    return this.transactionRepository.markWalletCredited(id, session);
+  }
+
   // ─── Payment Webhook Processing ──────────────────────────────────────────────
 
   async updateTransactionStatusDirect(

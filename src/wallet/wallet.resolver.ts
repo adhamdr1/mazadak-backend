@@ -18,7 +18,6 @@ import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { TransactionService } from '../transaction/transaction.service';
 import { TransactionsPage } from '../transaction/dto/transactions-page.type';
 import { TransactionsFilterInput } from '../transaction/dto/transactions-filter.input';
-import { DepositInput } from './dto/deposit.input';
 import { WithdrawInput } from './dto/withdraw.input';
 import { WalletsPage } from './dto/wallets-page.type';
 import { PaginationInput } from '../common/dto/pagination.input';
@@ -80,17 +79,9 @@ export class WalletResolver {
 
   // ─── Mutations (Mock — Stripe integration pending) ────────────────────────
 
-  @Mutation(() => Wallet, { name: 'deposit' })
-  async deposit(
-    @CurrentUser() currentUser: JwtPayload,
-    @Args('input') input: DepositInput,
-  ): Promise<Wallet> {
-    const { wallet } = await this.walletService.deposit(
-      currentUser.sub,
-      input.amount,
-    );
-    return wallet;
-  }
+  // Note: GraphQL Mutation `deposit` has been removed to prevent direct balance manipulation.
+  // Manual deposits are now processed strictly via Payment Intents (initializePayment) and Webhook events.
+  // Internal deposits are processed via WalletService.deposit internally.
 
   @Mutation(() => Wallet, { name: 'withdraw' })
   async withdraw(

@@ -83,6 +83,7 @@ type Transaction {
   referenceType: TransactionReferenceType
   expiresAt: DateTime
   hasChild: Boolean!
+  walletCredited: Boolean!
   createdAt: DateTime!
 }
 
@@ -416,7 +417,6 @@ type Mutation {
   deleteAccount: Boolean!
   adminUpdateUser(targetUser: FindUserInput!, input: UpdateUserInput!): User!
   adminDeleteUser(targetUser: FindUserInput!): Boolean!
-  deposit(input: DepositInput!): Wallet!
   withdraw(input: WithdrawInput!): Wallet!
   markNotificationAsRead(notificationId: ID!): InAppNotification!
   markAllNotificationsAsRead: Boolean!
@@ -485,10 +485,6 @@ input UpdateUserInput {
   phoneNumber: String
   dateOfBirth: DateTime
   address: AddressInput
-}
-
-input DepositInput {
-  amount: Float!
 }
 
 input WithdrawInput {

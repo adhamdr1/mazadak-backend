@@ -70,6 +70,10 @@ export class MongoUserRepository implements IUserRepository {
       .exec();
   }
 
+  async findByIdIncludingDeleted(id: string): Promise<User | null> {
+    return await this.userModel.findById(id).exec();
+  }
+
   async findByGoogleId(googleId: string): Promise<User | null> {
     return await this.userModel
       .findOne({

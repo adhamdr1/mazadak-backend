@@ -1,5 +1,7 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { ClientSession } from 'mongoose';
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import Redis from 'ioredis';
 import { RabbitMQService } from '../infrastructure/rabbitmq/rabbitmq.service';
 import { RabbitMQEvent } from '../infrastructure/rabbitmq/rabbitmq-event.types';
 import { UpdateUserInput } from './dto/update-user.input';
@@ -31,6 +33,7 @@ export class UsersService {
     private readonly userRepository: IUserRepository,
     private readonly queryBus: QueryBus,
     private readonly rabbitMQService: RabbitMQService,
+    @InjectRedis() private readonly redis: Redis,
   ) {}
 
   async startSession(): Promise<ClientSession> {
@@ -115,6 +118,12 @@ export class UsersService {
 
   async findById(id: string): Promise<User> {
     const user = await this.userRepository.findById(id);
+    if (!user) throw new UserNotFoundException();
+    return user;
+  }
+
+  async findByIdIncludingDeleted(id: string): Promise<User> {
+    const user = await this.userRepository.findByIdIncludingDeleted(id);
     if (!user) throw new UserNotFoundException();
     return user;
   }
@@ -205,11 +214,13 @@ export class UsersService {
     }
 
     await this.userRepository.softDelete(targetId);
+    await this.redis.del(`user:auth-status:${targetId}`);
   }
 
   async reactivateUser(id: string): Promise<User> {
     const updated = await this.userRepository.reactivate(id);
     if (!updated) throw new UserNotFoundException();
+    await this.redis.del(`user:auth-status:${id}`);
     return updated;
   }
 
@@ -240,6 +251,8 @@ export class UsersService {
     const updatedUser = (await this.userRepository.update(userId, {
       isBanned: !user.isBanned,
     })) as User;
+
+    await this.redis.del(`user:auth-status:${userId}`);
 
     if (updatedUser.isBanned) {
       // Publish UserBanned event to revoke tokens asynchronously

@@ -17,6 +17,7 @@ import Redis from 'ioredis';
 import { type IWalletRepository } from '../interfaces/wallet.repository.interface';
 import { WalletNotFoundException } from '../exceptions/wallet-not-found.exception';
 import { OutboxService } from '../../infrastructure/outbox/outbox.service';
+import { TransactionService } from '../../transaction/transaction.service';
 import {
   IDEMPOTENCY_KEY_PREFIX,
   IDEMPOTENCY_TTL_S,
@@ -44,6 +45,7 @@ export class WalletConsumer implements OnModuleInit, OnModuleDestroy {
     private readonly outboxService: OutboxService,
     private readonly configService: ConfigService,
     @InjectConnection() private readonly mongooseConnection: Connection,
+    private readonly transactionService: TransactionService,
   ) {}
 
   onModuleInit() {
@@ -130,7 +132,7 @@ export class WalletConsumer implements OnModuleInit, OnModuleDestroy {
         this.logger.warn(
           `WalletConsumer detected duplicate message and skipped: ${messageId}`,
         );
-        this.channelWrapper!.ack(msg);
+        channel.ack(msg);
         return;
       }
 
@@ -174,10 +176,33 @@ export class WalletConsumer implements OnModuleInit, OnModuleDestroy {
     try {
       session.startTransaction();
 
+      // 1. Check if this transaction has already credited the wallet
+      const transaction = await this.transactionService.findByIdWithinSession(
+        payload.transactionId,
+        session,
+      );
+
+      if (!transaction) {
+        this.logger.warn(
+          `Transaction ${payload.transactionId} not found. Skipping.`,
+        );
+        await session.commitTransaction();
+        return;
+      }
+
+      if (transaction.walletCredited) {
+        this.logger.warn(
+          `Wallet already credited for transaction ${payload.transactionId}. Skipping.`,
+        );
+        await session.commitTransaction();
+        return;
+      }
+
       this.logger.log(
         `WalletConsumer crediting balance for walletId: ${payload.walletId}, amount: ${payload.amount}`,
       );
 
+      // 2. Perform the credit operation
       const wallet = await this.walletRepository.creditBalance(
         payload.walletId,
         payload.amount,
@@ -188,7 +213,13 @@ export class WalletConsumer implements OnModuleInit, OnModuleDestroy {
         throw new WalletNotFoundException();
       }
 
-      // Publish the final WalletDeposited event containing the userId for the notification queue
+      // 3. Mark the transaction as walletCredited inside the session
+      await this.transactionService.markWalletCredited(
+        payload.transactionId,
+        session,
+      );
+
+      // 4. Publish the final WalletDeposited event containing the userId for the notification queue
       await this.outboxService.saveEvent(
         RabbitMQEvent.WalletDeposited,
         {

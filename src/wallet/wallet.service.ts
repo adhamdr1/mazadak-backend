@@ -139,6 +139,19 @@ export class WalletService {
     return await this.getWalletOrThrow(userId);
   }
 
+  /**
+   * Processes a deposit operation for the user's wallet.
+   * There are two types of deposit flows:
+   *
+   * 1. Manual/Mock Deposit (referenceId is NOT provided):
+   *    - Represents a client-initiated deposit from a payment provider (e.g. Credit Card/InstaPay).
+   *    - Triggers the generic notifyDeposit email since it's a direct user deposit action.
+   *    - In production, client mutations are disabled, and this flow is executed strictly via webhook/reconciliation.
+   *
+   * 2. Internal/System/P2P Deposit (referenceId IS provided, e.g., auctionId):
+   *    - Represents a system-initiated balance transfer (e.g., settling an auction by moving held funds from the winning bidder to the seller).
+   *    - Does NOT send the generic notifyDeposit email because context-specific notifications (like "Auction Won" / "Auction Ended") are handled separately.
+   */
   async deposit(
     userId: string,
     amount: number,

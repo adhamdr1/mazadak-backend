@@ -74,6 +74,8 @@ export class PaymentExpirationService {
           `Expiration worker page ${page}: Found ${expiredTransactions.length} expired pending deposit(s). Marking as EXPIRED...`,
         );
 
+        let updatedCount = 0;
+
         for (const transaction of expiredTransactions) {
           const session = await this.connection.startSession();
           try {
@@ -89,6 +91,7 @@ export class PaymentExpirationService {
             this.logger.log(
               `Transaction ${transaction._id.toString()} successfully marked as EXPIRED.`,
             );
+            updatedCount++;
           } catch (err) {
             await session.abortTransaction();
             this.logger.error(
@@ -101,7 +104,7 @@ export class PaymentExpirationService {
 
         if (expiredTransactions.length < limit) {
           hasMore = false;
-        } else {
+        } else if (updatedCount === 0) {
           page++;
         }
       }

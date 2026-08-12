@@ -84,6 +84,10 @@ export class Transaction {
   @Prop({ type: Boolean, default: false, index: true })
   hasChild!: boolean;
 
+  @Field(() => Boolean, { defaultValue: false })
+  @Prop({ type: Boolean, default: false, index: true })
+  walletCredited!: boolean;
+
   @Field()
   readonly createdAt!: Date;
 }

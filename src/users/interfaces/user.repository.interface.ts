@@ -44,6 +44,8 @@ export interface IUserRepository {
 
   findById(id: string): Promise<User | null>;
 
+  findByIdIncludingDeleted(id: string): Promise<User | null>;
+
   findByEmail(email: string): Promise<User | null>;
 
   findByEmailWithPassword(email: string): Promise<User | null>;

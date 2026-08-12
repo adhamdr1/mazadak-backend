@@ -141,7 +141,7 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
         this.logger.warn(
           `Duplicate message detected and skipped: ${messageId}`,
         );
-        this.channelWrapper!.ack(msg);
+        channel.ack(msg);
         return;
       }
 
@@ -257,7 +257,9 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
   // --- Event Handlers ---
 
   private async handleAuctionStarted(payload: AuctionStartedPayload) {
-    const seller = await this.usersService.findById(payload.sellerId);
+    const seller = await this.usersService.findByIdIncludingDeleted(
+      payload.sellerId,
+    );
     if (!seller) return;
 
     const name =
@@ -283,7 +285,9 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
   }
 
   private async handleAuctionCancelled(payload: AuctionCancelledPayload) {
-    const seller = await this.usersService.findById(payload.sellerId);
+    const seller = await this.usersService.findByIdIncludingDeleted(
+      payload.sellerId,
+    );
     if (seller) {
       const name =
         [seller.firstName, seller.lastName].filter(Boolean).join(' ') || 'User';
@@ -308,7 +312,9 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
 
     // Notify highest bidder if any
     if (payload.highestBidderId && payload.refundAmount !== undefined) {
-      const bidder = await this.usersService.findById(payload.highestBidderId);
+      const bidder = await this.usersService.findByIdIncludingDeleted(
+        payload.highestBidderId,
+      );
       if (bidder) {
         const bidderName =
           [bidder.firstName, bidder.lastName].filter(Boolean).join(' ') ||
@@ -340,7 +346,9 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
   private async handleAuctionCancelledByAdmin(
     payload: AuctionCancelledByAdminPayload,
   ) {
-    const seller = await this.usersService.findById(payload.sellerId);
+    const seller = await this.usersService.findByIdIncludingDeleted(
+      payload.sellerId,
+    );
     if (seller) {
       const name =
         [seller.firstName, seller.lastName].filter(Boolean).join(' ') || 'User';
@@ -366,7 +374,9 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
 
     // Notify highest bidder if any
     if (payload.highestBidderId && payload.refundAmount !== undefined) {
-      const bidder = await this.usersService.findById(payload.highestBidderId);
+      const bidder = await this.usersService.findByIdIncludingDeleted(
+        payload.highestBidderId,
+      );
       if (bidder) {
         const bidderName =
           [bidder.firstName, bidder.lastName].filter(Boolean).join(' ') ||
@@ -397,10 +407,14 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
 
   private async handleAuctionEnded(payload: AuctionEndedPayload) {
     let winnerName = 'Winning Bidder';
-    const seller = await this.usersService.findById(payload.sellerId);
+    const seller = await this.usersService.findByIdIncludingDeleted(
+      payload.sellerId,
+    );
 
     if (payload.winnerId) {
-      const winner = await this.usersService.findById(payload.winnerId);
+      const winner = await this.usersService.findByIdIncludingDeleted(
+        payload.winnerId,
+      );
       if (winner) {
         winnerName =
           [winner.firstName, winner.lastName].filter(Boolean).join(' ') ||
@@ -470,7 +484,7 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
     // 2. Notify previous winner (if any) that they were outbid
     if (!payload.outbidUserId) return;
 
-    const previousBidder = await this.usersService.findById(
+    const previousBidder = await this.usersService.findByIdIncludingDeleted(
       payload.outbidUserId,
     );
     if (!previousBidder) return;
@@ -543,7 +557,9 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
   }
 
   private async handleWalletDeposited(payload: WalletDepositedPayload) {
-    const user = await this.usersService.findById(payload.userId);
+    const user = await this.usersService.findByIdIncludingDeleted(
+      payload.userId,
+    );
     const email = user?.email ?? '';
     const name = user
       ? [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User'
@@ -567,7 +583,9 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
   }
 
   private async handleWithdrawalCompleted(payload: WithdrawalCompletedPayload) {
-    const user = await this.usersService.findById(payload.userId);
+    const user = await this.usersService.findByIdIncludingDeleted(
+      payload.userId,
+    );
     const email = user?.email ?? '';
     const name = user
       ? [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User'
