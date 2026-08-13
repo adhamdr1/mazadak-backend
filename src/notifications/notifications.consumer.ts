@@ -262,7 +262,7 @@ export class NotificationsConsumer
     const seller = await this.usersService.findByIdIncludingDeleted(
       payload.sellerId,
     );
-    if (!seller) return;
+    if (!seller || seller.isBanned) return;
 
     const name =
       [seller.firstName, seller.lastName].filter(Boolean).join(' ') || 'User';
@@ -290,7 +290,7 @@ export class NotificationsConsumer
     const seller = await this.usersService.findByIdIncludingDeleted(
       payload.sellerId,
     );
-    if (seller) {
+    if (seller && !seller.isBanned) {
       const name =
         [seller.firstName, seller.lastName].filter(Boolean).join(' ') || 'User';
       // Email for seller
@@ -317,7 +317,7 @@ export class NotificationsConsumer
       const bidder = await this.usersService.findByIdIncludingDeleted(
         payload.highestBidderId,
       );
-      if (bidder) {
+      if (bidder && !bidder.isBanned) {
         const bidderName =
           [bidder.firstName, bidder.lastName].filter(Boolean).join(' ') ||
           'User';
@@ -351,7 +351,7 @@ export class NotificationsConsumer
     const seller = await this.usersService.findByIdIncludingDeleted(
       payload.sellerId,
     );
-    if (seller) {
+    if (seller && !seller.isBanned) {
       const name =
         [seller.firstName, seller.lastName].filter(Boolean).join(' ') || 'User';
       // Email for seller
@@ -379,7 +379,7 @@ export class NotificationsConsumer
       const bidder = await this.usersService.findByIdIncludingDeleted(
         payload.highestBidderId,
       );
-      if (bidder) {
+      if (bidder && !bidder.isBanned) {
         const bidderName =
           [bidder.firstName, bidder.lastName].filter(Boolean).join(' ') ||
           'User';
@@ -417,7 +417,7 @@ export class NotificationsConsumer
       const winner = await this.usersService.findByIdIncludingDeleted(
         payload.winnerId,
       );
-      if (winner) {
+      if (winner && !winner.isBanned) {
         winnerName =
           [winner.firstName, winner.lastName].filter(Boolean).join(' ') ||
           'Winning Bidder';
@@ -444,7 +444,7 @@ export class NotificationsConsumer
       }
     }
 
-    if (seller) {
+    if (seller && !seller.isBanned) {
       const sellerName =
         [seller.firstName, seller.lastName].filter(Boolean).join(' ') || 'User';
       // Email to seller
@@ -474,14 +474,16 @@ export class NotificationsConsumer
 
   private async handleBidPlaced(payload: BidPlacedPayload) {
     // 1. Notify Seller about the new bid (In-App only)
-    await this.notificationsService.createInAppNotification({
-      userId: payload.sellerId,
-      type: InAppNotificationType.NEW_BID,
-      title: 'New bid placed! 📈',
-      body: `Someone placed a bid of ${payload.amount} EGP on your auction "${payload.auctionTitle}".`,
-      referenceId: payload.auctionId,
-      referenceType: NotificationReferenceType.AUCTION,
-    });
+    if (await this.isUserEligibleForNotification(payload.sellerId)) {
+      await this.notificationsService.createInAppNotification({
+        userId: payload.sellerId,
+        type: InAppNotificationType.NEW_BID,
+        title: 'New bid placed! 📈',
+        body: `Someone placed a bid of ${payload.amount} EGP on your auction "${payload.auctionTitle}".`,
+        referenceId: payload.auctionId,
+        referenceType: NotificationReferenceType.AUCTION,
+      });
+    }
 
     // 2. Notify previous winner (if any) that they were outbid
     if (!payload.outbidUserId) return;
@@ -489,35 +491,41 @@ export class NotificationsConsumer
     const previousBidder = await this.usersService.findByIdIncludingDeleted(
       payload.outbidUserId,
     );
-    if (!previousBidder) return;
+    if (previousBidder && !previousBidder.isBanned) {
+      const name =
+        [previousBidder.firstName, previousBidder.lastName]
+          .filter(Boolean)
+          .join(' ') || 'User';
 
-    const name =
-      [previousBidder.firstName, previousBidder.lastName]
-        .filter(Boolean)
-        .join(' ') || 'User';
+      // Email
+      await this.notificationsService.sendOutbidEmail(
+        previousBidder.email,
+        name,
+        payload.auctionTitle,
+        payload.amount,
+        payload.auctionId,
+        payload.outbidTransactionId,
+      );
 
-    // Email
-    await this.notificationsService.sendOutbidEmail(
-      previousBidder.email,
-      name,
-      payload.auctionTitle,
-      payload.amount,
-      payload.auctionId,
-      payload.outbidTransactionId,
-    );
-
-    // In-App Notification
-    await this.notificationsService.createInAppNotification({
-      userId: payload.outbidUserId,
-      type: InAppNotificationType.OUTBID,
-      title: 'You have been outbid! ⚠️',
-      body: `Someone placed a higher bid of ${payload.amount} EGP on the auction "${payload.auctionTitle}".`,
-      referenceId: payload.auctionId,
-      referenceType: NotificationReferenceType.AUCTION,
-    });
+      // In-App Notification
+      await this.notificationsService.createInAppNotification({
+        userId: payload.outbidUserId,
+        type: InAppNotificationType.OUTBID,
+        title: 'You have been outbid! ⚠️',
+        body: `Someone placed a higher bid of ${payload.amount} EGP on the auction "${payload.auctionTitle}".`,
+        referenceId: payload.auctionId,
+        referenceType: NotificationReferenceType.AUCTION,
+      });
+    }
   }
 
   private async handleUserRegistered(payload: UserRegisteredPayload) {
+    if (!(await this.isUserEligibleForNotification(payload.userId))) {
+      this.logger.warn(
+        `Skipping UserRegistered notification for ineligible user: ${payload.userId}`,
+      );
+      return;
+    }
     await this.notificationsService.sendEmailVerification(
       payload.email,
       payload.verificationToken,
@@ -527,6 +535,12 @@ export class NotificationsConsumer
   }
 
   private async handleEmailVerified(payload: EmailVerifiedPayload) {
+    if (!(await this.isUserEligibleForNotification(payload.userId))) {
+      this.logger.warn(
+        `Skipping EmailVerified notification for ineligible user: ${payload.userId}`,
+      );
+      return;
+    }
     await this.notificationsService.sendWelcomeEmail(
       payload.email,
       payload.name,
@@ -562,10 +576,11 @@ export class NotificationsConsumer
     const user = await this.usersService.findByIdIncludingDeleted(
       payload.userId,
     );
-    const email = user?.email ?? '';
-    const name = user
-      ? [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User'
-      : 'User';
+    if (!user || user.isBanned) return;
+
+    const email = user.email;
+    const name =
+      [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
 
     await this.notificationsService.sendDepositSuccessfulEmail(
       email,
@@ -588,10 +603,11 @@ export class NotificationsConsumer
     const user = await this.usersService.findByIdIncludingDeleted(
       payload.userId,
     );
-    const email = user?.email ?? '';
-    const name = user
-      ? [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User'
-      : 'User';
+    if (!user || user.isBanned) return;
+
+    const email = user.email;
+    const name =
+      [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
 
     await this.notificationsService.sendWithdrawalCompletedEmail(
       email,
@@ -621,6 +637,12 @@ export class NotificationsConsumer
   }
 
   private async handleAccountReactivated(payload: AccountReactivatedPayload) {
+    if (!(await this.isUserEligibleForNotification(payload.userId))) {
+      this.logger.warn(
+        `Skipping AccountReactivated notification for ineligible user: ${payload.userId}`,
+      );
+      return;
+    }
     await this.notificationsService.sendAccountReactivatedEmail(
       payload.email,
       payload.name,
@@ -632,5 +654,14 @@ export class NotificationsConsumer
       title: 'Welcome Back to Mazadak! 🌟',
       body: 'Your account has been successfully reactivated.',
     });
+  }
+
+  private async isUserEligibleForNotification(
+    userId: string,
+  ): Promise<boolean> {
+    const user = await this.usersService.findByIdIncludingDeleted(userId);
+    if (!user) return false;
+    if (user.isBanned) return false;
+    return true;
   }
 }

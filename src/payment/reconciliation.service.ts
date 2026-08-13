@@ -80,8 +80,6 @@ export class ReconciliationService {
           `Reconciliation page ${page}: Processing ${pendingTransactions.length} pending deposit(s)`,
         );
 
-        let updatedCount = 0;
-
         for (const transaction of pendingTransactions) {
           const txId = transaction._id.toString();
           if (processedIds.has(txId)) {
@@ -137,7 +135,6 @@ export class ReconciliationService {
               }
 
               await session.commitTransaction();
-              updatedCount++;
             } catch (err) {
               await session.abortTransaction();
               this.logger.error(
@@ -155,7 +152,7 @@ export class ReconciliationService {
 
         if (pendingTransactions.length < limit) {
           hasMore = false;
-        } else if (updatedCount === 0) {
+        } else {
           page++;
         }
       }

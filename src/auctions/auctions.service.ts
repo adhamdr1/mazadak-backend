@@ -305,13 +305,13 @@ export class AuctionsService {
     session.startTransaction();
 
     try {
+      let winningBid: { bidderId: string; amount: number } | null = null;
       // 1. If auction was active, look for highest winning bid to release funds and notify them
       if (auction.status === AuctionStatus.ACTIVE) {
-        const winningBid =
-          await this.auctionRepository.findWinningBidByAuctionId(
-            auctionId,
-            session,
-          );
+        winningBid = await this.auctionRepository.findWinningBidByAuctionId(
+          auctionId,
+          session,
+        );
 
         if (winningBid) {
           const bidderId = winningBid.bidderId;
@@ -337,16 +337,9 @@ export class AuctionsService {
       let highestBidderId: string | undefined;
       let refundAmount: number | undefined;
 
-      if (auction.status === AuctionStatus.ACTIVE) {
-        const winningBid =
-          await this.auctionRepository.findWinningBidByAuctionId(
-            auctionId,
-            session,
-          );
-        if (winningBid) {
-          highestBidderId = winningBid.bidderId;
-          refundAmount = winningBid.amount;
-        }
+      if (winningBid) {
+        highestBidderId = winningBid.bidderId;
+        refundAmount = winningBid.amount;
       }
 
       // 3. Publish Event to Outbox (Transactional)
@@ -401,12 +394,12 @@ export class AuctionsService {
     session.startTransaction();
 
     try {
+      let winningBid: { bidderId: string; amount: number } | null = null;
       if (auction.status === AuctionStatus.ACTIVE) {
-        const winningBid =
-          await this.auctionRepository.findWinningBidByAuctionId(
-            auctionId,
-            session,
-          );
+        winningBid = await this.auctionRepository.findWinningBidByAuctionId(
+          auctionId,
+          session,
+        );
 
         if (winningBid) {
           const bidderId = winningBid.bidderId;
@@ -430,16 +423,9 @@ export class AuctionsService {
       let highestBidderId: string | undefined;
       let refundAmount: number | undefined;
 
-      if (auction.status === AuctionStatus.ACTIVE) {
-        const winningBid =
-          await this.auctionRepository.findWinningBidByAuctionId(
-            auctionId,
-            session,
-          );
-        if (winningBid) {
-          highestBidderId = winningBid.bidderId;
-          refundAmount = winningBid.amount;
-        }
+      if (winningBid) {
+        highestBidderId = winningBid.bidderId;
+        refundAmount = winningBid.amount;
       }
 
       await this.outboxService.saveEvent(
