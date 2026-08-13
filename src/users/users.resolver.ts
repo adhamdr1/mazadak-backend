@@ -59,7 +59,7 @@ export class UsersResolver {
   async deleteAccount(
     @CurrentUser() currentUser: JwtPayload,
   ): Promise<boolean> {
-    await this.usersService.softDelete(currentUser, currentUser.sub);
+    await this.usersService.softDeleteUser(currentUser.sub, currentUser);
     return true;
   }
 
@@ -83,7 +83,7 @@ export class UsersResolver {
     @CurrentUser() currentUser: JwtPayload,
     @Args('targetUser') targetUser: FindUserInput,
   ): Promise<boolean> {
-    await this.usersService.softDelete(currentUser, targetUser.id);
+    await this.usersService.softDeleteUser(targetUser.id, currentUser);
     return true;
   }
 }

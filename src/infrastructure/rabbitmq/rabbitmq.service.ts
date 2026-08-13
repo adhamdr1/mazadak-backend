@@ -38,9 +38,10 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     eventType: RabbitMQEvent,
     payload: RabbitMQEventPayload,
     correlationId?: string,
+    messageId?: string,
   ): Promise<void> {
     const message: RabbitMQMessage = {
-      messageId: randomUUID(),
+      messageId: messageId ?? randomUUID(),
       correlationId: correlationId ?? randomUUID(),
       eventType,
       version: 'v1',

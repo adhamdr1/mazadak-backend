@@ -63,6 +63,7 @@ export class OutboxWorkerService {
             event.eventType,
             event.payload as unknown as RabbitMQEventPayload,
             event.correlationId,
+            event.messageId,
           );
 
           await this.outboxModel.updateOne(

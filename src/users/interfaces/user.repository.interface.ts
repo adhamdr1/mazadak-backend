@@ -56,7 +56,11 @@ export interface IUserRepository {
 
   findByGoogleId(googleId: string): Promise<User | null>;
 
-  update(id: string, data: UpdateUserData): Promise<User | null>;
+  update(
+    id: string,
+    data: UpdateUserData,
+    session?: ClientSession,
+  ): Promise<User | null>;
 
   findAll(
     page: number,
@@ -68,9 +72,9 @@ export interface IUserRepository {
 
   countAll(filter?: UsersFilter): Promise<number>;
 
-  softDelete(id: string): Promise<void>;
+  softDelete(id: string, session?: ClientSession): Promise<void>;
 
   linkGoogleAccount(userId: string, googleId: string): Promise<User | null>;
 
-  reactivate(id: string): Promise<User | null>;
+  reactivate(id: string, session?: ClientSession): Promise<User | null>;
 }

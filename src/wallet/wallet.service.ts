@@ -66,23 +66,12 @@ export class WalletService {
     const walletId = wallet._id.toString();
     const currency = params.currency ?? 'EGP';
 
-    let updated: Wallet | null = null;
-
-    try {
-      updated = await params.operation(walletId, params.amount, params.session);
-      if (!updated) params.onNull();
-    } catch (error) {
-      // Best-effort: log failed transaction without masking the original error
-      void this.transactionService.createTransaction({
-        walletId,
-        type: params.type,
-        amount: params.amount,
-        currency,
-        status: TransactionStatus.FAILED,
-        referenceId: params.referenceId,
-      });
-      throw error;
-    }
+    const updated = await params.operation(
+      walletId,
+      params.amount,
+      params.session,
+    );
+    if (!updated) params.onNull();
 
     const transaction = await this.transactionService.createTransaction(
       {
@@ -205,8 +194,13 @@ export class WalletService {
     }
 
     const newSession = await this.connection.startSession();
+    let walletId: string | undefined;
     try {
       newSession.startTransaction();
+      // Resolve walletId before the operation so we can log failures.
+      const wallet = await this.getWalletOrThrow(userId);
+      walletId = wallet._id.toString();
+
       const result = await this.executeWithdrawal(
         userId,
         amount,
@@ -217,6 +211,25 @@ export class WalletService {
       return result;
     } catch (error) {
       await newSession.abortTransaction();
+
+      // Log the failed transaction safely outside the aborted session.
+      if (walletId) {
+        try {
+          await this.transactionService.createTransaction({
+            walletId,
+            type: TransactionType.WITHDRAW,
+            amount,
+            currency: 'EGP',
+            status: TransactionStatus.FAILED,
+            referenceId,
+          });
+        } catch (logErr) {
+          this.logger.error(
+            `Failed to log FAILED withdrawal transaction for user ${userId}: ${logErr instanceof Error ? logErr.message : String(logErr)}`,
+          );
+        }
+      }
+
       throw error;
     } finally {
       await newSession.endSession();
