@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { ClientSession } from 'mongoose';
+import { ClientSession, Connection } from 'mongoose';
+import { InjectConnection } from '@nestjs/mongoose';
 import type { IWalletRepository } from './interfaces/wallet.repository.interface';
 import { Wallet } from './entities/wallet.entity';
 import { WalletNotFoundException } from './exceptions/wallet-not-found.exception';
@@ -24,6 +25,7 @@ export class WalletService {
     private readonly walletRepository: IWalletRepository,
     private readonly transactionService: TransactionService,
     private readonly outboxService: OutboxService,
+    @InjectConnection() private readonly connection: Connection,
   ) {}
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -64,23 +66,12 @@ export class WalletService {
     const walletId = wallet._id.toString();
     const currency = params.currency ?? 'EGP';
 
-    let updated: Wallet | null = null;
-
-    try {
-      updated = await params.operation(walletId, params.amount, params.session);
-      if (!updated) params.onNull();
-    } catch (error) {
-      // Best-effort: log failed transaction without masking the original error
-      void this.transactionService.createTransaction({
-        walletId,
-        type: params.type,
-        amount: params.amount,
-        currency,
-        status: TransactionStatus.FAILED,
-        referenceId: params.referenceId,
-      });
-      throw error;
-    }
+    const updated = await params.operation(
+      walletId,
+      params.amount,
+      params.session,
+    );
+    if (!updated) params.onNull();
 
     const transaction = await this.transactionService.createTransaction(
       {
@@ -139,6 +130,19 @@ export class WalletService {
     return await this.getWalletOrThrow(userId);
   }
 
+  /**
+   * Processes a deposit operation for the user's wallet.
+   * There are two types of deposit flows:
+   *
+   * 1. Manual/Mock Deposit (referenceId is NOT provided):
+   *    - Represents a client-initiated deposit from a payment provider (e.g. Credit Card/InstaPay).
+   *    - Triggers the generic notifyDeposit email since it's a direct user deposit action.
+   *    - In production, client mutations are disabled, and this flow is executed strictly via webhook/reconciliation.
+   *
+   * 2. Internal/System/P2P Deposit (referenceId IS provided, e.g., auctionId):
+   *    - Represents a system-initiated balance transfer (e.g., settling an auction by moving held funds from the winning bidder to the seller).
+   *    - Does NOT send the generic notifyDeposit email because context-specific notifications (like "Auction Won" / "Auction Ended") are handled separately.
+   */
   async deposit(
     userId: string,
     amount: number,
@@ -180,6 +184,59 @@ export class WalletService {
   }
 
   async withdraw(
+    userId: string,
+    amount: number,
+    referenceId?: string,
+    session?: ClientSession,
+  ): Promise<{ wallet: Wallet; transaction: Transaction }> {
+    if (session) {
+      return this.executeWithdrawal(userId, amount, referenceId, session);
+    }
+
+    const newSession = await this.connection.startSession();
+    let walletId: string | undefined;
+    try {
+      newSession.startTransaction();
+      // Resolve walletId before the operation so we can log failures.
+      const wallet = await this.getWalletOrThrow(userId);
+      walletId = wallet._id.toString();
+
+      const result = await this.executeWithdrawal(
+        userId,
+        amount,
+        referenceId,
+        newSession,
+      );
+      await newSession.commitTransaction();
+      return result;
+    } catch (error) {
+      await newSession.abortTransaction();
+
+      // Log the failed transaction safely outside the aborted session.
+      if (walletId) {
+        try {
+          await this.transactionService.createTransaction({
+            walletId,
+            type: TransactionType.WITHDRAW,
+            amount,
+            currency: 'EGP',
+            status: TransactionStatus.FAILED,
+            referenceId,
+          });
+        } catch (logErr) {
+          this.logger.error(
+            `Failed to log FAILED withdrawal transaction for user ${userId}: ${logErr instanceof Error ? logErr.message : String(logErr)}`,
+          );
+        }
+      }
+
+      throw error;
+    } finally {
+      await newSession.endSession();
+    }
+  }
+
+  private async executeWithdrawal(
     userId: string,
     amount: number,
     referenceId?: string,

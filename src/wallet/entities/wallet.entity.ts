@@ -1,4 +1,4 @@
-import { ObjectType, Field, ID, Float } from '@nestjs/graphql';
+import { ObjectType, Field, ID } from '@nestjs/graphql';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
 
@@ -8,6 +8,8 @@ export type WalletDocument = HydratedDocument<Wallet>;
 @Schema({
   timestamps: true,
   versionKey: false,
+  toJSON: { getters: true },
+  toObject: { getters: true },
 })
 export class Wallet {
   @Field(() => ID)
@@ -23,17 +25,27 @@ export class Wallet {
   })
   userId!: Types.ObjectId;
 
-  @Field(() => Float)
-  @Prop({ type: Number, default: 0, min: 0 })
-  balance!: number;
+  @Field(() => String)
+  @Prop({
+    type: Types.Decimal128,
+    default: 0,
+    min: 0,
+    get: (val: Types.Decimal128 | null) => (val ? val.toString() : '0.00'),
+  })
+  balance!: Types.Decimal128;
 
-  @Field(() => Float)
-  @Prop({ type: Number, default: 0, min: 0 })
-  heldBalance!: number;
+  @Field(() => String)
+  @Prop({
+    type: Types.Decimal128,
+    default: 0,
+    min: 0,
+    get: (val: Types.Decimal128 | null) => (val ? val.toString() : '0.00'),
+  })
+  heldBalance!: Types.Decimal128;
 
   // Computed field — resolved in WalletResolver via @ResolveField
-  @Field(() => Float)
-  availableBalance!: number;
+  @Field(() => String)
+  availableBalance!: string;
 
   @Field()
   readonly createdAt!: Date;

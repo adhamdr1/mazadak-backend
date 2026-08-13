@@ -160,6 +160,19 @@ export class MongoAuctionRepository implements IAuctionRepository {
       .exec();
   }
 
+  async findActiveOrPendingBySellerId(
+    sellerId: string,
+    session?: ClientSession,
+  ): Promise<Auction[]> {
+    return await this.auctionModel
+      .find({
+        sellerId: new Types.ObjectId(sellerId),
+        status: { $in: [AuctionStatus.PENDING, AuctionStatus.ACTIVE] },
+      })
+      .session(session || null)
+      .exec();
+  }
+
   async finalizeAuction(
     id: string,
     winnerId?: string,
@@ -246,7 +259,15 @@ export class MongoAuctionRepository implements IAuctionRepository {
 
     return {
       bidderId: winningBid.bidderId.toString(),
-      amount: winningBid.amount,
+      amount: Number(winningBid.amount.toString()),
     };
+  }
+
+  async count(
+    filter: AuctionsFilter,
+    excludeStatuses?: AuctionStatus[],
+  ): Promise<number> {
+    const query = this.buildQuery(filter, excludeStatuses);
+    return await this.auctionModel.countDocuments(query).exec();
   }
 }

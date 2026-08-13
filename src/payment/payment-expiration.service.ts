@@ -4,7 +4,9 @@ import { Connection } from 'mongoose';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';
+import { randomUUID } from 'crypto';
 import type { ITransactionRepository } from '../transaction/interfaces/transaction.repository.interface';
+import { RELEASE_LOCK_LUA_SCRIPT } from '../infrastructure/redis/redis.constants';
 import { TransactionService } from '../transaction/transaction.service';
 import { TransactionStatus } from '../transaction/enums/transaction-status.enum';
 import { TransactionType } from '../transaction/enums/transaction-type.enum';
@@ -31,10 +33,11 @@ export class PaymentExpirationService {
   @Cron(CronExpression.EVERY_5_MINUTES)
   async handleExpiredPayments(): Promise<void> {
     let acquiredLock = false;
+    const lockValue = randomUUID();
 
     try {
       const lockResult = await this.redis
-        .set(EXPIRATION_LOCK_KEY, '1', 'EX', LOCK_TTL_SECONDS, 'NX')
+        .set(EXPIRATION_LOCK_KEY, lockValue, 'EX', LOCK_TTL_SECONDS, 'NX')
         .catch((err) => {
           this.logger.warn(
             `Redis ExpirationWorker lock error: ${err instanceof Error ? err.message : String(err)}`,
@@ -51,7 +54,7 @@ export class PaymentExpirationService {
       let hasMore = true;
 
       while (hasMore) {
-        // Find PENDING deposit transactions where expiresAt <= now
+        // Find PENDING deposit transactions where expiresAt <= now and not resolved
         const expiredTransactions = await this.transactionRepository.findAll(
           page,
           limit,
@@ -59,6 +62,7 @@ export class PaymentExpirationService {
             status: TransactionStatus.PENDING,
             type: TransactionType.DEPOSIT,
             expiresAtBefore: now,
+            hasChild: false, // CRITICAL FIX
           },
         );
 
@@ -107,7 +111,9 @@ export class PaymentExpirationService {
       );
     } finally {
       if (acquiredLock) {
-        await this.redis.del(EXPIRATION_LOCK_KEY).catch(() => undefined);
+        await this.redis
+          .eval(RELEASE_LOCK_LUA_SCRIPT, 1, EXPIRATION_LOCK_KEY, lockValue)
+          .catch(() => undefined);
       }
     }
   }

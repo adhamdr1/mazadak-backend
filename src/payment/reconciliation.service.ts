@@ -4,6 +4,8 @@ import { InjectConnection } from '@nestjs/mongoose';
 import { Connection } from 'mongoose';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';
+import { randomUUID } from 'crypto';
+import { RELEASE_LOCK_LUA_SCRIPT } from '../infrastructure/redis/redis.constants';
 import type { ITransactionRepository } from '../transaction/interfaces/transaction.repository.interface';
 import { PaymentProviderFactory } from './providers/payment-provider.factory';
 import { PaymentProviderType } from './enums/payment-provider-type.enum';
@@ -36,10 +38,11 @@ export class ReconciliationService {
   @Cron(CronExpression.EVERY_10_MINUTES)
   async reconcilePendingPayments(): Promise<void> {
     let acquiredLock = false;
+    const lockValue = randomUUID();
 
     try {
       const lockResult = await this.redis
-        .set(RECONCILIATION_LOCK_KEY, '1', 'EX', LOCK_TTL_SECONDS, 'NX')
+        .set(RECONCILIATION_LOCK_KEY, lockValue, 'EX', LOCK_TTL_SECONDS, 'NX')
         .catch((err) => {
           this.logger.warn(
             `Redis Reconciliation lock error: ${err instanceof Error ? err.message : String(err)}`,
@@ -54,9 +57,10 @@ export class ReconciliationService {
       let page = 1;
       const limit = 100;
       let hasMore = true;
+      const processedIds = new Set<string>();
 
       while (hasMore) {
-        // Find PENDING deposits that are older than 15 minutes
+        // Find PENDING deposits that are older than 15 minutes and not resolved
         const pendingTransactions = await this.transactionRepository.findAll(
           page,
           limit,
@@ -64,6 +68,7 @@ export class ReconciliationService {
             status: TransactionStatus.PENDING,
             type: TransactionType.DEPOSIT,
             endDate: fifteenMinutesAgo,
+            hasChild: false, // CRITICAL FIX
           },
         );
 
@@ -76,6 +81,12 @@ export class ReconciliationService {
         );
 
         for (const transaction of pendingTransactions) {
+          const txId = transaction._id.toString();
+          if (processedIds.has(txId)) {
+            continue;
+          }
+          processedIds.add(txId);
+
           if (
             !transaction.gatewayPaymentIntentId ||
             !transaction.gatewayProvider
@@ -105,19 +116,19 @@ export class ReconciliationService {
 
               if (result.status === PaymentStatus.SUCCESS) {
                 this.logger.log(
-                  `Reconciliation: Transaction ${transaction._id.toString()} was SUCCESSFUL on gateway. Crediting wallet.`,
+                  `Reconciliation: Transaction ${txId} was SUCCESSFUL on gateway. Crediting wallet.`,
                 );
                 await this.transactionService.updateTransactionStatusDirect(
-                  transaction._id.toString(),
+                  txId,
                   TransactionStatus.SUCCESS,
                   session,
                 );
               } else if (result.status === PaymentStatus.FAILED) {
                 this.logger.log(
-                  `Reconciliation: Transaction ${transaction._id.toString()} was FAILED/CANCELED on gateway.`,
+                  `Reconciliation: Transaction ${txId} was FAILED/CANCELED on gateway.`,
                 );
                 await this.transactionService.updateTransactionStatusDirect(
-                  transaction._id.toString(),
+                  txId,
                   TransactionStatus.FAILED,
                   session,
                 );
@@ -127,14 +138,14 @@ export class ReconciliationService {
             } catch (err) {
               await session.abortTransaction();
               this.logger.error(
-                `Failed to reconcile transaction ${transaction._id.toString()}: ${err instanceof Error ? err.message : String(err)}`,
+                `Failed to reconcile transaction ${txId}: ${err instanceof Error ? err.message : String(err)}`,
               );
             } finally {
               await session.endSession();
             }
           } catch (err) {
             this.logger.error(
-              `Failed to get payment status for transaction ${transaction._id.toString()}: ${err instanceof Error ? err.message : String(err)}`,
+              `Failed to get payment status for transaction ${txId}: ${err instanceof Error ? err.message : String(err)}`,
             );
           }
         }
@@ -151,7 +162,9 @@ export class ReconciliationService {
       );
     } finally {
       if (acquiredLock) {
-        await this.redis.del(RECONCILIATION_LOCK_KEY).catch(() => undefined);
+        await this.redis
+          .eval(RELEASE_LOCK_LUA_SCRIPT, 1, RECONCILIATION_LOCK_KEY, lockValue)
+          .catch(() => undefined);
       }
     }
   }

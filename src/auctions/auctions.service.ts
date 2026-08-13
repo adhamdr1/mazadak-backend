@@ -2,7 +2,9 @@ import { Injectable, Inject, Logger } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';
+import { randomUUID } from 'crypto';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { RELEASE_LOCK_LUA_SCRIPT } from '../infrastructure/redis/redis.constants';
 import type { IAuctionRepository } from './interfaces/auction-repository.interface';
 import { Auction } from './entities/auction.entity';
 import { AuctionStatus } from './enums/auction-status.enum';
@@ -170,6 +172,13 @@ export class AuctionsService {
     return this.buildPage(items, total, input);
   }
 
+  async countAuctions(
+    filter: AuctionsFilterInput,
+    excludeStatuses?: AuctionStatus[],
+  ): Promise<number> {
+    return this.auctionRepository.count(filter, excludeStatuses);
+  }
+
   async findAuction(id: string): Promise<Auction> {
     return this.getAuctionOrThrow(id);
   }
@@ -248,6 +257,31 @@ export class AuctionsService {
     return updated;
   }
 
+  async cancelAllActiveAuctionsForSeller(sellerId: string): Promise<void> {
+    const auctions =
+      await this.auctionRepository.findActiveOrPendingBySellerId(sellerId);
+    this.logger.log(
+      `Found ${auctions.length} active/pending auction(s) to cancel for seller ${sellerId}`,
+    );
+
+    for (const auction of auctions) {
+      try {
+        await this.cancelAuction(
+          auction._id.toString(),
+          sellerId,
+          UserRole.ADMIN,
+        );
+        this.logger.log(
+          `Successfully cancelled auction ${auction._id.toString()} for seller ${sellerId}`,
+        );
+      } catch (err) {
+        this.logger.error(
+          `Failed to cancel auction ${auction._id.toString()} for seller ${sellerId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+  }
+
   async cancelAuction(
     auctionId: string,
     userId: string,
@@ -271,13 +305,13 @@ export class AuctionsService {
     session.startTransaction();
 
     try {
+      let winningBid: { bidderId: string; amount: number } | null = null;
       // 1. If auction was active, look for highest winning bid to release funds and notify them
       if (auction.status === AuctionStatus.ACTIVE) {
-        const winningBid =
-          await this.auctionRepository.findWinningBidByAuctionId(
-            auctionId,
-            session,
-          );
+        winningBid = await this.auctionRepository.findWinningBidByAuctionId(
+          auctionId,
+          session,
+        );
 
         if (winningBid) {
           const bidderId = winningBid.bidderId;
@@ -303,16 +337,9 @@ export class AuctionsService {
       let highestBidderId: string | undefined;
       let refundAmount: number | undefined;
 
-      if (auction.status === AuctionStatus.ACTIVE) {
-        const winningBid =
-          await this.auctionRepository.findWinningBidByAuctionId(
-            auctionId,
-            session,
-          );
-        if (winningBid) {
-          highestBidderId = winningBid.bidderId;
-          refundAmount = winningBid.amount;
-        }
+      if (winningBid) {
+        highestBidderId = winningBid.bidderId;
+        refundAmount = winningBid.amount;
       }
 
       // 3. Publish Event to Outbox (Transactional)
@@ -367,12 +394,12 @@ export class AuctionsService {
     session.startTransaction();
 
     try {
+      let winningBid: { bidderId: string; amount: number } | null = null;
       if (auction.status === AuctionStatus.ACTIVE) {
-        const winningBid =
-          await this.auctionRepository.findWinningBidByAuctionId(
-            auctionId,
-            session,
-          );
+        winningBid = await this.auctionRepository.findWinningBidByAuctionId(
+          auctionId,
+          session,
+        );
 
         if (winningBid) {
           const bidderId = winningBid.bidderId;
@@ -396,16 +423,9 @@ export class AuctionsService {
       let highestBidderId: string | undefined;
       let refundAmount: number | undefined;
 
-      if (auction.status === AuctionStatus.ACTIVE) {
-        const winningBid =
-          await this.auctionRepository.findWinningBidByAuctionId(
-            auctionId,
-            session,
-          );
-        if (winningBid) {
-          highestBidderId = winningBid.bidderId;
-          refundAmount = winningBid.amount;
-        }
+      if (winningBid) {
+        highestBidderId = winningBid.bidderId;
+        refundAmount = winningBid.amount;
       }
 
       await this.outboxService.saveEvent(
@@ -448,9 +468,16 @@ export class AuctionsService {
   @Cron(CronExpression.EVERY_MINUTE)
   async activatePendingAuctions(): Promise<void> {
     let acquiredLock = false;
+    const lockValue = randomUUID();
     try {
       const lockResult = await this.redis
-        .set(ACTIVATE_AUCTIONS_LOCK_KEY, '1', 'EX', LOCK_TTL_SECONDS, 'NX')
+        .set(
+          ACTIVATE_AUCTIONS_LOCK_KEY,
+          lockValue,
+          'EX',
+          LOCK_TTL_SECONDS,
+          'NX',
+        )
         .catch((err) => {
           this.logger.warn(
             `Redis activate auctions lock error: ${err instanceof Error ? err.message : String(err)}`,
@@ -510,7 +537,14 @@ export class AuctionsService {
       );
     } finally {
       if (acquiredLock) {
-        await this.redis.del(ACTIVATE_AUCTIONS_LOCK_KEY).catch(() => undefined);
+        await this.redis
+          .eval(
+            RELEASE_LOCK_LUA_SCRIPT,
+            1,
+            ACTIVATE_AUCTIONS_LOCK_KEY,
+            lockValue,
+          )
+          .catch(() => undefined);
       }
     }
   }
@@ -518,9 +552,10 @@ export class AuctionsService {
   @Cron(CronExpression.EVERY_MINUTE)
   async endActiveAuctions(): Promise<void> {
     let acquiredLock = false;
+    const lockValue = randomUUID();
     try {
       const lockResult = await this.redis
-        .set(END_AUCTIONS_LOCK_KEY, '1', 'EX', LOCK_TTL_SECONDS, 'NX')
+        .set(END_AUCTIONS_LOCK_KEY, lockValue, 'EX', LOCK_TTL_SECONDS, 'NX')
         .catch((err) => {
           this.logger.warn(
             `Redis end auctions lock error: ${err instanceof Error ? err.message : String(err)}`,
@@ -553,7 +588,9 @@ export class AuctionsService {
       );
     } finally {
       if (acquiredLock) {
-        await this.redis.del(END_AUCTIONS_LOCK_KEY).catch(() => undefined);
+        await this.redis
+          .eval(RELEASE_LOCK_LUA_SCRIPT, 1, END_AUCTIONS_LOCK_KEY, lockValue)
+          .catch(() => undefined);
       }
     }
   }

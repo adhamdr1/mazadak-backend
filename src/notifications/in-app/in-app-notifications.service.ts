@@ -24,9 +24,21 @@ export class InAppNotificationsService {
   ): Promise<InAppNotification> {
     const notification = await this.notificationRepository.create(dto, session);
 
-    // Publish real-time event after saving (non-blocking, fire-and-forget).
-    // If Redis fails, the notification is already saved in DB — no data loss.
-    void this.realtimeService.publishNotificationAdded(notification);
+    if (session && session.inTransaction()) {
+      const originalCommit = session.commitTransaction.bind(
+        session,
+      ) as () => Promise<void>;
+      const mutableSession = session as unknown as {
+        commitTransaction: () => Promise<void>;
+      };
+      mutableSession.commitTransaction = async () => {
+        await originalCommit();
+        void this.realtimeService.publishNotificationAdded(notification);
+      };
+    } else {
+      // Publish real-time event after saving if no transaction is active
+      void this.realtimeService.publishNotificationAdded(notification);
+    }
 
     return notification;
   }

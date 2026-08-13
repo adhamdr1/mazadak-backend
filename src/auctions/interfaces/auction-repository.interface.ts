@@ -87,6 +87,11 @@ export interface IAuctionRepository {
 
   findEndedWithoutWinner(): Promise<Auction[]>;
 
+  findActiveOrPendingBySellerId(
+    sellerId: string,
+    session?: ClientSession,
+  ): Promise<Auction[]>;
+
   finalizeAuction(
     id: string,
     winnerId?: string,
@@ -97,4 +102,9 @@ export interface IAuctionRepository {
     auctionId: string,
     session?: ClientSession,
   ): Promise<{ bidderId: string; amount: number } | null>;
+
+  count(
+    filter: AuctionsFilter,
+    excludeStatuses?: AuctionStatus[],
+  ): Promise<number>;
 }

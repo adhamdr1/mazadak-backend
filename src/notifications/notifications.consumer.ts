@@ -1,7 +1,7 @@
 import {
   Injectable,
   Logger,
-  OnModuleInit,
+  OnApplicationBootstrap,
   OnModuleDestroy,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -16,9 +16,9 @@ import { UsersService } from '../users/users.service';
 import {
   IDEMPOTENCY_KEY_PREFIX,
   IDEMPOTENCY_TTL_S,
-  RETRY_QUEUE_5S,
-  RETRY_QUEUE_30S,
-  RETRY_QUEUE_2M,
+  NOTIFICATIONS_RETRY_QUEUE_5S,
+  NOTIFICATIONS_RETRY_QUEUE_30S,
+  NOTIFICATIONS_RETRY_QUEUE_2M,
   X_RETRY_COUNT,
 } from '../infrastructure/rabbitmq/rabbitmq.constants';
 import {
@@ -42,7 +42,9 @@ import { InAppNotificationType } from './in-app/enums/in-app-notification-type.e
 import { NotificationReferenceType } from './in-app/enums/notification-reference-type.enum';
 
 @Injectable()
-export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
+export class NotificationsConsumer
+  implements OnApplicationBootstrap, OnModuleDestroy
+{
   private readonly logger = new Logger(NotificationsConsumer.name);
   private connection: AmqpConnectionManager | null = null;
   private channelWrapper: ChannelWrapper | null = null;
@@ -55,7 +57,7 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
     private readonly configService: ConfigService,
   ) {}
 
-  onModuleInit() {
+  onApplicationBootstrap() {
     const url = this.configService.getOrThrow<string>('RABBITMQ_URL');
 
     // 1. Connection Recovery implementation using amqp-connection-manager
@@ -109,19 +111,25 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
     msg: ConsumeMessage,
     channel: amqplib.Channel,
   ): Promise<void> {
+    let parsed: RabbitMQParsedMessage;
     try {
       const content = msg.content.toString();
       const raw = JSON.parse(content) as unknown;
-
-      // NestJS ClientProxy wraps the payload in a { pattern, data } structure by default.
-      // We extract the inner data if it exists.
-      const parsed = (
+      parsed = (
         raw && typeof raw === 'object' && 'data' in raw ? raw.data : raw
       ) as RabbitMQParsedMessage;
+    } catch (parseError) {
+      this.logger.error(
+        `NotificationsConsumer failed to parse message JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}. Rejecting to DLQ immediately.`,
+      );
+      channel.reject(msg, false);
+      return;
+    }
 
+    try {
       if (!parsed) {
         this.logger.warn('Received empty or invalid message payload');
-        this.channelWrapper!.ack(msg);
+        channel.ack(msg);
         return;
       }
 
@@ -135,7 +143,7 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
         this.logger.warn(
           `Duplicate message detected and skipped: ${messageId}`,
         );
-        this.channelWrapper!.ack(msg);
+        channel.ack(msg);
         return;
       }
 
@@ -220,11 +228,11 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
 
     let targetQueue: string | null = null;
     if (retryCount === 1) {
-      targetQueue = RETRY_QUEUE_5S;
+      targetQueue = NOTIFICATIONS_RETRY_QUEUE_5S;
     } else if (retryCount === 2) {
-      targetQueue = RETRY_QUEUE_30S;
+      targetQueue = NOTIFICATIONS_RETRY_QUEUE_30S;
     } else if (retryCount === 3) {
-      targetQueue = RETRY_QUEUE_2M;
+      targetQueue = NOTIFICATIONS_RETRY_QUEUE_2M;
     }
 
     if (targetQueue) {
@@ -251,8 +259,10 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
   // --- Event Handlers ---
 
   private async handleAuctionStarted(payload: AuctionStartedPayload) {
-    const seller = await this.usersService.findById(payload.sellerId);
-    if (!seller) return;
+    const seller = await this.usersService.findByIdIncludingDeleted(
+      payload.sellerId,
+    );
+    if (!seller || seller.isBanned) return;
 
     const name =
       [seller.firstName, seller.lastName].filter(Boolean).join(' ') || 'User';
@@ -277,8 +287,10 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
   }
 
   private async handleAuctionCancelled(payload: AuctionCancelledPayload) {
-    const seller = await this.usersService.findById(payload.sellerId);
-    if (seller) {
+    const seller = await this.usersService.findByIdIncludingDeleted(
+      payload.sellerId,
+    );
+    if (seller && !seller.isBanned) {
       const name =
         [seller.firstName, seller.lastName].filter(Boolean).join(' ') || 'User';
       // Email for seller
@@ -302,8 +314,10 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
 
     // Notify highest bidder if any
     if (payload.highestBidderId && payload.refundAmount !== undefined) {
-      const bidder = await this.usersService.findById(payload.highestBidderId);
-      if (bidder) {
+      const bidder = await this.usersService.findByIdIncludingDeleted(
+        payload.highestBidderId,
+      );
+      if (bidder && !bidder.isBanned) {
         const bidderName =
           [bidder.firstName, bidder.lastName].filter(Boolean).join(' ') ||
           'User';
@@ -334,8 +348,10 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
   private async handleAuctionCancelledByAdmin(
     payload: AuctionCancelledByAdminPayload,
   ) {
-    const seller = await this.usersService.findById(payload.sellerId);
-    if (seller) {
+    const seller = await this.usersService.findByIdIncludingDeleted(
+      payload.sellerId,
+    );
+    if (seller && !seller.isBanned) {
       const name =
         [seller.firstName, seller.lastName].filter(Boolean).join(' ') || 'User';
       // Email for seller
@@ -360,8 +376,10 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
 
     // Notify highest bidder if any
     if (payload.highestBidderId && payload.refundAmount !== undefined) {
-      const bidder = await this.usersService.findById(payload.highestBidderId);
-      if (bidder) {
+      const bidder = await this.usersService.findByIdIncludingDeleted(
+        payload.highestBidderId,
+      );
+      if (bidder && !bidder.isBanned) {
         const bidderName =
           [bidder.firstName, bidder.lastName].filter(Boolean).join(' ') ||
           'User';
@@ -391,11 +409,15 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
 
   private async handleAuctionEnded(payload: AuctionEndedPayload) {
     let winnerName = 'Winning Bidder';
-    const seller = await this.usersService.findById(payload.sellerId);
+    const seller = await this.usersService.findByIdIncludingDeleted(
+      payload.sellerId,
+    );
 
     if (payload.winnerId) {
-      const winner = await this.usersService.findById(payload.winnerId);
-      if (winner) {
+      const winner = await this.usersService.findByIdIncludingDeleted(
+        payload.winnerId,
+      );
+      if (winner && !winner.isBanned) {
         winnerName =
           [winner.firstName, winner.lastName].filter(Boolean).join(' ') ||
           'Winning Bidder';
@@ -422,7 +444,7 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    if (seller) {
+    if (seller && !seller.isBanned) {
       const sellerName =
         [seller.firstName, seller.lastName].filter(Boolean).join(' ') || 'User';
       // Email to seller
@@ -452,50 +474,58 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
 
   private async handleBidPlaced(payload: BidPlacedPayload) {
     // 1. Notify Seller about the new bid (In-App only)
-    await this.notificationsService.createInAppNotification({
-      userId: payload.sellerId,
-      type: InAppNotificationType.NEW_BID,
-      title: 'New bid placed! 📈',
-      body: `Someone placed a bid of ${payload.amount} EGP on your auction "${payload.auctionTitle}".`,
-      referenceId: payload.auctionId,
-      referenceType: NotificationReferenceType.AUCTION,
-    });
+    if (await this.isUserEligibleForNotification(payload.sellerId)) {
+      await this.notificationsService.createInAppNotification({
+        userId: payload.sellerId,
+        type: InAppNotificationType.NEW_BID,
+        title: 'New bid placed! 📈',
+        body: `Someone placed a bid of ${payload.amount} EGP on your auction "${payload.auctionTitle}".`,
+        referenceId: payload.auctionId,
+        referenceType: NotificationReferenceType.AUCTION,
+      });
+    }
 
     // 2. Notify previous winner (if any) that they were outbid
     if (!payload.outbidUserId) return;
 
-    const previousBidder = await this.usersService.findById(
+    const previousBidder = await this.usersService.findByIdIncludingDeleted(
       payload.outbidUserId,
     );
-    if (!previousBidder) return;
+    if (previousBidder && !previousBidder.isBanned) {
+      const name =
+        [previousBidder.firstName, previousBidder.lastName]
+          .filter(Boolean)
+          .join(' ') || 'User';
 
-    const name =
-      [previousBidder.firstName, previousBidder.lastName]
-        .filter(Boolean)
-        .join(' ') || 'User';
+      // Email
+      await this.notificationsService.sendOutbidEmail(
+        previousBidder.email,
+        name,
+        payload.auctionTitle,
+        payload.amount,
+        payload.auctionId,
+        payload.outbidTransactionId,
+      );
 
-    // Email
-    await this.notificationsService.sendOutbidEmail(
-      previousBidder.email,
-      name,
-      payload.auctionTitle,
-      payload.amount,
-      payload.auctionId,
-      payload.outbidTransactionId,
-    );
-
-    // In-App Notification
-    await this.notificationsService.createInAppNotification({
-      userId: payload.outbidUserId,
-      type: InAppNotificationType.OUTBID,
-      title: 'You have been outbid! ⚠️',
-      body: `Someone placed a higher bid of ${payload.amount} EGP on the auction "${payload.auctionTitle}".`,
-      referenceId: payload.auctionId,
-      referenceType: NotificationReferenceType.AUCTION,
-    });
+      // In-App Notification
+      await this.notificationsService.createInAppNotification({
+        userId: payload.outbidUserId,
+        type: InAppNotificationType.OUTBID,
+        title: 'You have been outbid! ⚠️',
+        body: `Someone placed a higher bid of ${payload.amount} EGP on the auction "${payload.auctionTitle}".`,
+        referenceId: payload.auctionId,
+        referenceType: NotificationReferenceType.AUCTION,
+      });
+    }
   }
 
   private async handleUserRegistered(payload: UserRegisteredPayload) {
+    if (!(await this.isUserEligibleForNotification(payload.userId))) {
+      this.logger.warn(
+        `Skipping UserRegistered notification for ineligible user: ${payload.userId}`,
+      );
+      return;
+    }
     await this.notificationsService.sendEmailVerification(
       payload.email,
       payload.verificationToken,
@@ -505,6 +535,12 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
   }
 
   private async handleEmailVerified(payload: EmailVerifiedPayload) {
+    if (!(await this.isUserEligibleForNotification(payload.userId))) {
+      this.logger.warn(
+        `Skipping EmailVerified notification for ineligible user: ${payload.userId}`,
+      );
+      return;
+    }
     await this.notificationsService.sendWelcomeEmail(
       payload.email,
       payload.name,
@@ -537,11 +573,14 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
   }
 
   private async handleWalletDeposited(payload: WalletDepositedPayload) {
-    const user = await this.usersService.findById(payload.userId);
-    const email = user?.email ?? '';
-    const name = user
-      ? [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User'
-      : 'User';
+    const user = await this.usersService.findByIdIncludingDeleted(
+      payload.userId,
+    );
+    if (!user || user.isBanned) return;
+
+    const email = user.email;
+    const name =
+      [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
 
     await this.notificationsService.sendDepositSuccessfulEmail(
       email,
@@ -561,11 +600,14 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
   }
 
   private async handleWithdrawalCompleted(payload: WithdrawalCompletedPayload) {
-    const user = await this.usersService.findById(payload.userId);
-    const email = user?.email ?? '';
-    const name = user
-      ? [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User'
-      : 'User';
+    const user = await this.usersService.findByIdIncludingDeleted(
+      payload.userId,
+    );
+    if (!user || user.isBanned) return;
+
+    const email = user.email;
+    const name =
+      [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
 
     await this.notificationsService.sendWithdrawalCompletedEmail(
       email,
@@ -595,6 +637,12 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
   }
 
   private async handleAccountReactivated(payload: AccountReactivatedPayload) {
+    if (!(await this.isUserEligibleForNotification(payload.userId))) {
+      this.logger.warn(
+        `Skipping AccountReactivated notification for ineligible user: ${payload.userId}`,
+      );
+      return;
+    }
     await this.notificationsService.sendAccountReactivatedEmail(
       payload.email,
       payload.name,
@@ -606,5 +654,14 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
       title: 'Welcome Back to Mazadak! 🌟',
       body: 'Your account has been successfully reactivated.',
     });
+  }
+
+  private async isUserEligibleForNotification(
+    userId: string,
+  ): Promise<boolean> {
+    const user = await this.usersService.findByIdIncludingDeleted(userId);
+    if (!user) return false;
+    if (user.isBanned) return false;
+    return true;
   }
 }

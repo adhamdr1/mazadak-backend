@@ -1,4 +1,4 @@
-import { ObjectType, Field, ID, Float } from '@nestjs/graphql';
+import { ObjectType, Field, ID } from '@nestjs/graphql';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
 import { TransactionType } from '../enums/transaction-type.enum';
@@ -11,6 +11,8 @@ export type TransactionDocument = HydratedDocument<Transaction>;
 @Schema({
   timestamps: { createdAt: true, updatedAt: false },
   versionKey: false,
+  toJSON: { getters: true },
+  toObject: { getters: true },
 })
 export class Transaction {
   @Field(() => ID)
@@ -29,9 +31,14 @@ export class Transaction {
   @Prop({ type: String, enum: TransactionType, required: true })
   type!: TransactionType;
 
-  @Field(() => Float)
-  @Prop({ type: Number, required: true, min: 0 })
-  amount!: number;
+  @Field(() => String)
+  @Prop({
+    type: Types.Decimal128,
+    required: true,
+    min: 0,
+    get: (val: Types.Decimal128 | null) => (val ? val.toString() : '0.00'),
+  })
+  amount!: Types.Decimal128;
 
   @Field(() => String)
   @Prop({ type: String, required: true, uppercase: true, default: 'EGP' })
@@ -77,6 +84,10 @@ export class Transaction {
   @Prop({ type: Boolean, default: false, index: true })
   hasChild!: boolean;
 
+  @Field(() => Boolean, { defaultValue: false })
+  @Prop({ type: Boolean, default: false, index: true })
+  walletCredited!: boolean;
+
   @Field()
   readonly createdAt!: Date;
 }
@@ -96,3 +107,6 @@ TransactionSchema.index(
     partialFilterExpression: { idempotencyKey: { $type: 'string' } },
   },
 );
+
+TransactionSchema.index({ walletId: 1, createdAt: -1 });
+TransactionSchema.index({ status: 1, type: 1, hasChild: 1 });

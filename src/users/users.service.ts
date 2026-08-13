@@ -1,7 +1,9 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { ClientSession } from 'mongoose';
-import { RabbitMQService } from '../infrastructure/rabbitmq/rabbitmq.service';
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import Redis from 'ioredis';
 import { RabbitMQEvent } from '../infrastructure/rabbitmq/rabbitmq-event.types';
+import { OutboxService } from '../infrastructure/outbox/outbox.service';
 import { UpdateUserInput } from './dto/update-user.input';
 import { PaginationInput } from '../common/dto/pagination.input';
 import { CreateUserInput } from './dto/create-user.input';
@@ -22,6 +24,7 @@ import { CannotBanAdminException } from './exceptions/cannot-ban-admin.exception
 import { WalletHasBalanceException } from '../wallet/exceptions/wallet-has-balance.exception';
 import { QueryBus } from '@nestjs/cqrs';
 import { GetWalletBalanceQuery } from '../wallet/queries/get-wallet-balance.query';
+import Decimal from 'decimal.js';
 
 @Injectable()
 export class UsersService {
@@ -29,7 +32,8 @@ export class UsersService {
     @Inject('IUserRepository')
     private readonly userRepository: IUserRepository,
     private readonly queryBus: QueryBus,
-    private readonly rabbitMQService: RabbitMQService,
+    @InjectRedis() private readonly redis: Redis,
+    private readonly outboxService: OutboxService,
   ) {}
 
   async startSession(): Promise<ClientSession> {
@@ -118,6 +122,12 @@ export class UsersService {
     return user;
   }
 
+  async findByIdIncludingDeleted(id: string): Promise<User> {
+    const user = await this.userRepository.findByIdIncludingDeleted(id);
+    if (!user) throw new UserNotFoundException();
+    return user;
+  }
+
   async findByEmail(email: string): Promise<User | null> {
     return this.userRepository.findByEmail(email);
   }
@@ -184,28 +194,55 @@ export class UsersService {
     await this.userRepository.update(id, { isEmailVerified: true });
   }
 
-  async softDelete(currentUser: JwtPayload, targetId: string): Promise<void> {
-    if (currentUser.role !== UserRole.ADMIN && currentUser.sub !== targetId) {
+  async softDeleteUser(
+    targetId: string,
+    currentUser: JwtPayload,
+  ): Promise<void> {
+    if (targetId === currentUser.sub) {
       throw new UserForbiddenException();
     }
     await this.findById(targetId);
 
     // Verify wallet has zero balance (available balance + held balance = 0) before deletion.
     const wallet = await this.queryBus.execute<{
-      balance: number;
-      heldBalance: number;
+      balance: string;
+      heldBalance: string;
     }>(new GetWalletBalanceQuery(targetId));
 
-    if (wallet.balance > 0 || wallet.heldBalance > 0) {
+    if (
+      new Decimal(wallet.balance).greaterThan(0) ||
+      new Decimal(wallet.heldBalance).greaterThan(0)
+    ) {
       throw new WalletHasBalanceException();
     }
 
-    await this.userRepository.softDelete(targetId);
+    const session = await this.startSession();
+    try {
+      session.startTransaction();
+
+      await this.userRepository.softDelete(targetId, session);
+      await this.redis.del(`user:auth-status:${targetId}`);
+
+      // Publish UserSoftDeleted event to Outbox within the transaction
+      await this.outboxService.saveEvent(
+        RabbitMQEvent.UserSoftDeleted,
+        { userId: targetId },
+        session,
+      );
+
+      await session.commitTransaction();
+    } catch (err) {
+      await session.abortTransaction();
+      throw err;
+    } finally {
+      await session.endSession();
+    }
   }
 
-  async reactivateUser(id: string): Promise<User> {
-    const updated = await this.userRepository.reactivate(id);
+  async reactivateUser(id: string, session?: ClientSession): Promise<User> {
+    const updated = await this.userRepository.reactivate(id, session);
     if (!updated) throw new UserNotFoundException();
+    await this.redis.del(`user:auth-status:${id}`);
     return updated;
   }
 
@@ -233,21 +270,42 @@ export class UsersService {
       throw new CannotBanAdminException();
     }
 
-    const updatedUser = (await this.userRepository.update(userId, {
-      isBanned: !user.isBanned,
-    })) as User;
+    const session = await this.startSession();
+    try {
+      session.startTransaction();
 
-    if (updatedUser.isBanned) {
-      // Publish UserBanned event to revoke tokens asynchronously
-      await this.rabbitMQService.publish(RabbitMQEvent.UserBanned, {
+      const updatedUser = (await this.userRepository.update(
         userId,
-      });
-    }
+        { isBanned: !user.isBanned },
+        session,
+      )) as User;
 
-    return updatedUser;
+      await this.redis.del(`user:auth-status:${userId}`);
+
+      if (updatedUser.isBanned) {
+        // Publish UserBanned event to Outbox within the transaction
+        await this.outboxService.saveEvent(
+          RabbitMQEvent.UserBanned,
+          { userId },
+          session,
+        );
+      }
+
+      await session.commitTransaction();
+      return updatedUser;
+    } catch (err) {
+      await session.abortTransaction();
+      throw err;
+    } finally {
+      await session.endSession();
+    }
   }
 
   async countVerifiedUsers(): Promise<number> {
     return this.userRepository.countVerified();
+  }
+
+  async countAll(filter?: UsersFilterInput): Promise<number> {
+    return this.userRepository.countAll(filter);
   }
 }

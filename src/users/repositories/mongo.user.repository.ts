@@ -70,6 +70,10 @@ export class MongoUserRepository implements IUserRepository {
       .exec();
   }
 
+  async findByIdIncludingDeleted(id: string): Promise<User | null> {
+    return await this.userModel.findById(id).exec();
+  }
+
   async findByGoogleId(googleId: string): Promise<User | null> {
     return await this.userModel
       .findOne({
@@ -79,7 +83,11 @@ export class MongoUserRepository implements IUserRepository {
       .exec();
   }
 
-  async update(id: string, data: UpdateUserData): Promise<User | null> {
+  async update(
+    id: string,
+    data: UpdateUserData,
+    session?: ClientSession,
+  ): Promise<User | null> {
     return await this.userModel
       .findOneAndUpdate(
         {
@@ -87,7 +95,7 @@ export class MongoUserRepository implements IUserRepository {
           deletedAt: null,
         },
         { $set: data },
-        { returnDocument: 'after' },
+        { returnDocument: 'after', session },
       )
       .exec();
   }
@@ -136,7 +144,19 @@ export class MongoUserRepository implements IUserRepository {
       .exec();
   }
 
-  async softDelete(id: string): Promise<void> {
+  async countAll(filter?: UsersFilter): Promise<number> {
+    const query: Record<string, any> = {
+      deletedAt: null,
+    };
+
+    if (filter?.search) {
+      query.$text = { $search: filter.search };
+    }
+
+    return await this.userModel.countDocuments(query).exec();
+  }
+
+  async softDelete(id: string, session?: ClientSession): Promise<void> {
     await this.userModel
       .findOneAndUpdate(
         {
@@ -147,6 +167,7 @@ export class MongoUserRepository implements IUserRepository {
           deletedAt: new Date(),
           isEmailVerified: false,
         },
+        { session },
       )
       .exec();
   }
@@ -170,7 +191,7 @@ export class MongoUserRepository implements IUserRepository {
       .exec();
   }
 
-  async reactivate(id: string): Promise<User | null> {
+  async reactivate(id: string, session?: ClientSession): Promise<User | null> {
     return await this.userModel
       .findOneAndUpdate(
         { _id: id, deletedAt: { $ne: null } },
@@ -180,7 +201,7 @@ export class MongoUserRepository implements IUserRepository {
             isEmailVerified: true,
           },
         },
-        { returnDocument: 'after' },
+        { returnDocument: 'after', session },
       )
       .exec();
   }

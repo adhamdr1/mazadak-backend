@@ -58,50 +58,12 @@ type RegisterResponse {
   message: String!
 }
 
-type InAppNotification {
-  _id: ID!
-  userId: ID!
-  type: InAppNotificationType!
-  title: String!
-  body: String!
-  isRead: Boolean!
-  referenceId: String
-  referenceType: NotificationReferenceType
-  createdAt: DateTime!
-}
-
-enum InAppNotificationType {
-  OUTBID
-  AUCTION_WON
-  AUCTION_ENDED_SELLER
-  DEPOSIT_SUCCESSFUL
-  WITHDRAWAL_COMPLETED
-  AUCTION_STARTED
-  WELCOME
-  NEW_BID
-  AUCTION_CANCELLED
-  AUCTION_CANCELLED_BY_ADMIN
-}
-
-enum NotificationReferenceType {
-  AUCTION
-  TRANSACTION
-  WALLET
-}
-
-type InAppNotificationsPage {
-  items: [InAppNotification!]!
-  total: Int!
-  totalPages: Int!
-  hasNextPage: Boolean!
-}
-
 type Wallet {
   _id: ID!
   userId: ID!
-  balance: Float!
-  heldBalance: Float!
-  availableBalance: Float!
+  balance: String!
+  heldBalance: String!
+  availableBalance: String!
   createdAt: DateTime!
   updatedAt: DateTime!
 }
@@ -110,7 +72,7 @@ type Transaction {
   _id: ID!
   walletId: ID!
   type: TransactionType!
-  amount: Float!
+  amount: String!
   currency: String!
   status: TransactionStatus!
   referenceId: String
@@ -121,6 +83,7 @@ type Transaction {
   referenceType: TransactionReferenceType
   expiresAt: DateTime
   hasChild: Boolean!
+  walletCredited: Boolean!
   createdAt: DateTime!
 }
 
@@ -162,6 +125,44 @@ type WalletsPage {
   hasNextPage: Boolean!
 }
 
+type InAppNotification {
+  _id: ID!
+  userId: ID!
+  type: InAppNotificationType!
+  title: String!
+  body: String!
+  isRead: Boolean!
+  referenceId: String
+  referenceType: NotificationReferenceType
+  createdAt: DateTime!
+}
+
+enum InAppNotificationType {
+  OUTBID
+  AUCTION_WON
+  AUCTION_ENDED_SELLER
+  DEPOSIT_SUCCESSFUL
+  WITHDRAWAL_COMPLETED
+  AUCTION_STARTED
+  WELCOME
+  NEW_BID
+  AUCTION_CANCELLED
+  AUCTION_CANCELLED_BY_ADMIN
+}
+
+enum NotificationReferenceType {
+  AUCTION
+  TRANSACTION
+  WALLET
+}
+
+type InAppNotificationsPage {
+  items: [InAppNotification!]!
+  total: Int!
+  totalPages: Int!
+  hasNextPage: Boolean!
+}
+
 type Auction {
   _id: ID!
   sellerId: ID!
@@ -169,9 +170,9 @@ type Auction {
   description: String!
   images: [String!]!
   category: AuctionCategory!
-  startingPrice: Float!
-  minimumBidIncrement: Float!
-  currentPrice: Float!
+  startingPrice: String!
+  minimumBidIncrement: String!
+  currentPrice: String!
   status: AuctionStatus!
   startTime: DateTime!
   endTime: DateTime!
@@ -223,7 +224,7 @@ type Bid {
   _id: ID!
   auctionId: ID!
   bidderId: ID!
-  amount: Float!
+  amount: String!
   status: BidStatus!
   createdAt: DateTime!
   updatedAt: DateTime!
@@ -283,13 +284,13 @@ type Query {
   me: User!
   findUser(input: FindUserInput!): User!
   users(input: PaginationInput!, filter: UsersFilterInput): UsersPage!
-  myNotifications(input: PaginationInput!): InAppNotificationsPage!
-  unreadNotificationsCount: Int!
   wallets(input: PaginationInput!): WalletsPage!
   adminGetWallet(userId: String!): Wallet!
   myWallet: Wallet!
   myTransactions(input: PaginationInput, filter: TransactionsFilterInput): TransactionsPage!
   transactions(input: PaginationInput, filter: TransactionsFilterInput): TransactionsPage!
+  myNotifications(input: PaginationInput!): InAppNotificationsPage!
+  unreadNotificationsCount: Int!
   auctions(input: PaginationInput!, filter: AuctionsFilterInput): AuctionsPage!
   adminAuctions(input: PaginationInput!, filter: AuctionsFilterInput): AuctionsPage!
   auction(id: ID!): Auction!
@@ -345,6 +346,7 @@ input TransactionsFilterInput {
   startDate: DateTime
   endDate: DateTime
   expiresAtBefore: DateTime
+  hasChild: Boolean
   sort: TransactionsSortInput
 }
 
@@ -415,10 +417,9 @@ type Mutation {
   deleteAccount: Boolean!
   adminUpdateUser(targetUser: FindUserInput!, input: UpdateUserInput!): User!
   adminDeleteUser(targetUser: FindUserInput!): Boolean!
+  withdraw(input: WithdrawInput!): Wallet!
   markNotificationAsRead(notificationId: ID!): InAppNotification!
   markAllNotificationsAsRead: Boolean!
-  deposit(input: DepositInput!): Wallet!
-  withdraw(input: WithdrawInput!): Wallet!
   createAuction(input: CreateAuctionInput!): Auction!
   updateAuction(id: ID!, input: UpdateAuctionInput!): Auction!
   cancelAuction(id: ID!): Boolean!
@@ -484,10 +485,6 @@ input UpdateUserInput {
   phoneNumber: String
   dateOfBirth: DateTime
   address: AddressInput
-}
-
-input DepositInput {
-  amount: Float!
 }
 
 input WithdrawInput {

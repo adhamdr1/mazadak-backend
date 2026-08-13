@@ -1,7 +1,7 @@
 import {
   Injectable,
   Logger,
-  OnModuleInit,
+  OnApplicationBootstrap,
   OnModuleDestroy,
   Inject,
 } from '@nestjs/common';
@@ -17,12 +17,13 @@ import Redis from 'ioredis';
 import { type IWalletRepository } from '../interfaces/wallet.repository.interface';
 import { WalletNotFoundException } from '../exceptions/wallet-not-found.exception';
 import { OutboxService } from '../../infrastructure/outbox/outbox.service';
+import { TransactionService } from '../../transaction/transaction.service';
 import {
   IDEMPOTENCY_KEY_PREFIX,
   IDEMPOTENCY_TTL_S,
   WALLET_QUEUE,
   X_RETRY_COUNT,
-  RETRY_QUEUE_5S,
+  WALLET_RETRY_QUEUE_5S,
 } from '../../infrastructure/rabbitmq/rabbitmq.constants';
 import {
   RabbitMQEvent,
@@ -31,7 +32,7 @@ import {
 } from '../../infrastructure/rabbitmq/rabbitmq-event.types';
 
 @Injectable()
-export class WalletConsumer implements OnModuleInit, OnModuleDestroy {
+export class WalletConsumer implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(WalletConsumer.name);
   private connection: AmqpConnectionManager | null = null;
   private channelWrapper: ChannelWrapper | null = null;
@@ -44,9 +45,10 @@ export class WalletConsumer implements OnModuleInit, OnModuleDestroy {
     private readonly outboxService: OutboxService,
     private readonly configService: ConfigService,
     @InjectConnection() private readonly mongooseConnection: Connection,
+    private readonly transactionService: TransactionService,
   ) {}
 
-  onModuleInit() {
+  onApplicationBootstrap() {
     const url = this.configService.getOrThrow<string>('RABBITMQ_URL');
 
     this.connection = amqpManager.connect([url]);
@@ -98,19 +100,27 @@ export class WalletConsumer implements OnModuleInit, OnModuleDestroy {
     msg: ConsumeMessage,
     channel: amqplib.Channel,
   ): Promise<void> {
+    let parsed: RabbitMQParsedMessage;
     try {
       const content = msg.content.toString();
       const raw = JSON.parse(content) as unknown;
-
-      const parsed = (
+      parsed = (
         raw && typeof raw === 'object' && 'data' in raw ? raw.data : raw
       ) as RabbitMQParsedMessage;
+    } catch (parseError) {
+      this.logger.error(
+        `WalletConsumer failed to parse message JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}. Rejecting to DLQ immediately.`,
+      );
+      channel.reject(msg, false);
+      return;
+    }
 
+    try {
       if (!parsed) {
         this.logger.warn(
           'WalletConsumer received empty or invalid message payload',
         );
-        this.channelWrapper!.ack(msg);
+        channel.ack(msg);
         return;
       }
 
@@ -122,7 +132,7 @@ export class WalletConsumer implements OnModuleInit, OnModuleDestroy {
         this.logger.warn(
           `WalletConsumer detected duplicate message and skipped: ${messageId}`,
         );
-        this.channelWrapper!.ack(msg);
+        channel.ack(msg);
         return;
       }
 
@@ -166,10 +176,33 @@ export class WalletConsumer implements OnModuleInit, OnModuleDestroy {
     try {
       session.startTransaction();
 
+      // 1. Check if this transaction has already credited the wallet
+      const transaction = await this.transactionService.findByIdWithinSession(
+        payload.transactionId,
+        session,
+      );
+
+      if (!transaction) {
+        this.logger.warn(
+          `Transaction ${payload.transactionId} not found. Skipping.`,
+        );
+        await session.commitTransaction();
+        return;
+      }
+
+      if (transaction.walletCredited) {
+        this.logger.warn(
+          `Wallet already credited for transaction ${payload.transactionId}. Skipping.`,
+        );
+        await session.commitTransaction();
+        return;
+      }
+
       this.logger.log(
         `WalletConsumer crediting balance for walletId: ${payload.walletId}, amount: ${payload.amount}`,
       );
 
+      // 2. Perform the credit operation
       const wallet = await this.walletRepository.creditBalance(
         payload.walletId,
         payload.amount,
@@ -180,7 +213,13 @@ export class WalletConsumer implements OnModuleInit, OnModuleDestroy {
         throw new WalletNotFoundException();
       }
 
-      // Publish the final WalletDeposited event containing the userId for the notification queue
+      // 3. Mark the transaction as walletCredited inside the session
+      await this.transactionService.markWalletCredited(
+        payload.transactionId,
+        session,
+      );
+
+      // 4. Publish the final WalletDeposited event containing the userId for the notification queue
       await this.outboxService.saveEvent(
         RabbitMQEvent.WalletDeposited,
         {
@@ -222,7 +261,7 @@ export class WalletConsumer implements OnModuleInit, OnModuleDestroy {
         `WalletConsumer processing failed (attempt ${retryCount}). Retrying in 5 seconds...`,
       );
       channel.ack(msg); // Acknowledge first before republishing to retry queue
-      channel.sendToQueue(RETRY_QUEUE_5S, msg.content, {
+      channel.sendToQueue(WALLET_RETRY_QUEUE_5S, msg.content, {
         headers: {
           ...headers,
           [X_RETRY_COUNT]: retryCount,

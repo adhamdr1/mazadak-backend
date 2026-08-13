@@ -1,4 +1,4 @@
-import { ObjectType, Field, ID, Float } from '@nestjs/graphql';
+import { ObjectType, Field, ID } from '@nestjs/graphql';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
 import { AuctionStatus } from '../enums/auction-status.enum';
@@ -10,6 +10,8 @@ export type AuctionDocument = HydratedDocument<Auction>;
 @Schema({
   timestamps: true,
   versionKey: false,
+  toJSON: { getters: true },
+  toObject: { getters: true },
 })
 export class Auction {
   @Field(() => ID)
@@ -35,17 +37,29 @@ export class Auction {
   @Prop({ type: String, enum: AuctionCategory, required: true, index: true })
   category!: AuctionCategory;
 
-  @Field(() => Float)
-  @Prop({ required: true })
-  startingPrice!: number;
+  @Field(() => String)
+  @Prop({
+    type: Types.Decimal128,
+    required: true,
+    get: (val: Types.Decimal128 | null) => (val ? val.toString() : '0.00'),
+  })
+  startingPrice!: Types.Decimal128;
 
-  @Field(() => Float)
-  @Prop({ required: true })
-  minimumBidIncrement!: number;
+  @Field(() => String)
+  @Prop({
+    type: Types.Decimal128,
+    required: true,
+    get: (val: Types.Decimal128 | null) => (val ? val.toString() : '0.00'),
+  })
+  minimumBidIncrement!: Types.Decimal128;
 
-  @Field(() => Float)
-  @Prop({ required: true })
-  currentPrice!: number;
+  @Field(() => String)
+  @Prop({
+    type: Types.Decimal128,
+    required: true,
+    get: (val: Types.Decimal128 | null) => (val ? val.toString() : '0.00'),
+  })
+  currentPrice!: Types.Decimal128;
 
   @Field(() => AuctionStatus)
   @Prop({

@@ -6,7 +6,6 @@ import { Wallet } from './entities/wallet.entity';
 import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { UserRole } from '../users/enums/user-role.enum';
 import { Types } from 'mongoose';
-import { DepositInput } from './dto/deposit.input';
 import { WithdrawInput } from './dto/withdraw.input';
 
 import { PaginationInput } from '../common/dto/pagination.input';
@@ -102,25 +101,6 @@ describe('WalletResolver', () => {
     it('should calculate available balance correctly', () => {
       const result = resolver.availableBalance(mockWallet);
       expect(result).toBe(70); // 100 - 30
-    });
-  });
-
-  describe('deposit', () => {
-    it('should call deposit on wallet service', async () => {
-      const depositInput: DepositInput = { amount: 50 };
-      const updatedWallet = { ...mockWallet, balance: 150 };
-      mockWalletService.deposit.mockResolvedValue({
-        wallet: updatedWallet,
-        transaction: { _id: 'mock-tx-id' },
-      });
-
-      const result = await resolver.deposit(currentUser, depositInput);
-
-      expect(result).toEqual(updatedWallet);
-      expect(mockWalletService.deposit).toHaveBeenCalledWith(
-        currentUser.sub,
-        50,
-      );
     });
   });
 

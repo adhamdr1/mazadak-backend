@@ -28,43 +28,36 @@ export class AdminAnalyticsService {
       DASHBOARD_STATS_HARD_TTL_S,
       async () => {
         const [
-          totalUsersResult,
+          totalUsers,
           verifiedUsersCount,
-          activeAuctionsResult,
-          completedAuctionsResult,
-          cancelledAuctionsResult,
-          totalTransactionsResult,
+          activeAuctions,
+          completedAuctions,
+          cancelledAuctions,
+          totalTransactions,
           totalWalletBalance,
           todaysRevenue,
         ] = await Promise.all([
-          this.usersService.findAll({ page: 1, limit: 1 }, {}),
+          this.usersService.countAll({}),
           this.usersService.countVerifiedUsers(),
-          this.auctionsService.findAllForAdmin(
-            { page: 1, limit: 1 },
-            { status: AuctionStatus.ACTIVE },
-          ),
-          this.auctionsService.findAllForAdmin(
-            { page: 1, limit: 1 },
-            { status: AuctionStatus.ENDED },
-          ),
-          this.auctionsService.findAllForAdmin(
-            { page: 1, limit: 1 },
-            { status: AuctionStatus.CANCELLED },
-          ),
-          this.transactionService.getAllTransactions({ page: 1, limit: 1 }, {}),
+          this.auctionsService.countAuctions({ status: AuctionStatus.ACTIVE }),
+          this.auctionsService.countAuctions({ status: AuctionStatus.ENDED }),
+          this.auctionsService.countAuctions({
+            status: AuctionStatus.CANCELLED,
+          }),
+          this.transactionService.countTransactions({}),
           this.walletService.sumAllBalances(),
           this.transactionService.sumTodayRevenue(),
         ]);
 
         return {
-          totalUsers: totalUsersResult.total,
+          totalUsers,
           verifiedUsers: verifiedUsersCount,
-          activeAuctions: activeAuctionsResult.total,
-          completedAuctions: completedAuctionsResult.total,
-          cancelledAuctions: cancelledAuctionsResult.total,
+          activeAuctions,
+          completedAuctions,
+          cancelledAuctions,
           totalWalletBalance,
           todaysRevenue,
-          totalTransactions: totalTransactionsResult.total,
+          totalTransactions,
         };
       },
     );

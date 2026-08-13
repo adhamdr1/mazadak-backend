@@ -25,6 +25,7 @@ import * as bcrypt from 'bcrypt';
 import { createHash } from 'crypto';
 import { getRedisConnectionToken } from '@nestjs-modules/ioredis';
 import { WalletService } from '../wallet/wallet.service';
+import { OutboxService } from '../infrastructure/outbox/outbox.service';
 // ─── Mock google-auth-library ──────────────────────────────────────────────
 // يجب إنشاء الـ mock قبل أي import يستخدم google-auth-library.
 // ليه mockVerifyIdToken يبدأ بـ mock؟
@@ -111,6 +112,10 @@ const mockRabbitMQService = {
   publish: jest.fn().mockResolvedValue(undefined),
 };
 
+const mockOutboxService = {
+  saveEvent: jest.fn().mockResolvedValue(undefined),
+};
+
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 function createMockUser(overrides: Partial<User> = {}): User {
@@ -168,6 +173,7 @@ describe('AuthService', () => {
         { provide: getRedisConnectionToken(), useValue: mockRedis },
         { provide: WalletService, useValue: mockWalletService },
         { provide: RabbitMQService, useValue: mockRabbitMQService },
+        { provide: OutboxService, useValue: mockOutboxService },
       ],
     }).compile();
 

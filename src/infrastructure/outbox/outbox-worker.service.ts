@@ -7,6 +7,8 @@ import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
 import { RabbitMQEventPayload } from '../rabbitmq/rabbitmq-event.types';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';
+import { randomUUID } from 'crypto';
+import { RELEASE_LOCK_LUA_SCRIPT } from '../redis/redis.constants';
 
 const OUTBOX_WORKER_LOCK_KEY = 'outbox:worker:lock';
 const LOCK_TTL_SECONDS = 10;
@@ -30,10 +32,11 @@ export class OutboxWorkerService {
   @Cron(CronExpression.EVERY_SECOND)
   async dispatchPendingEvents(): Promise<void> {
     let acquiredLock = false;
+    const lockValue = randomUUID();
     try {
       // SETNX with 10s TTL -- only one worker instance runs at a time
       const lockResult = await this.redis
-        .set(OUTBOX_WORKER_LOCK_KEY, '1', 'EX', LOCK_TTL_SECONDS, 'NX')
+        .set(OUTBOX_WORKER_LOCK_KEY, lockValue, 'EX', LOCK_TTL_SECONDS, 'NX')
         .catch((err) => {
           this.logger.warn(
             `Redis OutboxWorker lock error: ${err instanceof Error ? err.message : String(err)}`,
@@ -60,6 +63,7 @@ export class OutboxWorkerService {
             event.eventType,
             event.payload as unknown as RabbitMQEventPayload,
             event.correlationId,
+            event.messageId,
           );
 
           await this.outboxModel.updateOne(
@@ -79,7 +83,9 @@ export class OutboxWorkerService {
       );
     } finally {
       if (acquiredLock) {
-        await this.redis.del(OUTBOX_WORKER_LOCK_KEY).catch(() => undefined);
+        await this.redis
+          .eval(RELEASE_LOCK_LUA_SCRIPT, 1, OUTBOX_WORKER_LOCK_KEY, lockValue)
+          .catch(() => undefined);
       }
     }
   }

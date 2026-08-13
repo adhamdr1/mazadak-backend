@@ -375,7 +375,7 @@ describe('UsersService', () => {
     it('should throw ForbiddenException if normal user tries to delete another user', async () => {
       // Act & Assert
       await expect(
-        service.softDelete(normalUserPayload, otherUserId),
+        service.softDeleteUser(normalUserPayload.sub, normalUserPayload),
       ).rejects.toThrow(ForbiddenException);
 
       expect(mockUserRepository.softDelete).not.toHaveBeenCalled();
@@ -390,7 +390,7 @@ describe('UsersService', () => {
 
       // Act & Assert
       await expect(
-        service.softDelete(normalUserPayload, currentUserId),
+        service.softDeleteUser(normalUserPayload.sub, normalUserPayload),
       ).rejects.toThrow(NotFoundException);
 
       expect(mockUserRepository.softDelete).not.toHaveBeenCalled();
@@ -407,7 +407,7 @@ describe('UsersService', () => {
       mockUserRepository.softDelete.mockResolvedValue(undefined); // ترجع void
 
       // Act
-      await service.softDelete(normalUserPayload, currentUserId);
+      await service.softDeleteUser(normalUserPayload.sub, normalUserPayload);
 
       // Assert
       // نفحص المتغير الذي خزنّاه بدلاً من الدالة الأصلية
@@ -424,7 +424,7 @@ describe('UsersService', () => {
       mockUserRepository.softDelete.mockResolvedValue(undefined);
 
       // Act
-      await service.softDelete(adminUserPayload, otherUserId);
+      await service.softDeleteUser(otherUserId, adminUserPayload);
 
       // Assert
       expect(findByIdSpy).toHaveBeenCalledWith(otherUserId);

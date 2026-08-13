@@ -4,14 +4,14 @@ import { UsersService } from './users.service';
 import { UsersResolver } from './users.resolver';
 import { User, UserSchema } from './entities/user.entity';
 import { MongoUserRepository } from './repositories/mongo.user.repository';
-import { RabbitMQModule } from '../infrastructure/rabbitmq/rabbitmq.module';
 import { CqrsModule } from '@nestjs/cqrs';
+import { OutboxModule } from '../infrastructure/outbox/outbox.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
-    RabbitMQModule,
     CqrsModule,
+    OutboxModule,
   ],
   providers: [
     UsersResolver,

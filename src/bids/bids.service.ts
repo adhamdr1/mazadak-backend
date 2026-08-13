@@ -2,7 +2,9 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';
+import { randomUUID } from 'crypto';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { RELEASE_LOCK_LUA_SCRIPT } from '../infrastructure/redis/redis.constants';
 import { PlaceBidInput } from './dto/place-bid.input';
 import { BidsFilterInput } from './dto/bids-filter.input';
 import { BidsPage } from './dto/bids-page.type';
@@ -19,6 +21,7 @@ import { BidAmountTooLowException } from './exceptions/bid-amount-too-low.except
 import { BidOnOwnAuctionException } from './exceptions/bid-on-own-auction.exception';
 import { InvalidAuctionIdException } from './exceptions/invalid-auction-id.exception';
 import { AuctionNotFoundException } from '../auctions/exceptions/auction-not-found.exception';
+import { BiddingBusyException } from './exceptions/bidding-busy.exception';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
 import { RedisService } from '../infrastructure/redis/redis.service';
@@ -51,143 +54,176 @@ export class BidsService {
   ) {}
 
   async placeBid(userId: string, input: PlaceBidInput): Promise<Bid> {
-    const session = await this.bidRepository.startSession();
-    session.startTransaction();
+    let acquiredLock = false;
+    const lockKey = `auction:bid:lock:${input.auctionId}`;
+    const lockValue = randomUUID();
 
     try {
-      const auction = await this.auctionRepository.findById(
-        input.auctionId,
-        session,
-      );
-      if (!auction) {
-        throw new AuctionNotFoundException();
+      const lockResult = await this.redis
+        .set(lockKey, lockValue, 'EX', 5, 'NX')
+        .catch((err) => {
+          this.logger.warn(
+            `Redis placeBid lock error: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          return null;
+        });
+
+      if (!lockResult) {
+        throw new BiddingBusyException();
       }
+      acquiredLock = true;
 
-      if (auction.status !== AuctionStatus.ACTIVE) {
-        throw new AuctionNotActiveException();
-      }
+      const session = await this.bidRepository.startSession();
+      session.startTransaction();
 
-      if (auction.sellerId.toString() === userId) {
-        throw new BidOnOwnAuctionException();
-      }
-
-      const currentWinner = await this.bidRepository.findWinningByAuctionId(
-        input.auctionId,
-        session,
-      );
-
-      if (currentWinner && currentWinner.bidderId.toString() === userId) {
-        throw new AlreadyHighestBidderException();
-      }
-
-      const minimumRequired = currentWinner
-        ? new Decimal(auction.currentPrice)
-            .plus(auction.minimumBidIncrement)
-            .toNumber()
-        : auction.startingPrice;
-
-      if (input.amount < minimumRequired) {
-        throw new BidAmountTooLowException();
-      }
-
-      // 1. Hold new bidder's funds
-      await this.walletService.hold(
-        userId,
-        input.amount,
-        input.auctionId,
-        session,
-      );
-
-      // 2. Release previous winner's funds and mark OUTBID
-      let outbidTransactionId: string | undefined;
-      if (currentWinner) {
-        const { transaction } = await this.walletService.release(
-          currentWinner.bidderId.toString(),
-          currentWinner.amount,
+      try {
+        const auction = await this.auctionRepository.findById(
           input.auctionId,
           session,
         );
-        outbidTransactionId = transaction._id.toString();
+        if (!auction) {
+          throw new AuctionNotFoundException();
+        }
 
-        await this.bidRepository.updateStatus(
-          currentWinner._id.toString(),
-          BidStatus.OUTBID,
+        if (auction.status !== AuctionStatus.ACTIVE) {
+          throw new AuctionNotActiveException();
+        }
+
+        if (auction.sellerId.toString() === userId) {
+          throw new BidOnOwnAuctionException();
+        }
+
+        const currentWinner = await this.bidRepository.findWinningByAuctionId(
+          input.auctionId,
           session,
         );
-      }
 
-      // 3. Record the bid
-      const bid = await this.bidRepository.create(
-        {
-          auctionId: new Types.ObjectId(input.auctionId),
-          bidderId: new Types.ObjectId(userId),
-          amount: input.amount,
-          status: BidStatus.WINNING,
-        },
-        session,
-      );
+        if (currentWinner && currentWinner.bidderId.toString() === userId) {
+          throw new AlreadyHighestBidderException();
+        }
 
-      // 4. Update the auction's current price
-      await this.auctionRepository.updateCurrentPrice(
-        input.auctionId,
-        input.amount,
-        session,
-      );
+        const minimumRequired = currentWinner
+          ? new Decimal(auction.currentPrice.toString())
+              .plus(auction.minimumBidIncrement.toString())
+              .toNumber()
+          : Number(auction.startingPrice.toString());
 
-      // 7. Publish Event to Outbox (Transactional)
-      await this.outboxService.saveEvent(
-        RabbitMQEvent.BidPlaced,
-        {
-          bidId: bid._id.toString(),
-          auctionId: input.auctionId,
-          auctionTitle: auction.title,
-          sellerId: auction.sellerId.toString(),
-          bidderId: userId,
-          amount: input.amount,
-          outbidUserId: currentWinner?.bidderId.toString(),
-          outbidTransactionId,
-        },
-        session,
-      );
+        if (input.amount < minimumRequired) {
+          throw new BidAmountTooLowException();
+        }
 
-      await session.commitTransaction();
+        // 1. Hold new bidder's funds
+        await this.walletService.hold(
+          userId,
+          input.amount,
+          input.auctionId,
+          session,
+        );
 
-      // Invalidate active auctions cache (currentPrice changed)
-      void this.redisService.invalidatePattern(ACTIVE_AUCTIONS_PATTERN);
-
-      // 8. Publish real-time event (post-commit, non-blocking)
-      // bidCount is fetched after commit to get the accurate total
-      this.bidRepository
-        .countByAuctionId(input.auctionId)
-        .then((bidCount) => {
-          void this.realtimeService.publishBidAdded({
-            bid,
-            currentPrice: input.amount,
-            leadingBidderId: userId,
-            bidCount,
-          });
-        })
-        .catch((err: Error) => {
-          this.logger.error(
-            `Failed to fetch bid count for publish: ${err.message}`,
+        // 2. Release previous winner's funds and mark OUTBID
+        let outbidTransactionId: string | undefined;
+        if (currentWinner) {
+          const { transaction } = await this.walletService.release(
+            currentWinner.bidderId.toString(),
+            Number(currentWinner.amount.toString()),
+            input.auctionId,
+            session,
           );
-        });
+          outbidTransactionId = transaction._id.toString();
 
-      return bid;
-    } catch (error) {
-      await session.abortTransaction();
-      throw error;
+          await this.bidRepository.updateStatus(
+            currentWinner._id.toString(),
+            BidStatus.OUTBID,
+            session,
+          );
+        }
+
+        // 3. Record the bid
+        const bid = await this.bidRepository.create(
+          {
+            auctionId: new Types.ObjectId(input.auctionId),
+            bidderId: new Types.ObjectId(userId),
+            amount: input.amount,
+            status: BidStatus.WINNING,
+          },
+          session,
+        );
+
+        // 4. Update the auction's current price
+        await this.auctionRepository.updateCurrentPrice(
+          input.auctionId,
+          input.amount,
+          session,
+        );
+
+        // 7. Publish Event to Outbox (Transactional)
+        await this.outboxService.saveEvent(
+          RabbitMQEvent.BidPlaced,
+          {
+            bidId: bid._id.toString(),
+            auctionId: input.auctionId,
+            auctionTitle: auction.title,
+            sellerId: auction.sellerId.toString(),
+            bidderId: userId,
+            amount: input.amount,
+            outbidUserId: currentWinner?.bidderId.toString(),
+            outbidTransactionId,
+          },
+          session,
+        );
+
+        await session.commitTransaction();
+
+        // Invalidate active auctions cache (currentPrice changed)
+        void this.redisService.invalidatePattern(ACTIVE_AUCTIONS_PATTERN);
+
+        // 8. Publish real-time event (post-commit, non-blocking)
+        // bidCount is fetched after commit to get the accurate total
+        this.bidRepository
+          .countByAuctionId(input.auctionId)
+          .then((bidCount) => {
+            void this.realtimeService.publishBidAdded({
+              bid,
+              currentPrice: input.amount,
+              leadingBidderId: userId,
+              bidCount,
+            });
+          })
+          .catch((err: Error) => {
+            this.logger.error(
+              `Failed to fetch bid count for publish: ${err.message}`,
+            );
+          });
+
+        return bid;
+      } catch (error) {
+        await session.abortTransaction();
+        throw error;
+      } finally {
+        await session.endSession();
+      }
     } finally {
-      await session.endSession();
+      if (acquiredLock) {
+        await this.redis
+          .eval(RELEASE_LOCK_LUA_SCRIPT, 1, lockKey, lockValue)
+          .catch(() => undefined);
+      }
     }
   }
 
   @Cron(CronExpression.EVERY_MINUTE)
   async finalizeEndedAuctions(): Promise<void> {
     let acquiredLock = false;
+    const lockValue = randomUUID();
     try {
       const lockResult = await this.redis
-        .set(FINALIZE_AUCTIONS_LOCK_KEY, '1', 'EX', LOCK_TTL_SECONDS, 'NX')
+        .set(
+          FINALIZE_AUCTIONS_LOCK_KEY,
+          lockValue,
+          'EX',
+          LOCK_TTL_SECONDS,
+          'NX',
+        )
         .catch((err) => {
           this.logger.warn(
             `Redis finalize auctions lock error: ${err instanceof Error ? err.message : String(err)}`,
@@ -235,7 +271,7 @@ export class BidsService {
                 auctionId,
                 auctionTitle: auction.title,
                 sellerId: auction.sellerId.toString(),
-                finalPrice: auction.currentPrice,
+                finalPrice: Number(auction.currentPrice.toString()),
               },
               session,
             );
@@ -251,7 +287,7 @@ export class BidsService {
           const { transaction: captureTransaction } =
             await this.walletService.capture(
               winnerId,
-              winningBid.amount,
+              Number(winningBid.amount.toString()),
               auctionId,
               session,
             );
@@ -260,7 +296,7 @@ export class BidsService {
           const { transaction: depositTransaction } =
             await this.walletService.deposit(
               sellerId,
-              winningBid.amount,
+              Number(winningBid.amount.toString()),
               auctionId,
               session,
             );
@@ -279,7 +315,7 @@ export class BidsService {
               auctionId,
               auctionTitle: auction.title,
               sellerId,
-              finalPrice: auction.currentPrice,
+              finalPrice: Number(auction.currentPrice.toString()),
               winnerId,
               captureTransactionId: captureTransaction._id.toString(),
               depositTransactionId: depositTransaction._id.toString(),
@@ -290,7 +326,7 @@ export class BidsService {
           await session.commitTransaction();
 
           this.logger.log(
-            `Successfully finalized auction ${auctionId}. Winner: ${winnerId}, Seller: ${sellerId}, Amount: ${winningBid.amount}`,
+            `Successfully finalized auction ${auctionId}. Winner: ${winnerId}, Seller: ${sellerId}, Amount: ${winningBid.amount.toString()}`,
           );
         } catch (error) {
           await session.abortTransaction();
@@ -307,7 +343,14 @@ export class BidsService {
       );
     } finally {
       if (acquiredLock) {
-        await this.redis.del(FINALIZE_AUCTIONS_LOCK_KEY).catch(() => undefined);
+        await this.redis
+          .eval(
+            RELEASE_LOCK_LUA_SCRIPT,
+            1,
+            FINALIZE_AUCTIONS_LOCK_KEY,
+            lockValue,
+          )
+          .catch(() => undefined);
       }
     }
   }

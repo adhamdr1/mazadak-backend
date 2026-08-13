@@ -19,8 +19,14 @@ export class RolesGuard implements CanActivate {
       return true;
     }
 
-    const ctx = GqlExecutionContext.create(context);
-    const user = ctx.getContext<{ req: { user: JwtPayload } }>().req?.user;
+    let user: JwtPayload | undefined;
+    if (context.getType<string>() === 'graphql') {
+      const ctx = GqlExecutionContext.create(context);
+      user = ctx.getContext<{ req: { user?: JwtPayload } }>().req?.user;
+    } else {
+      const req = context.switchToHttp().getRequest<{ user?: JwtPayload }>();
+      user = req?.user;
+    }
 
     if (!user) {
       return false;

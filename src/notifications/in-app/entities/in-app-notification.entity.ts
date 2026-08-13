@@ -62,3 +62,6 @@ export class InAppNotification {
 
 export const InAppNotificationSchema =
   SchemaFactory.createForClass(InAppNotification);
+
+InAppNotificationSchema.index({ userId: 1, createdAt: -1 });
+InAppNotificationSchema.index({ userId: 1, isRead: 1 });

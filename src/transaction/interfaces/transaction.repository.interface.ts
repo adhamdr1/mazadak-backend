@@ -40,6 +40,11 @@ export interface ITransactionRepository {
     session?: ClientSession,
   ): Promise<Transaction | null>;
 
+  markWalletCredited(
+    id: string,
+    session?: ClientSession,
+  ): Promise<Transaction | null>;
+
   findByWalletId(
     walletId: string,
     page: number,

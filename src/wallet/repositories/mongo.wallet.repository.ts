@@ -42,7 +42,9 @@ export class MongoWalletRepository implements IWalletRepository {
   }
 
   async sumAllBalances(): Promise<number> {
-    const result = await this.walletModel.aggregate<{ totalBalance: number }>([
+    const result = await this.walletModel.aggregate<{
+      totalBalance: Types.Decimal128 | null;
+    }>([
       {
         $group: {
           _id: null,
@@ -50,8 +52,8 @@ export class MongoWalletRepository implements IWalletRepository {
         },
       },
     ]);
-    return result.length > 0
-      ? new Decimal(result[0].totalBalance).toNumber()
+    return result.length > 0 && result[0].totalBalance
+      ? new Decimal(result[0].totalBalance.toString()).toNumber()
       : 0;
   }
 
@@ -61,11 +63,13 @@ export class MongoWalletRepository implements IWalletRepository {
     amount: number,
     session?: ClientSession,
   ): Promise<Wallet | null> {
-    const cleanAmount = new Decimal(amount).toNumber();
+    const decimalAmount = Types.Decimal128.fromString(
+      new Decimal(amount).toString(),
+    );
     return await this.walletModel
       .findByIdAndUpdate(
         new Types.ObjectId(walletId),
-        { $inc: { balance: cleanAmount } },
+        { $inc: { balance: decimalAmount } },
         { returnDocument: 'after', session },
       )
       .exec();
@@ -77,16 +81,21 @@ export class MongoWalletRepository implements IWalletRepository {
     amount: number,
     session?: ClientSession,
   ): Promise<Wallet | null> {
-    const cleanAmount = new Decimal(amount).toNumber();
+    const decimalAmount = Types.Decimal128.fromString(
+      new Decimal(amount).toString(),
+    );
+    const negativeDecimalAmount = Types.Decimal128.fromString(
+      new Decimal(amount).negated().toString(),
+    );
     return await this.walletModel
       .findOneAndUpdate(
         {
           _id: new Types.ObjectId(walletId),
           $expr: {
-            $gte: [{ $subtract: ['$balance', '$heldBalance'] }, cleanAmount],
+            $gte: [{ $subtract: ['$balance', '$heldBalance'] }, decimalAmount],
           },
         },
-        { $inc: { balance: -cleanAmount } },
+        { $inc: { balance: negativeDecimalAmount } },
         { returnDocument: 'after', session },
       )
       .exec();
@@ -98,16 +107,18 @@ export class MongoWalletRepository implements IWalletRepository {
     amount: number,
     session?: ClientSession,
   ): Promise<Wallet | null> {
-    const cleanAmount = new Decimal(amount).toNumber();
+    const decimalAmount = Types.Decimal128.fromString(
+      new Decimal(amount).toString(),
+    );
     return await this.walletModel
       .findOneAndUpdate(
         {
           _id: new Types.ObjectId(walletId),
           $expr: {
-            $gte: [{ $subtract: ['$balance', '$heldBalance'] }, cleanAmount],
+            $gte: [{ $subtract: ['$balance', '$heldBalance'] }, decimalAmount],
           },
         },
-        { $inc: { heldBalance: cleanAmount } },
+        { $inc: { heldBalance: decimalAmount } },
         { returnDocument: 'after', session },
       )
       .exec();
@@ -119,14 +130,19 @@ export class MongoWalletRepository implements IWalletRepository {
     amount: number,
     session?: ClientSession,
   ): Promise<Wallet | null> {
-    const cleanAmount = new Decimal(amount).toNumber();
+    const decimalAmount = Types.Decimal128.fromString(
+      new Decimal(amount).toString(),
+    );
+    const negativeDecimalAmount = Types.Decimal128.fromString(
+      new Decimal(amount).negated().toString(),
+    );
     return await this.walletModel
       .findOneAndUpdate(
         {
           _id: new Types.ObjectId(walletId),
-          $expr: { $gte: ['$heldBalance', cleanAmount] },
+          $expr: { $gte: ['$heldBalance', decimalAmount] },
         },
-        { $inc: { heldBalance: -cleanAmount } },
+        { $inc: { heldBalance: negativeDecimalAmount } },
         { returnDocument: 'after', session },
       )
       .exec();
@@ -138,14 +154,24 @@ export class MongoWalletRepository implements IWalletRepository {
     amount: number,
     session?: ClientSession,
   ): Promise<Wallet | null> {
-    const cleanAmount = new Decimal(amount).toNumber();
+    const decimalAmount = Types.Decimal128.fromString(
+      new Decimal(amount).toString(),
+    );
+    const negativeDecimalAmount = Types.Decimal128.fromString(
+      new Decimal(amount).negated().toString(),
+    );
     return await this.walletModel
       .findOneAndUpdate(
         {
           _id: new Types.ObjectId(walletId),
-          $expr: { $gte: ['$heldBalance', cleanAmount] },
+          $expr: { $gte: ['$heldBalance', decimalAmount] },
         },
-        { $inc: { balance: -cleanAmount, heldBalance: -cleanAmount } },
+        {
+          $inc: {
+            balance: negativeDecimalAmount,
+            heldBalance: negativeDecimalAmount,
+          },
+        },
         { returnDocument: 'after', session },
       )
       .exec();

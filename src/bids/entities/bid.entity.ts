@@ -1,4 +1,4 @@
-import { ObjectType, Field, ID, Float } from '@nestjs/graphql';
+import { ObjectType, Field, ID } from '@nestjs/graphql';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
 import { BidStatus } from '../enums/bid-status.enum';
@@ -9,6 +9,8 @@ export type BidDocument = HydratedDocument<Bid>;
 @Schema({
   timestamps: true,
   versionKey: false,
+  toJSON: { getters: true },
+  toObject: { getters: true },
 })
 export class Bid {
   @Field(() => ID)
@@ -22,9 +24,13 @@ export class Bid {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
   bidderId!: Types.ObjectId;
 
-  @Field(() => Float)
-  @Prop({ required: true })
-  amount!: number;
+  @Field(() => String)
+  @Prop({
+    type: Types.Decimal128,
+    required: true,
+    get: (val: Types.Decimal128 | null) => (val ? val.toString() : '0.00'),
+  })
+  amount!: Types.Decimal128;
 
   @Field(() => BidStatus)
   @Prop({ type: String, enum: BidStatus, required: true, index: true })
@@ -38,3 +44,6 @@ export class Bid {
 }
 
 export const BidSchema = SchemaFactory.createForClass(Bid);
+
+BidSchema.index({ auctionId: 1, amount: -1 });
+BidSchema.index({ auctionId: 1, status: 1 });

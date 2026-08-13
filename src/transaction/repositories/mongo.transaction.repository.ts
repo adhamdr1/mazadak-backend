@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, ClientSession } from 'mongoose';
+import Decimal from 'decimal.js';
 import {
   ITransactionRepository,
   CreateTransactionData,
@@ -28,7 +29,7 @@ export class MongoTransactionRepository implements ITransactionRepository {
     const transaction = new this.transactionModel({
       walletId: new Types.ObjectId(data.walletId),
       type: data.type,
-      amount: data.amount,
+      amount: Types.Decimal128.fromString(data.amount.toString()),
       status: data.status,
       referenceId: data.referenceId ?? null,
       idempotencyKey: data.idempotencyKey ?? null,
@@ -79,6 +80,19 @@ export class MongoTransactionRepository implements ITransactionRepository {
       .exec();
   }
 
+  async markWalletCredited(
+    id: string,
+    session?: ClientSession,
+  ): Promise<Transaction | null> {
+    return this.transactionModel
+      .findByIdAndUpdate(
+        id,
+        { $set: { walletCredited: true } },
+        { returnDocument: 'after', session },
+      )
+      .exec();
+  }
+
   private shouldApplyDefaultTransactionFilter(
     filter?: TransactionsFilterInput,
   ): boolean {
@@ -115,6 +129,10 @@ export class MongoTransactionRepository implements ITransactionRepository {
 
     if (filter.expiresAtBefore) {
       query['expiresAt'] = { $lte: filter.expiresAtBefore, $ne: null };
+    }
+
+    if (filter.hasChild !== undefined) {
+      query['hasChild'] = filter.hasChild;
     }
 
     return query;
@@ -209,7 +227,7 @@ export class MongoTransactionRepository implements ITransactionRepository {
     endOfDay.setHours(23, 59, 59, 999);
 
     const result = await this.transactionModel.aggregate<{
-      totalRevenue: number;
+      totalRevenue: Types.Decimal128 | null;
     }>([
       {
         $match: {
@@ -226,6 +244,8 @@ export class MongoTransactionRepository implements ITransactionRepository {
       },
     ]);
 
-    return result.length > 0 ? Number(result[0].totalRevenue) : 0;
+    return result.length > 0 && result[0].totalRevenue
+      ? new Decimal(result[0].totalRevenue.toString()).toNumber()
+      : 0;
   }
 }

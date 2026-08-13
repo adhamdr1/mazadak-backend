@@ -146,6 +146,12 @@ Our database schema is designed to handle financial transactions securely and ma
 
 ## 💳 Payment Gateway Integration
 
+<div align="center">
+
+![Payment Flow](image/paymentFlow.png)
+
+</div>
+
 This is the most complex and technically demanding feature in the entire system. We built a **production-grade, fault-tolerant payment engine** from scratch, implementing multiple enterprise design patterns to guarantee absolute financial consistency — even under network failures, provider retries, or system crashes.
 
 ### The Challenge
@@ -273,9 +279,10 @@ sequenceDiagram
     end
 ```
 
-### 📧 Scalable Event-Driven Notifications
+### 📧 Scalable Event-Driven Architecture & Notifications
 - **Outbox Pattern Worker:** Prevents data loss during network hiccups by committing notification events to the DB first. A background job polls and publishes them to RabbitMQ.
-- **Asynchronous Processing:** Heavy tasks like rendering Handlebars HTML templates and sending emails (Auction won, deposit receipt, password reset) are offloaded to asynchronous background consumers.
+- **Asynchronous Notifications:** Heavy tasks like rendering Handlebars HTML templates and sending emails (Auction won, deposit receipt, password reset) are offloaded to asynchronous background consumers.
+- **Automated Lifecycle Cleanups (AuctionConsumer):** Listens to account lifecycle events (`UserBanned`, `UserSoftDeleted`) to automatically cancel active auctions of the affected sellers and transactionally release locked bidder funds.
 
 ### ⚡ Real-Time GraphQL Subscriptions
 - **GraphQL-WS Handshake Validation:** Secures WebSocket connections by verifying JWT and lookup user state (active, banned, deleted) during handshake, rejecting invalid sockets.

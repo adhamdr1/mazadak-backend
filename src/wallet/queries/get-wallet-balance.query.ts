@@ -1,8 +1,8 @@
 import { Query } from '@nestjs/cqrs';
 
 export class GetWalletBalanceQuery extends Query<{
-  balance: number;
-  heldBalance: number;
+  balance: string;
+  heldBalance: string;
 }> {
   constructor(readonly userId: string) {
     super();

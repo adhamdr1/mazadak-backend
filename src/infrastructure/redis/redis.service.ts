@@ -1,6 +1,8 @@
-﻿import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';
+import { randomUUID } from 'crypto';
+import { RELEASE_LOCK_LUA_SCRIPT } from './redis.constants';
 
 interface CacheEntry<T> {
   data: T;
@@ -134,15 +136,18 @@ export class RedisService {
     fetcher: () => Promise<T>,
   ): Promise<void> {
     const lockKey = `revalidating:${key}`;
+    const lockValue = randomUUID();
+    let acquiredLock = false;
     try {
       // SETNX with 30s TTL -- only one revalidation worker at a time
-      const acquired = await this.redis.set(lockKey, '1', 'EX', 30, 'NX');
+      const acquired = await this.redis.set(lockKey, lockValue, 'EX', 30, 'NX');
       if (!acquired) {
         this.logger.debug(
           `Revalidation lock already held for "${key}" -- skipping`,
         );
         return;
       }
+      acquiredLock = true;
 
       const data = await fetcher();
       await this.setInRedis(key, data, softTtlMs, hardTtlS);
@@ -153,7 +158,11 @@ export class RedisService {
       );
     } finally {
       // Always release the lock, even on error
-      await this.redis.del(lockKey).catch(() => undefined);
+      if (acquiredLock) {
+        await this.redis
+          .eval(RELEASE_LOCK_LUA_SCRIPT, 1, lockKey, lockValue)
+          .catch(() => undefined);
+      }
     }
   }
 
