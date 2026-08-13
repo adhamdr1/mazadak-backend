@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { ClientSession } from 'mongoose';
+import { ClientSession, Connection } from 'mongoose';
+import { InjectConnection } from '@nestjs/mongoose';
 import type { IWalletRepository } from './interfaces/wallet.repository.interface';
 import { Wallet } from './entities/wallet.entity';
 import { WalletNotFoundException } from './exceptions/wallet-not-found.exception';
@@ -24,6 +25,7 @@ export class WalletService {
     private readonly walletRepository: IWalletRepository,
     private readonly transactionService: TransactionService,
     private readonly outboxService: OutboxService,
+    @InjectConnection() private readonly connection: Connection,
   ) {}
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -193,6 +195,35 @@ export class WalletService {
   }
 
   async withdraw(
+    userId: string,
+    amount: number,
+    referenceId?: string,
+    session?: ClientSession,
+  ): Promise<{ wallet: Wallet; transaction: Transaction }> {
+    if (session) {
+      return this.executeWithdrawal(userId, amount, referenceId, session);
+    }
+
+    const newSession = await this.connection.startSession();
+    try {
+      newSession.startTransaction();
+      const result = await this.executeWithdrawal(
+        userId,
+        amount,
+        referenceId,
+        newSession,
+      );
+      await newSession.commitTransaction();
+      return result;
+    } catch (error) {
+      await newSession.abortTransaction();
+      throw error;
+    } finally {
+      await newSession.endSession();
+    }
+  }
+
+  private async executeWithdrawal(
     userId: string,
     amount: number,
     referenceId?: string,

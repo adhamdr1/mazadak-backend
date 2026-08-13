@@ -257,6 +257,31 @@ export class AuctionsService {
     return updated;
   }
 
+  async cancelAllActiveAuctionsForSeller(sellerId: string): Promise<void> {
+    const auctions =
+      await this.auctionRepository.findActiveOrPendingBySellerId(sellerId);
+    this.logger.log(
+      `Found ${auctions.length} active/pending auction(s) to cancel for seller ${sellerId}`,
+    );
+
+    for (const auction of auctions) {
+      try {
+        await this.cancelAuction(
+          auction._id.toString(),
+          sellerId,
+          UserRole.ADMIN,
+        );
+        this.logger.log(
+          `Successfully cancelled auction ${auction._id.toString()} for seller ${sellerId}`,
+        );
+      } catch (err) {
+        this.logger.error(
+          `Failed to cancel auction ${auction._id.toString()} for seller ${sellerId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+  }
+
   async cancelAuction(
     auctionId: string,
     userId: string,

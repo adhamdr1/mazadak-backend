@@ -1,7 +1,7 @@
 import {
   Injectable,
   Logger,
-  OnModuleInit,
+  OnApplicationBootstrap,
   OnModuleDestroy,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -22,7 +22,9 @@ import {
 import { PaymentService } from '../payment.service';
 
 @Injectable()
-export class WebhookConsumer implements OnModuleInit, OnModuleDestroy {
+export class WebhookConsumer
+  implements OnApplicationBootstrap, OnModuleDestroy
+{
   private readonly logger = new Logger(WebhookConsumer.name);
   private connection: AmqpConnectionManager | null = null;
   private channelWrapper: ChannelWrapper | null = null;
@@ -32,7 +34,7 @@ export class WebhookConsumer implements OnModuleInit, OnModuleDestroy {
     private readonly paymentService: PaymentService,
   ) {}
 
-  onModuleInit() {
+  onApplicationBootstrap() {
     const url = this.configService.getOrThrow<string>('RABBITMQ_URL');
     this.connection = amqpManager.connect([url]);
 

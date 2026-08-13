@@ -3,7 +3,6 @@ import {
   Logger,
   OnApplicationBootstrap,
   OnModuleDestroy,
-  Inject,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ConsumeMessage } from 'amqplib';
@@ -12,31 +11,33 @@ import * as amqpManager from 'amqp-connection-manager';
 import { AmqpConnectionManager, ChannelWrapper } from 'amqp-connection-manager';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';
-import { type IAuthRepository } from '../interfaces/auth-repository.interface';
+import { AuctionsService } from '../auctions.service';
 import {
   IDEMPOTENCY_KEY_PREFIX,
   IDEMPOTENCY_TTL_S,
-  AUTH_QUEUE,
+  AUCTION_QUEUE,
   X_RETRY_COUNT,
-  AUTH_RETRY_QUEUE_5S,
+  AUCTION_RETRY_QUEUE_5S,
 } from '../../infrastructure/rabbitmq/rabbitmq.constants';
 import {
   RabbitMQEvent,
   RabbitMQParsedMessage,
   UserBannedPayload,
+  UserSoftDeletedPayload,
 } from '../../infrastructure/rabbitmq/rabbitmq-event.types';
 
 @Injectable()
-export class AuthConsumer implements OnApplicationBootstrap, OnModuleDestroy {
-  private readonly logger = new Logger(AuthConsumer.name);
+export class AuctionConsumer
+  implements OnApplicationBootstrap, OnModuleDestroy
+{
+  private readonly logger = new Logger(AuctionConsumer.name);
   private connection: AmqpConnectionManager | null = null;
   private channelWrapper: ChannelWrapper | null = null;
-  private readonly queueName = AUTH_QUEUE;
+  private readonly queueName = AUCTION_QUEUE;
 
   constructor(
     @InjectRedis() private readonly redis: Redis,
-    @Inject('IAuthRepository')
-    private readonly authRepository: IAuthRepository,
+    private readonly auctionsService: AuctionsService,
     private readonly configService: ConfigService,
   ) {}
 
@@ -46,11 +47,11 @@ export class AuthConsumer implements OnApplicationBootstrap, OnModuleDestroy {
     this.connection = amqpManager.connect([url]);
 
     this.connection.on('connect', () => {
-      this.logger.log('AuthConsumer connected to RabbitMQ!');
+      this.logger.log('AuctionConsumer connected to RabbitMQ!');
     });
     this.connection.on('disconnect', (params: { err: Error }) => {
       this.logger.warn(
-        `AuthConsumer disconnected from RabbitMQ: ${params.err.message}. Reconnecting...`,
+        `AuctionConsumer disconnected from RabbitMQ: ${params.err.message}. Reconnecting...`,
       );
     });
 
@@ -64,7 +65,7 @@ export class AuthConsumer implements OnApplicationBootstrap, OnModuleDestroy {
               if (msg) {
                 this.handleMessage(msg, channel).catch((error: unknown) => {
                   this.logger.error(
-                    `Unhandled error in AuthConsumer message: ${error instanceof Error ? error.message : String(error)}`,
+                    `Unhandled error in AuctionConsumer message: ${error instanceof Error ? error.message : String(error)}`,
                   );
                   this.handleProcessingError(msg, error as Error, channel);
                 });
@@ -76,7 +77,7 @@ export class AuthConsumer implements OnApplicationBootstrap, OnModuleDestroy {
       },
     });
 
-    this.logger.log(`AuthConsumer listening on ${this.queueName}`);
+    this.logger.log(`AuctionConsumer listening on ${this.queueName}`);
   }
 
   async onModuleDestroy() {
@@ -101,7 +102,7 @@ export class AuthConsumer implements OnApplicationBootstrap, OnModuleDestroy {
       ) as RabbitMQParsedMessage;
     } catch (parseError) {
       this.logger.error(
-        `AuthConsumer failed to parse message JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}. Rejecting to DLQ immediately.`,
+        `AuctionConsumer failed to parse message JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}. Rejecting to DLQ immediately.`,
       );
       channel.reject(msg, false);
       return;
@@ -110,7 +111,7 @@ export class AuthConsumer implements OnApplicationBootstrap, OnModuleDestroy {
     try {
       if (!parsed) {
         this.logger.warn(
-          'AuthConsumer received empty or invalid message payload',
+          'AuctionConsumer received empty or invalid message payload',
         );
         channel.ack(msg);
         return;
@@ -122,23 +123,26 @@ export class AuthConsumer implements OnApplicationBootstrap, OnModuleDestroy {
 
       if (isDuplicate) {
         this.logger.warn(
-          `AuthConsumer detected duplicate message and skipped: ${messageId}`,
+          `AuctionConsumer detected duplicate message and skipped: ${messageId}`,
         );
         channel.ack(msg);
         return;
       }
 
       this.logger.log(
-        `AuthConsumer processing event ${parsed.eventType} (Msg: ${messageId})`,
+        `AuctionConsumer processing event ${parsed.eventType} (Msg: ${messageId})`,
       );
 
       switch (parsed.eventType) {
         case RabbitMQEvent.UserBanned:
           await this.handleUserBanned(parsed.payload);
           break;
+        case RabbitMQEvent.UserSoftDeleted:
+          await this.handleUserSoftDeleted(parsed.payload);
+          break;
         default:
           this.logger.warn(
-            `AuthConsumer received unhandled event type: ${parsed.eventType}`,
+            `AuctionConsumer received unhandled event type: ${parsed.eventType}`,
           );
       }
 
@@ -151,19 +155,30 @@ export class AuthConsumer implements OnApplicationBootstrap, OnModuleDestroy {
 
       channel.ack(msg);
       this.logger.log(
-        `AuthConsumer successfully processed event ${parsed.eventType}`,
+        `AuctionConsumer successfully processed event ${parsed.eventType}`,
       );
     } catch (error) {
       this.logger.error(
-        `AuthConsumer error processing message: ${error instanceof Error ? error.message : String(error)}`,
+        `AuctionConsumer error processing message: ${error instanceof Error ? error.message : String(error)}`,
       );
       this.handleProcessingError(msg, error as Error, channel);
     }
   }
 
   private async handleUserBanned(payload: UserBannedPayload): Promise<void> {
-    this.logger.log(`Revoking all tokens for banned user: ${payload.userId}`);
-    await this.authRepository.deleteAllUserTokens(payload.userId);
+    this.logger.log(
+      `AuctionConsumer handling ban event for seller: ${payload.userId}`,
+    );
+    await this.auctionsService.cancelAllActiveAuctionsForSeller(payload.userId);
+  }
+
+  private async handleUserSoftDeleted(
+    payload: UserSoftDeletedPayload,
+  ): Promise<void> {
+    this.logger.log(
+      `AuctionConsumer handling soft-delete event for seller: ${payload.userId}`,
+    );
+    await this.auctionsService.cancelAllActiveAuctionsForSeller(payload.userId);
   }
 
   private handleProcessingError(
@@ -176,15 +191,15 @@ export class AuthConsumer implements OnApplicationBootstrap, OnModuleDestroy {
 
     if (retryCount > 3) {
       this.logger.error(
-        `AuthConsumer message exceeded max retries. Sending to dead-letter queue. Error: ${err.message}`,
+        `AuctionConsumer message exceeded max retries. Sending to dead-letter queue. Error: ${err.message}`,
       );
       channel.reject(msg, false); // Rejects to DLQ (no requeue)
     } else {
       this.logger.warn(
-        `AuthConsumer processing failed (attempt ${retryCount}). Retrying in 5 seconds...`,
+        `AuctionConsumer processing failed (attempt ${retryCount}). Retrying in 5 seconds...`,
       );
       channel.ack(msg); // Acknowledge first before republishing to retry queue
-      channel.sendToQueue(AUTH_RETRY_QUEUE_5S, msg.content, {
+      channel.sendToQueue(AUCTION_RETRY_QUEUE_5S, msg.content, {
         headers: {
           ...headers,
           [X_RETRY_COUNT]: retryCount,

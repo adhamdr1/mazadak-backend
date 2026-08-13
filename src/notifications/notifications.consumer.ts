@@ -1,7 +1,7 @@
 import {
   Injectable,
   Logger,
-  OnModuleInit,
+  OnApplicationBootstrap,
   OnModuleDestroy,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -42,7 +42,9 @@ import { InAppNotificationType } from './in-app/enums/in-app-notification-type.e
 import { NotificationReferenceType } from './in-app/enums/notification-reference-type.enum';
 
 @Injectable()
-export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
+export class NotificationsConsumer
+  implements OnApplicationBootstrap, OnModuleDestroy
+{
   private readonly logger = new Logger(NotificationsConsumer.name);
   private connection: AmqpConnectionManager | null = null;
   private channelWrapper: ChannelWrapper | null = null;
@@ -55,7 +57,7 @@ export class NotificationsConsumer implements OnModuleInit, OnModuleDestroy {
     private readonly configService: ConfigService,
   ) {}
 
-  onModuleInit() {
+  onApplicationBootstrap() {
     const url = this.configService.getOrThrow<string>('RABBITMQ_URL');
 
     // 1. Connection Recovery implementation using amqp-connection-manager

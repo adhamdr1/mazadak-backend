@@ -7,6 +7,7 @@ import { MongoAuctionRepository } from './repositories/mongo.auction.repository'
 import { UploadModule } from '../upload/upload.module';
 import { WalletModule } from '../wallet/wallet.module';
 import { Bid, BidSchema } from '../bids/entities/bid.entity';
+import { AuctionConsumer } from './consumers/auction.consumer';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { Bid, BidSchema } from '../bids/entities/bid.entity';
   providers: [
     AuctionsResolver,
     AuctionsService,
+    AuctionConsumer,
     {
       provide: 'IAuctionRepository',
       useClass: MongoAuctionRepository,

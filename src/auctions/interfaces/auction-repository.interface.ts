@@ -87,6 +87,11 @@ export interface IAuctionRepository {
 
   findEndedWithoutWinner(): Promise<Auction[]>;
 
+  findActiveOrPendingBySellerId(
+    sellerId: string,
+    session?: ClientSession,
+  ): Promise<Auction[]>;
+
   finalizeAuction(
     id: string,
     winnerId?: string,

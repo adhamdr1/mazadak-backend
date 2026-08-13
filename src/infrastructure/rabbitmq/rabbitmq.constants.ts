@@ -31,6 +31,11 @@ export const NOTIFICATIONS_RETRY_QUEUE_30S = 'notifications.queue.retry.30s';
 export const NOTIFICATIONS_RETRY_QUEUE_2M = 'notifications.queue.retry.2m';
 export const NOTIFICATIONS_RETRY_ROUTING_KEY = 'notification.retry.direct';
 
+// Dedicated retry queues for Auctions
+export const AUCTION_QUEUE = 'auction.queue';
+export const AUCTION_RETRY_QUEUE_5S = 'auction.queue.retry.5s';
+export const AUCTION_RETRY_ROUTING_KEY = 'auction.retry.direct';
+
 // Idempotency Redis key prefix (TTL: 24h)
 export const IDEMPOTENCY_KEY_PREFIX = 'rabbit:msg:';
 export const IDEMPOTENCY_TTL_S = 86400; // 24 hours

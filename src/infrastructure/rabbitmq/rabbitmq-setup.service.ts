@@ -18,6 +18,9 @@ import {
   NOTIFICATIONS_RETRY_QUEUE_30S,
   NOTIFICATIONS_RETRY_QUEUE_2M,
   NOTIFICATIONS_RETRY_ROUTING_KEY,
+  AUCTION_QUEUE,
+  AUCTION_RETRY_QUEUE_5S,
+  AUCTION_RETRY_ROUTING_KEY,
 } from './rabbitmq.constants';
 
 /**
@@ -96,6 +99,12 @@ export class RabbitMQSetupService implements OnApplicationBootstrap {
           ttl: 120_000,
           dlk: NOTIFICATIONS_RETRY_ROUTING_KEY,
         },
+        // Auctions Retry
+        {
+          queue: AUCTION_RETRY_QUEUE_5S,
+          ttl: 5_000,
+          dlk: AUCTION_RETRY_ROUTING_KEY,
+        },
       ];
 
       for (const config of queueRetryConfigs) {
@@ -167,6 +176,30 @@ export class RabbitMQSetupService implements OnApplicationBootstrap {
         WALLET_QUEUE,
         MAZADAK_EXCHANGE,
         RabbitMQEvent.WalletDepositInitiated,
+      );
+
+      // ── 9. Auctions Queue ───────────────────────────────────────────────────
+      await channel.assertQueue(AUCTION_QUEUE, {
+        durable: true,
+        arguments: {
+          'x-dead-letter-exchange': '',
+          'x-dead-letter-routing-key': DEAD_LETTER_QUEUE,
+        },
+      });
+      await channel.bindQueue(
+        AUCTION_QUEUE,
+        MAZADAK_EXCHANGE,
+        RabbitMQEvent.UserBanned,
+      );
+      await channel.bindQueue(
+        AUCTION_QUEUE,
+        MAZADAK_EXCHANGE,
+        RabbitMQEvent.UserSoftDeleted,
+      );
+      await channel.bindQueue(
+        AUCTION_QUEUE,
+        MAZADAK_EXCHANGE,
+        AUCTION_RETRY_ROUTING_KEY,
       );
 
       this.logger.log('RabbitMQ topology asserted successfully');

@@ -215,6 +215,11 @@ export class UsersService {
 
     await this.userRepository.softDelete(targetId);
     await this.redis.del(`user:auth-status:${targetId}`);
+
+    // Publish UserSoftDeleted event to trigger cleanup of active auctions
+    await this.rabbitMQService.publish(RabbitMQEvent.UserSoftDeleted, {
+      userId: targetId,
+    });
   }
 
   async reactivateUser(id: string): Promise<User> {

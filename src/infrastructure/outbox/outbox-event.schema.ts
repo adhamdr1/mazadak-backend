@@ -35,7 +35,7 @@ export class OutboxEvent {
    * Date  = dispatched successfully.
    * Index on this field to allow fast polling by the OutboxWorker.
    */
-  @Prop({ type: Date, default: null, index: true })
+  @Prop({ type: Date, default: null })
   publishedAt: Date | null;
 
   createdAt: Date;

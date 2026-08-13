@@ -1,7 +1,7 @@
 import {
   Injectable,
   Logger,
-  OnModuleInit,
+  OnApplicationBootstrap,
   OnModuleDestroy,
   Inject,
 } from '@nestjs/common';
@@ -32,7 +32,7 @@ import {
 } from '../../infrastructure/rabbitmq/rabbitmq-event.types';
 
 @Injectable()
-export class WalletConsumer implements OnModuleInit, OnModuleDestroy {
+export class WalletConsumer implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(WalletConsumer.name);
   private connection: AmqpConnectionManager | null = null;
   private channelWrapper: ChannelWrapper | null = null;
@@ -48,7 +48,7 @@ export class WalletConsumer implements OnModuleInit, OnModuleDestroy {
     private readonly transactionService: TransactionService,
   ) {}
 
-  onModuleInit() {
+  onApplicationBootstrap() {
     const url = this.configService.getOrThrow<string>('RABBITMQ_URL');
 
     this.connection = amqpManager.connect([url]);
