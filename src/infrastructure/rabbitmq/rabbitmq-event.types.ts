@@ -20,6 +20,7 @@ export enum RabbitMQEvent {
   UserBanned = 'UserBanned',
   WalletDepositInitiated = 'WalletDepositInitiated',
   UserSoftDeleted = 'UserSoftDeleted',
+  ChatMessageSent = 'ChatMessageSent',
 }
 
 // ─── Event Payloads ────────────────────────────────────────────────────────────
@@ -142,6 +143,15 @@ export interface UserSoftDeletedPayload {
   userId: string;
 }
 
+export interface ChatMessageSentPayload {
+  recipientId: string;
+  auctionId: string;
+  auctionTitle: string;
+  senderId: string;
+  messageType: string;
+  preview: string;
+}
+
 /** Union type of all event payloads */
 export type RabbitMQEventPayload =
   | BidPlacedPayload
@@ -160,7 +170,8 @@ export type RabbitMQEventPayload =
   | AccountReactivatedPayload
   | UserBannedPayload
   | WalletDepositInitiatedPayload
-  | UserSoftDeletedPayload;
+  | UserSoftDeletedPayload
+  | ChatMessageSentPayload;
 
 /** Map for Discriminated Union Type Safety */
 export type RabbitMQEventMap = {
@@ -181,6 +192,7 @@ export type RabbitMQEventMap = {
   [RabbitMQEvent.UserBanned]: UserBannedPayload;
   [RabbitMQEvent.WalletDepositInitiated]: WalletDepositInitiatedPayload;
   [RabbitMQEvent.UserSoftDeleted]: UserSoftDeletedPayload;
+  [RabbitMQEvent.ChatMessageSent]: ChatMessageSentPayload;
 };
 
 /** The parsed message with full type inference based on eventType */

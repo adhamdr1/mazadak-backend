@@ -23,6 +23,8 @@ async function bootstrap() {
     rawBody: true,
   });
 
+  // const configService = app.get(ConfigService);
+
   // Enable trust proxy to parse X-Forwarded-For headers correctly in proxy environments
   app.set('trust proxy', true);
 
@@ -42,6 +44,14 @@ async function bootstrap() {
     credentials: true,
     methods: ['GET', 'POST', 'OPTIONS'],
   });
+
+  // app.enableCors({
+  //   origin: (origin, callback) => {
+  //     callback(null, true);
+  //   },
+  //   credentials: true,
+  //   methods: ['GET', 'POST', 'OPTIONS'],
+  // });
 
   // Set payload limit for request body (1mb)
   // We add verify hook to preserve rawBody for signature verification

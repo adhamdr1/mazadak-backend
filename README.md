@@ -11,7 +11,7 @@
 
 **A highly scalable, robust, and event-driven backend system for a real-time auction and bidding platform. Built from the ground up using NestJS, GraphQL, and enterprise-grade Microservices patterns.**
 
-[💻 Quick Start & Installation](#-quick-start--installation) • [🎯 Overview](#-overview) • [🏗️ Architecture Flow](#️-architecture-flow) • [🗄️ Database Entities](#️-database-entities) • [✨ Key Technical Features](#-key-technical-features) • [💳 Payment Integration](#-payment-gateway-integration)
+[💻 Quick Start & Installation](#-quick-start--installation) • [🎯 Overview](#-overview) • [🏗️ Architecture Flow](#️-architecture-flow) • [🗄️ Database Entities](#️-database-entities) • [✨ Key Technical Features](#-key-technical-features) • [💳 Payment Integration](#-payment-gateway-integration) • [🔨 Real-Time Bidding](#-real-time-bidding-flow) • [💬 Real-Time Chat Engine](#-post-auction-real-time-chat-engine)
 
 </div>
 
@@ -117,14 +117,20 @@ Our database schema is designed to handle financial transactions securely and ma
    - Tracks `balance` (Total available funds) and `heldBalance` (Funds locked in active bids).
 3. **Auction (`auctions`)**:
    - The core entity containing item details, `startingPrice`, `minimumBidIncrement`, and the dynamic `currentPrice`.
-   - Tracks the auction `status` (ACTIVE, PENDING, COMPLETED, CANCELLED).
+   - Tracks the auction `status` (ACTIVE, PENDING, ENDED, CANCELLED).
 4. **Bid (`bids`)**:
    - Records every bid placed on an auction.
    - Tracks whether a bid is currently `WINNING` or has been `OUTBID`.
 5. **Transaction (`transactions`)**:
    - The immutable financial ledger.
    - Records every `DEPOSIT`, `WITHDRAW`, `HOLD`, `RELEASE`, and `CAPTURE` operation tied to a Wallet.
-6. **Outbox Event (`outbox_events`)**:
+6. **Chat Message (`chat_messages`)**:
+   - Stores post-auction messages, clientMessageId idempotency, reactions array, media URLs, edit/delete flags, and sender snapshots.
+7. **Chat Read State (`chat_read_states`)**:
+   - Tracks the latest read message ID and read timestamp per participant for real-time read receipts.
+8. **Webhook Event (`webhook_events`)**:
+   - Dedicated store ensuring idempotent, exactly-once processing of payment gateway webhook callbacks.
+9. **Outbox Event (`outbox_events`)**:
    - Temporarily stores domain events before they are picked up and published to RabbitMQ to ensure zero data loss.
 
 ---
@@ -132,7 +138,7 @@ Our database schema is designed to handle financial transactions securely and ma
 ## ✨ Key Technical Features
 
 ### 🔐 Security & Automated Threat Prevention
-- **Smart Rate Limiting (`CustomThrottlerGuard`):** Enforces rate limiting per User ID if authenticated, falling back to IP address. Sensitive endpoints use a strict policy.
+- **Smart Rate Limiting (`CustomThrottlerGuard`):** Enforces rate limiting per User ID if authenticated, falling back to IP address. Sensitive endpoints use a strict policy. WebSocket subscriptions safely bypass HTTP headers.
 - **Automated IP Blacklisting:** If strict rate limits (e.g. login/banning endpoints) are breached, the malicious IP is automatically blacklisted in Redis for 24 hours.
 - **Fast Gateway Filtering (`IpBlacklistMiddleware`):** Rejects requests from blacklisted IPs at the gateway level before hitting NestJS routing, saving system resources.
 - **Exception Shielding:** Clean, specialized errors like `AccountBannedException` and `CannotBanAdminException` returning consistent GraphQL error structures.
@@ -146,99 +152,88 @@ Our database schema is designed to handle financial transactions securely and ma
 
 ## 💳 Payment Gateway Integration
 
-<div align="center">
+This is one of the most complex and technically demanding features in the system. We built a **production-grade, fault-tolerant payment engine** from scratch, implementing multiple enterprise design patterns to guarantee absolute financial consistency — even under network failures, provider retries, or system crashes.
 
-![Payment Flow](image/paymentFlow.png)
+### Data Flow: Asynchronous Webhook Ingestion & Wallet Credit
 
-</div>
+Below is the complete event-driven lifecycle for deposit webhooks:
 
-This is the most complex and technically demanding feature in the entire system. We built a **production-grade, fault-tolerant payment engine** from scratch, implementing multiple enterprise design patterns to guarantee absolute financial consistency — even under network failures, provider retries, or system crashes.
+```mermaid
+sequenceDiagram
+    autonumber
+    participant PG as Payment Gateway (Stripe/Paymob)
+    participant Ctrl as PaymentController
+    participant Svc as PaymentService
+    participant DB as MongoDB
+    participant Outbox as Outbox Service
+    participant RMQ as RabbitMQ
+    participant Consumer as WalletConsumer
 
-### The Challenge
+    PG->>Ctrl: Webhook Event
+    Ctrl->>Svc: verifySignature(signature, payload)
+    
+    rect rgb(30, 40, 50)
+        Note over Svc,Outbox: MongoDB Transaction Session (Atomic Ingestion)
+        Svc->>DB: Idempotency Check (webhook_events)
+        Svc->>DB: Save Webhook Event (processed = false)
+        Svc->>Outbox: Save PaymentWebhookReceived Event
+    end
 
-Integrating a payment gateway is deceptively complex. The core problem is that **two separate systems** (our DB and the payment provider) must stay in sync. What happens if:
-- The payment provider charges the user, but our server crashes before saving the transaction?
-- The provider retries a webhook that we already processed?
-- A `PENDING` transaction is stuck because the webhook was never delivered?
+    Ctrl-->>PG: 200 OK (Safe Ingestion Acknowledged)
 
-Each of these scenarios, if unhandled, leads to **real financial loss or data corruption**.
+    Outbox->>RMQ: Outbox Worker Publishes Event
+    RMQ->>Consumer: Consume PaymentWebhookReceived Event
 
-### Our Solution: A Multi-Layer Financial Engine
+    rect rgb(30, 40, 50)
+        Note over Svc,Outbox: MongoDB Transaction Session (Settlement Validation)
+        Consumer->>Svc: Process Webhook Event
+        Svc->>DB: Validate Amount & Currency Match
+        Svc->>DB: Append SUCCESS Transaction & Update Parent (hasChild = true)
+        Svc->>Outbox: Save WalletDepositInitiated Event
+    end
+
+    Consumer-->>RMQ: ACK
+
+    RMQ->>Consumer: Consume WalletDepositInitiated Event
+
+    rect rgb(30, 40, 50)
+        Note over Consumer,Outbox: MongoDB Transaction Session (Wallet Credit)
+        Consumer->>DB: Credit User Wallet Balance (creditBalance)
+        Consumer->>DB: Update Transaction (walletCredited = true)
+        Consumer->>Outbox: Save WalletDeposited Event
+    end
+
+    Consumer-->>RMQ: ACK
+```
+
+### Multi-Layer Architectural Pillars
 
 #### Layer 1 — Append-Only Ledger (Event Sourcing)
-
-Instead of updating a single transaction record (e.g., changing `PENDING` → `SUCCESS`), we **append a new immutable child record** that references the original via `referenceId`.
-
+Instead of mutating a single transaction record (e.g., updating `PENDING` → `SUCCESS`), we **append an immutable child record** referencing the root record via `referenceId`:
 ```
 [PENDING] ← root record (created at initiation)
     └── [SUCCESS] referenceId = PENDING._id  ← appended on success
          or
     └── [FAILED]  referenceId = PENDING._id  ← appended on failure
 ```
-
-This means:
-- The ledger is **tamper-proof** and **append-only** — no record is ever mutated.
-- A full financial audit trail exists for every single operation.
-- The `hasChild` flag on the parent record tells us whether this transaction has been settled, without an expensive DB lookup.
+- Ledger is **tamper-proof** and **append-only**.
+- Full financial audit trail exists for every transaction.
+- The `hasChild` flag indicates settlement status without expensive DB lookups.
 
 #### Layer 2 — Idempotent Webhook Processing
-
-Payment providers retry webhooks aggressively (sometimes 10+ times). Without idempotency, a user could be credited multiple times for one payment.
-
-We use a dedicated **`webhook_events` collection** as an idempotency store:
-
-```mermaid
-sequenceDiagram
-    participant PG as Payment Gateway
-    participant API as Our Webhook Handler
-    participant DB as MongoDB
-
-    PG->>API: POST /webhook {providerEventId: "evt_123"}
-    API->>DB: findOne({providerEventId: "evt_123"})
-    
-    alt Already exists and processed = true
-        DB-->>API: Found (processed)
-        API-->>PG: 200 OK (Idempotent — safe ignore)
-    else New or unprocessed
-        API->>DB: Start ACID Session
-        Note over DB: Atomically in one session:
-        DB->>DB: 1. Append child Transaction (SUCCESS/FAILED)
-        DB->>DB: 2. Credit wallet if SUCCESS DEPOSIT
-        DB->>DB: 3. Save WalletDeposited event to outbox
-        DB->>DB: 4. Mark webhook_event as processed = true
-        API->>DB: Commit Session
-        API-->>PG: 200 OK
-    end
-```
+Payment providers retry webhooks aggressively. A dedicated `webhook_events` collection acts as an idempotency barrier:
+- If a webhook event was already recorded as processed, it returns `200 OK` immediately without duplicate execution.
 
 #### Layer 3 — ACID Distributed Transactions (MongoDB Sessions)
-
-Every financial operation that involves multiple documents is wrapped in a **single MongoDB `ClientSession`**. This guarantees atomicity:
-
-> ✅ Either ALL of these succeed together, or NONE of them are saved.
-
-1. Append new `Transaction` record (child record with SUCCESS/FAILED status)
-2. Credit/Debit the user's `Wallet`
-3. Save the domain event to `outbox_events`
-4. Mark the `webhook_event` as processed
-
-If any single step throws an error, `session.abortTransaction()` rolls back the entire DB state — no partial writes, no ghost records.
+Every multi-document operation executes within a single MongoDB `ClientSession`:
+> ✅ Either ALL state changes (child transaction, wallet balance, outbox events, webhook status) succeed together, or NONE are committed.
 
 #### Layer 4 — Safety Net: Reconciliation & Expiration Workers
-
-Webhooks can fail to deliver entirely. We have two background Cron Jobs that act as a safety net:
-
-| Worker | Job | Interval |
-|---|---|---|
-| `PaymentExpirationWorker` | Finds `PENDING` transactions past their `expiresAt` date and marks them `EXPIRED` | Every hour |
-| `ReconciliationWorker` | Queries the payment provider's API directly to check the true status of unresolved `PENDING` transactions and reconciles them | Every hour |
-
-This ensures **zero transactions are left stuck in `PENDING` forever**, even if every webhook was lost.
+- **`PaymentExpirationWorker`:** Scans for stale `PENDING` transactions past their expiration threshold and expires them cleanly.
+- **`ReconciliationWorker`:** Queries the payment provider's API directly to resolve stuck transactions and sync unconfirmed webhooks.
 
 #### Layer 5 — Provider Factory Pattern (Strategy)
-
-The integration is built with extensibility in mind. Payment provider logic is abstracted behind an `IPaymentProvider` interface, and the correct provider is resolved at runtime via a `PaymentProviderFactory`:
-
+Payment logic is abstracted behind an `IPaymentProvider` interface resolved at runtime via `PaymentProviderFactory`:
 ```
 PaymentService → PaymentProviderFactory.getProvider("PAYMOB")
                                            ↓
@@ -247,37 +242,99 @@ PaymentService → PaymentProviderFactory.getProvider("PAYMOB")
                           PaymobProvider implements IPaymentProvider
 ```
 
-Adding a new gateway (Stripe, PayPal, etc.) requires **zero changes to core business logic** — just implement the interface and register the provider.
+---
 
-### Data Flow: Initiating a Deposit
+## 🔨 Real-Time Bidding Flow
+
+The core bidding engine provides **zero-latency real-time price updates** while maintaining strict financial locking via the user's wallet.
 
 ```mermaid
 sequenceDiagram
-    participant User
-    participant API as NestJS API
-    participant PG as Payment Gateway
+    autonumber
+    participant Bidder as Bidder / Client
+    participant API as GraphQL API (BidsResolver)
+    participant BidSvc as BidsService
+    participant WalletSvc as WalletService
     participant DB as MongoDB
+    participant Outbox as Outbox Service
+    participant PubSub as Redis Pub/Sub
+    participant RMQ as RabbitMQ
+    participant LiveBidders as Connected Bidders (WS)
 
-    User->>API: initializePayment(amount)
-    API->>DB: Create PENDING Transaction (with idempotencyKey)
-    API->>PG: Create Payment Intent
-    
-    alt Gateway Error
-        PG-->>API: Error
-        API->>DB: Append FAILED Transaction (referenceId = PENDING._id)
-        API-->>User: Error (user can retry immediately)
-    else Gateway Success
-        PG-->>API: {paymentIntentId, redirectUrl}
-        API->>DB: Update PENDING tx with gatewayPaymentIntentId
-        API-->>User: {redirectUrl} (redirect to payment page)
-        
-        Note over User,PG: User completes payment on gateway's page
-        
-        PG->>API: POST /webhook (payment completed)
-        API->>DB: Append SUCCESS tx + Credit wallet (atomically)
-        API-->>PG: 200 OK
+    Bidder->>API: Mutation: placeBid(auctionId, amount)
+    API->>BidSvc: placeBid(userId, auctionId, amount)
+
+    rect rgb(30, 40, 50)
+        Note over BidSvc,Outbox: MongoDB ACID Transaction Session
+        BidSvc->>DB: Validate Auction Status (ACTIVE) & Min Increment
+        BidSvc->>WalletSvc: Hold Funds (amount - previousHold)
+        WalletSvc->>DB: Lock Funds in heldBalance (Available Balance Check)
+        BidSvc->>DB: Release Hold of Previous Outbidder (heldBalance freed)
+        BidSvc->>DB: Create New Bid Record (WINNING) & Mark Old as OUTBID
+        BidSvc->>DB: Update Auction currentPrice & winningBidder
+        BidSvc->>Outbox: Save BidPlaced & BidderOutbid Events
     end
+
+    BidSvc->>PubSub: Publish bidAdded Event
+    PubSub-->>LiveBidders: Push Live Bid Update to all Subscribers (Real-Time ⚡)
+    API-->>Bidder: Bid Successfully Placed (Bid Object)
+
+    Outbox->>RMQ: Outbox Worker Publishes Outbid Event
+    RMQ->>API: Notifications Consumer Dispatches Outbid Email / Push
 ```
+
+---
+
+## 💬 Post-Auction Real-Time Chat Engine
+
+A private, secure communication channel established between the **Seller** and the **Winning Bidder** once an auction has concluded (`status = ENDED`).
+
+### Architectural Highlights
+- **Role-Based Access Control:** Restricted exclusively to the auction's seller, winning bidder, and platform admins.
+- **WebSocket Subscriptions (Native `graphql-transport-ws`):** Live streaming of new messages (`messageSent`), message edits/deletions/reactions (`messageUpdated`), and read receipts (`chatReadStatusUpdated`) powered by **Redis Pub/Sub**.
+- **15-Minute Edit & Delete Window:** Users can edit or delete messages within 15 minutes of sending. Deletions retain an audit trail marking `isDeleted = true`.
+- **Client Message ID Idempotency:** Guaranteed once-only delivery using composite unique indices `{ auctionId, senderId, clientMessageId }`.
+- **Media Albums & Reactions:** Supports up to 10 image attachments per message and instant emoji reactions.
+- **Asynchronous Offline Notifications:** Dispatches notification events through RabbitMQ to alert participants via email when they are offline.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Client as Winner / Seller (Browser)
+    participant WS as WebSocket Gateway (GraphQL-WS)
+    participant API as GraphQL API (ChatResolver)
+    participant ChatSvc as ChatService
+    participant DB as MongoDB
+    participant PubSub as Redis Pub/Sub
+    participant RMQ as RabbitMQ
+    participant Other as Other Participant (Browser)
+
+    Client->>WS: connection_init { Authorization: Bearer JWT }
+    WS->>WS: Validate JWT & User Status (Active / Not Banned)
+    WS-->>Client: connection_ack (Authenticated 🟢)
+    Client->>WS: subscribe: messageSent(auctionId)
+
+    Note over Client,Other: Participant sends a new chat message
+
+    Client->>API: Mutation: sendMessage(auctionId, clientMessageId, content, mediaUrls)
+    API->>ChatSvc: sendMessage(senderId, input)
+    ChatSvc->>ChatSvc: verifyChatAccess(auction.status == ENDED & user is Seller/Winner)
+    
+    rect rgb(30, 40, 50)
+        Note over ChatSvc,DB: Atomic Storage & Idempotency Check
+        ChatSvc->>DB: Save Message with Unique Index {auctionId, senderId, clientMessageId}
+    end
+
+    ChatSvc->>PubSub: publishMessageSent(message)
+    ChatSvc->>RMQ: publishChatNotification(ChatMessageSent) [Async Offline Alert]
+    API-->>Client: Message Created Successfully
+
+    PubSub-->>WS: Broadcast to Active WebSocket Subscribers
+    WS-->>Client: Live WS Event (messageSent)
+    WS-->>Other: Live WS Event (messageSent - Real-Time Delivery 🚀)
+```
+
+---
 
 ### 📧 Scalable Event-Driven Architecture & Notifications
 - **Outbox Pattern Worker:** Prevents data loss during network hiccups by committing notification events to the DB first. A background job polls and publishes them to RabbitMQ.
@@ -317,3 +374,4 @@ Contributions are always welcome! Please follow these steps:
 <div align="center">
 ⭐ Star this repository if you find it helpful!
 </div>
+
