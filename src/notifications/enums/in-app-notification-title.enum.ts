@@ -1,0 +1,14 @@
+export enum InAppNotificationTitles {
+  AUCTION_LIVE = 'Your auction is now LIVE! 🚀',
+  AUCTION_CANCELLED = 'Auction Cancelled ❌',
+  AUCTION_CANCELLED_BY_ADMIN = 'Auction Cancelled by Admin ❌',
+  AUCTION_WON = 'Congratulations! You won! 🎉',
+  AUCTION_ENDED_SELLER = 'Your auction has ended 🏁',
+  NEW_BID = 'New bid placed! 📈',
+  OUTBID = 'You have been outbid! ⚠️',
+  WELCOME = 'Welcome to Mazadak! 🌟',
+  DEPOSIT_SUCCESSFUL = 'Deposit Successful 💰',
+  WITHDRAWAL_COMPLETED = 'Withdrawal Completed 💸',
+  WELCOME_BACK = 'Welcome Back to Mazadak! 🌟',
+  NEW_CHAT_MESSAGE = 'New Chat Message',
+}

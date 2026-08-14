@@ -37,25 +37,37 @@ export class CustomThrottlerGuard extends ThrottlerGuard {
     super(options, storageService, reflector);
   }
 
+  override async canActivate(context: ExecutionContext): Promise<boolean> {
+    // WebSocket Subscriptions have no HTTP req/res — skip throttling entirely.
+    if (context.getType<string>() === 'graphql') {
+      const ctx = GqlExecutionContext.create(context);
+      const gqlCtx = ctx.getContext<{ req?: { headers?: unknown } }>();
+      if (!gqlCtx.req?.headers) {
+        return true;
+      }
+    }
+    return super.canActivate(context);
+  }
+
   // Override context for GraphQL and HTTP
   protected override getRequestResponse(context: ExecutionContext): {
     req: RequestWithUser;
-    res: Record<string, any>;
+    res: Record<string, unknown>;
   } {
     if (context.getType<string>() === 'graphql') {
       const ctx = GqlExecutionContext.create(context);
-      const { req, res } = ctx.getContext<{
+      const gqlCtx = ctx.getContext<{
         req: RequestWithUser;
-        res: Record<string, any>;
+        res: Record<string, unknown>;
       }>();
-      return { req, res };
+      return { req: gqlCtx.req, res: gqlCtx.res };
     }
 
     // Fallback for standard HTTP requests
     const http = context.switchToHttp();
     return {
       req: http.getRequest<RequestWithUser>(),
-      res: http.getResponse<Record<string, any>>(),
+      res: http.getResponse<Record<string, unknown>>(),
     };
   }
 

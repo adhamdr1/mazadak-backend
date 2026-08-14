@@ -5,6 +5,7 @@ import { PUB_SUB_EVENTS } from './events.constants';
 import { BidAddedPayload } from '../../bids/dto/bid-added.payload';
 import { InAppNotification } from '../../notifications/in-app/entities/in-app-notification.entity';
 import { AuctionStatusChangedPayload } from '../../auctions/dto/auction-status-changed.payload';
+import { ChatMessage } from '../../chat/entities/chat-message.entity';
 
 @Injectable()
 export class RealtimeService {
@@ -57,6 +58,38 @@ export class RealtimeService {
   ): Promise<void> {
     await this.publishSafely(PUB_SUB_EVENTS.AUCTION_STATUS_CHANGED, {
       auctionStatusChanged: payload,
+    });
+  }
+
+  /**
+   * Publish a real-time event when a message is sent in chat.
+   */
+  async publishMessageSent(payload: ChatMessage): Promise<void> {
+    await this.publishSafely(PUB_SUB_EVENTS.MESSAGE_SENT, {
+      messageSent: payload,
+    });
+  }
+
+  /**
+   * Publish a real-time event when a message is updated or deleted in chat.
+   */
+  async publishMessageUpdated(payload: ChatMessage): Promise<void> {
+    await this.publishSafely(PUB_SUB_EVENTS.MESSAGE_UPDATED, {
+      messageUpdated: payload,
+    });
+  }
+
+  /**
+   * Publish a real-time event when chat read status is updated.
+   */
+  async publishChatReadStatusUpdated(payload: {
+    auctionId: string;
+    userId: string;
+    lastReadMessageId: string | null;
+    lastReadAt: Date | null;
+  }): Promise<void> {
+    await this.publishSafely(PUB_SUB_EVENTS.CHAT_READ_STATUS_UPDATED, {
+      chatReadStatusUpdated: payload,
     });
   }
 }

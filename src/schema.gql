@@ -148,6 +148,7 @@ enum InAppNotificationType {
   NEW_BID
   AUCTION_CANCELLED
   AUCTION_CANCELLED_BY_ADMIN
+  NEW_CHAT_MESSAGE
 }
 
 enum NotificationReferenceType {
@@ -280,6 +281,52 @@ type DashboardStats {
   totalTransactions: Int!
 }
 
+type ChatReaction {
+  emoji: String!
+  userId: ID!
+}
+
+type ChatMessage {
+  _id: ID!
+  clientMessageId: String!
+  auctionId: ID!
+  senderId: ID!
+  type: ChatMessageType!
+  content: String
+  mediaUrls: [String!]
+  reactions: [ChatReaction!]!
+  isEdited: Boolean!
+  isDeleted: Boolean!
+  senderName: String!
+  createdAt: DateTime!
+}
+
+enum ChatMessageType {
+  TEXT
+  IMAGE
+}
+
+type ChatReadState {
+  _id: ID!
+  auctionId: ID!
+  userId: ID!
+  lastReadMessageId: ID
+  lastReadAt: DateTime
+}
+
+type ChatMessagesConnection {
+  items: [ChatMessage!]!
+  hasNextPage: Boolean!
+  endCursor: String
+}
+
+type ChatReadStateUpdatedPayload {
+  auctionId: ID!
+  userId: ID!
+  lastReadMessageId: ID
+  lastReadAt: DateTime
+}
+
 type Query {
   me: User!
   findUser(input: FindUserInput!): User!
@@ -305,6 +352,8 @@ type Query {
   adminGetAuctions(input: PaginationInput!, filter: AuctionsFilterInput): AuctionsPage!
   adminGetTransactions(input: PaginationInput!, filter: TransactionsFilterInput): TransactionsPage!
   adminGetDashboardStats: DashboardStats!
+  chatMessages(auctionId: ID!, limit: Float! = 20, cursor: String): ChatMessagesConnection!
+  chatReadState(auctionId: ID!): ChatReadState
 }
 
 input FindUserInput {
@@ -428,6 +477,11 @@ type Mutation {
   placeBid(input: PlaceBidInput!): Bid!
   adminToggleUserBan(userId: ID!): User!
   adminCancelAuction(auctionId: ID!, reason: String!): Boolean!
+  sendMessage(input: CreateChatMessageInput!): ChatMessage!
+  editMessage(messageId: ID!, newContent: String!): ChatMessage!
+  deleteMessage(messageId: ID!): ChatMessage!
+  reactToMessage(messageId: ID!, emoji: String): ChatMessage!
+  markChatAsRead(auctionId: ID!, lastReadMessageId: ID!): Boolean!
 }
 
 input RegisterInput {
@@ -524,8 +578,19 @@ input PlaceBidInput {
   amount: Float!
 }
 
+input CreateChatMessageInput {
+  auctionId: ID!
+  content: String
+  type: ChatMessageType
+  mediaUrls: [String!]
+  clientMessageId: String!
+}
+
 type Subscription {
   notificationAdded: InAppNotification!
   auctionStatusChanged(auctionId: ID!): AuctionStatusChangedPayload!
   bidAdded(auctionId: ID!): BidAddedPayload!
+  messageSent(auctionId: ID!): ChatMessage!
+  messageUpdated(auctionId: ID!): ChatMessage!
+  chatReadStatusUpdated(auctionId: ID!): ChatReadStateUpdatedPayload!
 }

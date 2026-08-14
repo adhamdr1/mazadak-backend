@@ -37,9 +37,11 @@ import {
   WithdrawalCompletedPayload,
   AccountReactivationRequestedPayload,
   AccountReactivatedPayload,
+  ChatMessageSentPayload,
 } from '../infrastructure/rabbitmq/rabbitmq-event.types';
 import { InAppNotificationType } from './in-app/enums/in-app-notification-type.enum';
 import { NotificationReferenceType } from './in-app/enums/notification-reference-type.enum';
+import { InAppNotificationTitles } from './enums/in-app-notification-title.enum';
 
 @Injectable()
 export class NotificationsConsumer
@@ -192,6 +194,9 @@ export class NotificationsConsumer
         case RabbitMQEvent.AccountReactivated:
           await this.handleAccountReactivated(parsed.payload);
           break;
+        case RabbitMQEvent.ChatMessageSent:
+          await this.handleChatMessageSent(parsed.payload);
+          break;
         default: {
           const unknownEvent = (parsed as { eventType?: string }).eventType;
           this.logger.warn(
@@ -279,7 +284,7 @@ export class NotificationsConsumer
     await this.notificationsService.createInAppNotification({
       userId: payload.sellerId,
       type: InAppNotificationType.AUCTION_STARTED,
-      title: 'Your auction is now LIVE! 🚀',
+      title: InAppNotificationTitles.AUCTION_LIVE,
       body: `Your auction "${payload.auctionTitle}" is now live and accepting bids.`,
       referenceId: payload.auctionId,
       referenceType: NotificationReferenceType.AUCTION,
@@ -305,7 +310,7 @@ export class NotificationsConsumer
       await this.notificationsService.createInAppNotification({
         userId: payload.sellerId,
         type: InAppNotificationType.AUCTION_CANCELLED,
-        title: 'Auction Cancelled ❌',
+        title: InAppNotificationTitles.AUCTION_CANCELLED,
         body: `You have successfully cancelled your auction "${payload.auctionTitle}".`,
         referenceId: payload.auctionId,
         referenceType: NotificationReferenceType.AUCTION,
@@ -336,7 +341,7 @@ export class NotificationsConsumer
         await this.notificationsService.createInAppNotification({
           userId: payload.highestBidderId,
           type: InAppNotificationType.AUCTION_CANCELLED,
-          title: 'Auction Cancelled ❌',
+          title: InAppNotificationTitles.AUCTION_CANCELLED,
           body: `The auction "${payload.auctionTitle}" has been cancelled and your held funds of ${payload.refundAmount} EGP have been released.`,
           referenceId: payload.auctionId,
           referenceType: NotificationReferenceType.AUCTION,
@@ -367,7 +372,7 @@ export class NotificationsConsumer
       await this.notificationsService.createInAppNotification({
         userId: payload.sellerId,
         type: InAppNotificationType.AUCTION_CANCELLED_BY_ADMIN,
-        title: 'Auction Cancelled by Admin ❌',
+        title: InAppNotificationTitles.AUCTION_CANCELLED_BY_ADMIN,
         body: `Your auction "${payload.auctionTitle}" was cancelled by an admin. Reason: ${payload.adminActionReason}`,
         referenceId: payload.auctionId,
         referenceType: NotificationReferenceType.AUCTION,
@@ -398,7 +403,7 @@ export class NotificationsConsumer
         await this.notificationsService.createInAppNotification({
           userId: payload.highestBidderId,
           type: InAppNotificationType.AUCTION_CANCELLED_BY_ADMIN,
-          title: 'Auction Cancelled by Admin ❌',
+          title: InAppNotificationTitles.AUCTION_CANCELLED_BY_ADMIN,
           body: `The auction "${payload.auctionTitle}" has been cancelled by an Admin and your held funds of ${payload.refundAmount} EGP have been released. Reason: ${payload.adminActionReason}`,
           referenceId: payload.auctionId,
           referenceType: NotificationReferenceType.AUCTION,
@@ -436,7 +441,7 @@ export class NotificationsConsumer
         await this.notificationsService.createInAppNotification({
           userId: payload.winnerId,
           type: InAppNotificationType.AUCTION_WON,
-          title: 'Congratulations! You won! 🎉',
+          title: InAppNotificationTitles.AUCTION_WON,
           body: `You won the auction "${payload.auctionTitle}" with a final bid of ${payload.finalPrice} EGP.`,
           referenceId: payload.auctionId,
           referenceType: NotificationReferenceType.AUCTION,
@@ -462,7 +467,7 @@ export class NotificationsConsumer
       await this.notificationsService.createInAppNotification({
         userId: payload.sellerId,
         type: InAppNotificationType.AUCTION_ENDED_SELLER,
-        title: 'Your auction has ended 🏁',
+        title: InAppNotificationTitles.AUCTION_ENDED_SELLER,
         body: payload.winnerId
           ? `Your auction "${payload.auctionTitle}" has successfully ended. Sold for ${payload.finalPrice} EGP to ${winnerName}.`
           : `Your auction "${payload.auctionTitle}" has ended with no bids.`,
@@ -478,7 +483,7 @@ export class NotificationsConsumer
       await this.notificationsService.createInAppNotification({
         userId: payload.sellerId,
         type: InAppNotificationType.NEW_BID,
-        title: 'New bid placed! 📈',
+        title: InAppNotificationTitles.NEW_BID,
         body: `Someone placed a bid of ${payload.amount} EGP on your auction "${payload.auctionTitle}".`,
         referenceId: payload.auctionId,
         referenceType: NotificationReferenceType.AUCTION,
@@ -511,7 +516,7 @@ export class NotificationsConsumer
       await this.notificationsService.createInAppNotification({
         userId: payload.outbidUserId,
         type: InAppNotificationType.OUTBID,
-        title: 'You have been outbid! ⚠️',
+        title: InAppNotificationTitles.OUTBID,
         body: `Someone placed a higher bid of ${payload.amount} EGP on the auction "${payload.auctionTitle}".`,
         referenceId: payload.auctionId,
         referenceType: NotificationReferenceType.AUCTION,
@@ -549,7 +554,7 @@ export class NotificationsConsumer
     await this.notificationsService.createInAppNotification({
       userId: payload.userId,
       type: InAppNotificationType.WELCOME,
-      title: 'Welcome to Mazadak! 🌟',
+      title: InAppNotificationTitles.WELCOME,
       body: 'Your account is now fully verified. Happy bidding!',
     });
   }
@@ -592,7 +597,7 @@ export class NotificationsConsumer
     await this.notificationsService.createInAppNotification({
       userId: payload.userId,
       type: InAppNotificationType.DEPOSIT_SUCCESSFUL,
-      title: 'Deposit Successful 💰',
+      title: InAppNotificationTitles.DEPOSIT_SUCCESSFUL,
       body: `An amount of ${payload.amount} EGP has been credited to your wallet. Ref: ${payload.transactionId}.`,
       referenceId: payload.transactionId,
       referenceType: NotificationReferenceType.TRANSACTION,
@@ -619,7 +624,7 @@ export class NotificationsConsumer
     await this.notificationsService.createInAppNotification({
       userId: payload.userId,
       type: InAppNotificationType.WITHDRAWAL_COMPLETED,
-      title: 'Withdrawal Completed 💸',
+      title: InAppNotificationTitles.WITHDRAWAL_COMPLETED,
       body: `An amount of ${payload.amount} EGP has been withdrawn from your wallet. Ref: ${payload.transactionId}.`,
       referenceId: payload.transactionId,
       referenceType: NotificationReferenceType.TRANSACTION,
@@ -651,8 +656,25 @@ export class NotificationsConsumer
     await this.notificationsService.createInAppNotification({
       userId: payload.userId,
       type: InAppNotificationType.WELCOME,
-      title: 'Welcome Back to Mazadak! 🌟',
+      title: InAppNotificationTitles.WELCOME_BACK,
       body: 'Your account has been successfully reactivated.',
+    });
+  }
+
+  private async handleChatMessageSent(payload: ChatMessageSentPayload) {
+    if (!(await this.isUserEligibleForNotification(payload.recipientId))) {
+      this.logger.warn(
+        `Skipping ChatMessageSent notification for ineligible user: ${payload.recipientId}`,
+      );
+      return;
+    }
+    await this.notificationsService.createInAppNotification({
+      userId: payload.recipientId,
+      type: InAppNotificationType.NEW_CHAT_MESSAGE,
+      title: InAppNotificationTitles.NEW_CHAT_MESSAGE,
+      body: payload.preview,
+      referenceId: payload.auctionId,
+      referenceType: NotificationReferenceType.AUCTION,
     });
   }
 

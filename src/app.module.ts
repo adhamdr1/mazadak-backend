@@ -34,6 +34,7 @@ import { JwtService } from '@nestjs/jwt';
 import { UsersService } from './users/users.service';
 import { PubSubModule } from './infrastructure/pubsub/pubsub.module';
 import type { JwtPayload } from './auth/interfaces/jwt-payload.interface';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
@@ -156,6 +157,7 @@ import type { JwtPayload } from './auth/interfaces/jwt-payload.interface';
     BidsModule,
     AdminModule,
     PaymentModule,
+    ChatModule,
   ],
   providers: [
     // Global Authentication Guards
