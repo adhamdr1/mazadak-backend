@@ -35,6 +35,7 @@ import { UsersService } from './users/users.service';
 import { PubSubModule } from './infrastructure/pubsub/pubsub.module';
 import type { JwtPayload } from './auth/interfaces/jwt-payload.interface';
 import { ChatModule } from './chat/chat.module';
+import { ReviewsModule } from './reviews/reviews.module';
 
 @Module({
   imports: [
@@ -158,6 +159,7 @@ import { ChatModule } from './chat/chat.module';
     AdminModule,
     PaymentModule,
     ChatModule,
+    ReviewsModule,
   ],
   providers: [
     // Global Authentication Guards

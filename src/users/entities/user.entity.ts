@@ -3,6 +3,10 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
 import { UserRole } from '../enums/user-role.enum';
 import { AuthProvider } from '../enums/auth-provider.enum';
+import {
+  UserRatingStats,
+  UserRatingStatsSchema,
+} from '../../reviews/entities/user-rating-stats.entity';
 
 @Schema({ _id: false })
 @ObjectType()
@@ -84,6 +88,10 @@ export class User {
   @Field()
   @Prop({ default: false })
   isBanned!: boolean;
+
+  @Field(() => UserRatingStats, { nullable: true })
+  @Prop({ type: UserRatingStatsSchema, default: () => ({}) })
+  ratingStats?: UserRatingStats;
 
   @Field({ nullable: true })
   @Prop({ default: null, index: true, sparse: true })

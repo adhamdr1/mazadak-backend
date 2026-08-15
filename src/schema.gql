@@ -2,6 +2,24 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
 # ------------------------------------------------------
 
+type RatingBreakdown {
+  oneStar: Int!
+  twoStar: Int!
+  threeStar: Int!
+  fourStar: Int!
+  fiveStar: Int!
+}
+
+type UserRatingStats {
+  averageRating: Float!
+  totalReviews: Int!
+  asSellerAverageRating: Float!
+  asSellerTotalReviews: Int!
+  asBuyerAverageRating: Float!
+  asBuyerTotalReviews: Int!
+  breakdown: RatingBreakdown!
+}
+
 type Address {
   city: String!
   street: String!
@@ -20,6 +38,7 @@ type User {
   address: Address!
   isEmailVerified: Boolean!
   isBanned: Boolean!
+  ratingStats: UserRatingStats
   deletedAt: DateTime
   createdAt: DateTime!
   updatedAt: DateTime!
@@ -45,6 +64,18 @@ type UsersPage {
   total: Int!
   totalPages: Int!
   hasNextPage: Boolean!
+}
+
+"""Sanitized public profile projection for a user"""
+type PublicProfile {
+  id: ID!
+  firstName: String!
+  lastName: String!
+  city: String
+  memberSince: DateTime!
+  ratingStats: UserRatingStats
+  activeAuctionsCount: Int!
+  completedAuctionsCount: Int!
 }
 
 type AuthResponse {
@@ -149,12 +180,15 @@ enum InAppNotificationType {
   AUCTION_CANCELLED
   AUCTION_CANCELLED_BY_ADMIN
   NEW_CHAT_MESSAGE
+  REVIEW_RECEIVED
+  REVIEW_REPLIED
 }
 
 enum NotificationReferenceType {
   AUCTION
   TRANSACTION
   WALLET
+  REVIEW
 }
 
 type InAppNotificationsPage {
@@ -327,7 +361,63 @@ type ChatReadStateUpdatedPayload {
   lastReadAt: DateTime
 }
 
+type ReviewCriteria {
+  itemAccuracy: Int
+  communication: Int
+  packaging: Int
+  smoothExperience: Int
+}
+
+type Review {
+  _id: ID!
+  auctionId: ID!
+  reviewerId: ID!
+  reviewedUserId: ID!
+  type: ReviewType!
+  status: ReviewStatus!
+  overallRating: Float!
+  criteria: ReviewCriteria
+  comment: String
+  reply: String
+  repliedAt: DateTime
+  publishedAt: DateTime
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  reviewer: PublicProfile
+  reviewedUser: PublicProfile
+  auction: Auction
+}
+
+"""
+Type of review submitted (buyer reviewing seller or seller reviewing buyer)
+"""
+enum ReviewType {
+  BUYER_TO_SELLER
+  SELLER_TO_BUYER
+}
+
+"""Publication and moderation status of a review"""
+enum ReviewStatus {
+  PENDING
+  PUBLISHED
+  HIDDEN
+}
+
+type ReviewsPage {
+  items: [Review!]!
+  total: Int!
+  totalPages: Int!
+  hasNextPage: Boolean!
+}
+
+"""Indicates whether the current user is eligible to review an auction"""
+type CanReviewAuctionResponse {
+  canReview: Boolean!
+  reason: String
+}
+
 type Query {
+  publicProfile(userId: ID!): PublicProfile!
   me: User!
   findUser(input: FindUserInput!): User!
   users(input: PaginationInput!, filter: UsersFilterInput): UsersPage!
@@ -343,6 +433,7 @@ type Query {
   auction(id: ID!): Auction!
   myAuctions(input: PaginationInput!, filter: AuctionsFilterInput): AuctionsPage!
   myWonAuctions(input: PaginationInput!, filter: AuctionsFilterInput): AuctionsPage!
+  userAuctions(userId: ID!, input: PaginationInput, filter: AuctionsFilterInput): AuctionsPage!
   generateUploadSignature(folder: String): UploadSignatureResponse!
   auctionBids(auctionId: String!, input: PaginationInput!, filter: BidsFilterInput): BidsPage!
   adminBids(input: PaginationInput!, filter: BidsFilterInput): BidsPage!
@@ -354,6 +445,12 @@ type Query {
   adminGetDashboardStats: DashboardStats!
   chatMessages(auctionId: ID!, limit: Float! = 20, cursor: String): ChatMessagesConnection!
   chatReadState(auctionId: ID!): ChatReadState
+  userReviews(userId: ID!, input: PaginationInput, filter: ReviewsFilterInput, sort: ReviewsSortInput): ReviewsPage!
+  myWrittenReviews(input: PaginationInput): ReviewsPage!
+  userRatingStats(userId: ID!): UserRatingStats!
+  canReviewAuction(auctionId: ID!): CanReviewAuctionResponse!
+  review(id: ID!): Review!
+  adminAuctionReviews(auctionId: ID!): [Review!]!
 }
 
 input FindUserInput {
@@ -447,6 +544,22 @@ enum BidsSortField {
   AMOUNT
 }
 
+input ReviewsFilterInput {
+  type: ReviewType
+  minRating: Int
+}
+
+input ReviewsSortInput {
+  field: ReviewsSortField! = CREATED_AT
+  order: SortOrder! = DESC
+}
+
+"""Available sorting fields for reviews listing"""
+enum ReviewsSortField {
+  CREATED_AT
+  RATING
+}
+
 type Mutation {
   register(registerInput: RegisterInput!): RegisterResponse!
   login(loginInput: LoginInput!): AuthResponse!
@@ -482,6 +595,10 @@ type Mutation {
   deleteMessage(messageId: ID!): ChatMessage!
   reactToMessage(messageId: ID!, emoji: String): ChatMessage!
   markChatAsRead(auctionId: ID!, lastReadMessageId: ID!): Boolean!
+  createReview(input: CreateReviewInput!): Review!
+  replyToReview(input: ReplyReviewInput!): Review!
+  hideReview(reviewId: ID!): Review!
+  unhideReview(reviewId: ID!): Review!
 }
 
 input RegisterInput {
@@ -584,6 +701,25 @@ input CreateChatMessageInput {
   type: ChatMessageType
   mediaUrls: [String!]
   clientMessageId: String!
+}
+
+input CreateReviewInput {
+  auctionId: String!
+  overallRating: Int!
+  criteria: ReviewCriteriaInput
+  comment: String
+}
+
+input ReviewCriteriaInput {
+  itemAccuracy: Int
+  communication: Int
+  packaging: Int
+  smoothExperience: Int
+}
+
+input ReplyReviewInput {
+  reviewId: String!
+  reply: String!
 }
 
 type Subscription {

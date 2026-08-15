@@ -11,7 +11,7 @@
 
 **A highly scalable, robust, and event-driven backend system for a real-time auction and bidding platform. Built from the ground up using NestJS, GraphQL, and enterprise-grade Microservices patterns.**
 
-[💻 Quick Start & Installation](#-quick-start--installation) • [🎯 Overview](#-overview) • [🏗️ Architecture Flow](#️-architecture-flow) • [🗄️ Database Entities](#️-database-entities) • [✨ Key Technical Features](#-key-technical-features) • [💳 Payment Integration](#-payment-gateway-integration) • [🔨 Real-Time Bidding](#-real-time-bidding-flow) • [💬 Real-Time Chat Engine](#-post-auction-real-time-chat-engine)
+[💻 Quick Start & Installation](#-quick-start--installation) • [🎯 Overview](#-overview) • [🏗️ Architecture Flow](#️-architecture-flow) • [🗄️ Database Entities](#️-database-entities) • [✨ Key Technical Features](#-key-technical-features) • [💳 Payment Integration](#-payment-gateway-integration) • [🔨 Real-Time Bidding](#-real-time-bidding-flow) • [💬 Real-Time Chat Engine](#-post-auction-real-time-chat-engine) • [⭐ Rating & Reviews](#-rating--reviews-system)
 
 </div>
 
@@ -132,6 +132,8 @@ Our database schema is designed to handle financial transactions securely and ma
    - Dedicated store ensuring idempotent, exactly-once processing of payment gateway webhook callbacks.
 9. **Outbox Event (`outbox_events`)**:
    - Temporarily stores domain events before they are picked up and published to RabbitMQ to ensure zero data loss.
+10. **Review (`reviews`)**:
+   - Stores ratings (1-5), multi-dimensional criteria breakdown, mutual blind review states (`PENDING`, `PUBLISHED`, `HIDDEN`), public seller replies, and published timestamps.
 
 ---
 
@@ -332,6 +334,64 @@ sequenceDiagram
     PubSub-->>WS: Broadcast to Active WebSocket Subscribers
     WS-->>Client: Live WS Event (messageSent)
     WS-->>Other: Live WS Event (messageSent - Real-Time Delivery 🚀)
+```
+
+---
+
+## ⭐ Rating & Reviews System
+
+An Airbnb-style, two-sided **Mutual Blind Review Engine** engineered for transaction integrity, trust building, and prevention of retaliatory ratings between buyers and sellers.
+
+### Architectural & Business Highlights
+- **Mutual Blind Review Flow:** When the first party (e.g. Winner) submits a review, its status is stored as `PENDING` and kept hidden from both public profile queries and the counterpart (Seller).
+- **Simultaneous Double-Blind Reveal:** As soon as the counterpart submits their review within a multi-document MongoDB transaction, both reviews transition atomically to `PUBLISHED`, trigger Outbox events, and invalidate user Redis caches.
+- **14-Day Review Window & Expiration Cron:** Participants have 14 days from auction conclusion to submit reviews. A scheduled background worker automatically transitions single orphaned pending reviews to `PUBLISHED` once the window expires.
+- **Multi-Dimensional Granular Criteria:**
+  - *Buyer reviewing Seller:* Overall Rating (1-5), `itemAccuracy`, `communication`, `packaging`, and `smoothExperience`.
+  - *Seller reviewing Buyer:* Overall Rating (1-5), `communication`, and `smoothExperience`.
+- **Public Single-Thread Reply:** The reviewed user can post a single public reply to any published review (e.g., expressing gratitude or addressing feedback).
+- **Admin Moderation with Real-Time Score Invalidation:** Platform admins can hide abusive reviews (`status = HIDDEN`), which immediately recalculates user average star ratings, star breakdowns, and flushes Redis caches.
+- **High-Performance Redis SWR Caching:** Review listings and user rating aggregates are served via **Stale-While-Revalidate** with single-flight request coalescing and automated `dateReviver` deserialization.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Buyer as Buyer (Winner)
+    participant Seller as Seller
+    participant API as GraphQL Gateway
+    participant ReviewSvc as ReviewsService
+    participant DB as MongoDB (ACID Transaction)
+    participant Redis as Redis SWR Cache
+    participant Outbox as Outbox Collection
+    participant Worker as Expiration Cron Worker
+
+    Note over Buyer,Seller: Phase 1: Buyer Submits First Review (Blind Mode)
+    Buyer->>API: Mutation: createReview(auctionId, overallRating: 5, criteria, comment)
+    API->>ReviewSvc: createReview(buyerId, input)
+    ReviewSvc->>ReviewSvc: Verify Eligibility (Auction ENDED, Winner/Seller, Within 14-Day Window)
+    ReviewSvc->>DB: Check Counterpart Review Exists? (None found)
+    ReviewSvc->>DB: Insert Review (status: PENDING)
+    ReviewSvc->>Outbox: Save ReviewCreated Event
+    API-->>Buyer: Review Created (status: PENDING 🔒)
+    Note over Seller,Redis: Public & Seller cannot see Buyer's review yet!
+
+    Note over Buyer,Seller: Phase 2: Seller Submits Counterpart Review (Simultaneous Reveal)
+    Seller->>API: Mutation: createReview(auctionId, overallRating: 5, criteria, comment)
+    API->>ReviewSvc: createReview(sellerId, input)
+    ReviewSvc->>DB: Check Counterpart Review Exists? (Buyer's Pending Review Found!)
+    rect rgb(35, 45, 60)
+        Note over ReviewSvc,DB: Atomic Multi-Document Transaction
+        ReviewSvc->>DB: Update Buyer's Review -> status: PUBLISHED
+        ReviewSvc->>DB: Insert Seller's Review -> status: PUBLISHED
+        ReviewSvc->>Outbox: Save ReviewPublished Events (For Both Parties)
+    end
+    ReviewSvc->>Redis: Invalidate Cached Reviews & Rating Stats (Buyer & Seller)
+    API-->>Seller: Review Created (status: PUBLISHED 🟢)
+
+    Note over Buyer,Seller: Phase 3: Auto-Publishing Orphaned Reviews (Alternative Path)
+    Worker->>DB: Poll Expired Pending Reviews (> 14 Days Old)
+    Worker->>DB: Transactionally Update to PUBLISHED
+    Worker->>Redis: Invalidate Cache & Recalculate Rating Aggregates
 ```
 
 ---

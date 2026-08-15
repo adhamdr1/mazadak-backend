@@ -107,4 +107,8 @@ export interface IAuctionRepository {
     filter: AuctionsFilter,
     excludeStatuses?: AuctionStatus[],
   ): Promise<number>;
+
+  countUserAuctions(
+    sellerId: string,
+  ): Promise<{ active: number; completed: number }>;
 }

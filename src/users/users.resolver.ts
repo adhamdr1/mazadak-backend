@@ -1,4 +1,4 @@
-import { Resolver, Query, Mutation, Args } from '@nestjs/graphql';
+import { Resolver, Query, Mutation, Args, ID } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { User } from './entities/user.entity';
@@ -7,12 +7,14 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
+import { Public } from '../common/decorators/public.decorator';
 import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { FindUserInput } from './dto/find-user.input';
 import { PaginationInput } from '../common/dto/pagination.input';
 import { UpdateUserInput } from './dto/update-user.input';
 import { UsersPage } from './dto/users-page.type';
 import { UsersFilterInput } from './dto/users-filter.input';
+import { PublicProfile } from './dto/public-profile.dto';
 
 @Resolver(() => User)
 @UseGuards(JwtAuthGuard)
@@ -20,6 +22,14 @@ export class UsersResolver {
   constructor(private readonly usersService: UsersService) {}
 
   // ─── User Queries ──────────────────────────────────────────────────────────
+
+  @Public()
+  @Query(() => PublicProfile, { name: 'publicProfile' })
+  async getPublicProfile(
+    @Args('userId', { type: () => ID }) userId: string,
+  ): Promise<PublicProfile> {
+    return this.usersService.getPublicProfile(userId);
+  }
 
   @Query(() => User, { name: 'me' })
   async me(@CurrentUser() currentUser: JwtPayload): Promise<User> {

@@ -21,6 +21,9 @@ export enum RabbitMQEvent {
   WalletDepositInitiated = 'WalletDepositInitiated',
   UserSoftDeleted = 'UserSoftDeleted',
   ChatMessageSent = 'ChatMessageSent',
+  ReviewCreated = 'ReviewCreated',
+  ReviewPublished = 'ReviewPublished',
+  ReviewReplied = 'ReviewReplied',
 }
 
 // ─── Event Payloads ────────────────────────────────────────────────────────────
@@ -152,6 +155,31 @@ export interface ChatMessageSentPayload {
   preview: string;
 }
 
+export interface ReviewCreatedPayload {
+  reviewId: string;
+  auctionId: string;
+  reviewerId: string;
+  reviewedUserId: string;
+  type: string;
+  status: string;
+}
+
+export interface ReviewPublishedPayload {
+  reviewId: string;
+  auctionId: string;
+  reviewerId: string;
+  reviewedUserId: string;
+  overallRating: number;
+  type: string;
+}
+
+export interface ReviewRepliedPayload {
+  reviewId: string;
+  auctionId: string;
+  reviewerId: string;
+  replierId: string;
+}
+
 /** Union type of all event payloads */
 export type RabbitMQEventPayload =
   | BidPlacedPayload
@@ -171,7 +199,10 @@ export type RabbitMQEventPayload =
   | UserBannedPayload
   | WalletDepositInitiatedPayload
   | UserSoftDeletedPayload
-  | ChatMessageSentPayload;
+  | ChatMessageSentPayload
+  | ReviewCreatedPayload
+  | ReviewPublishedPayload
+  | ReviewRepliedPayload;
 
 /** Map for Discriminated Union Type Safety */
 export type RabbitMQEventMap = {
@@ -193,6 +224,9 @@ export type RabbitMQEventMap = {
   [RabbitMQEvent.WalletDepositInitiated]: WalletDepositInitiatedPayload;
   [RabbitMQEvent.UserSoftDeleted]: UserSoftDeletedPayload;
   [RabbitMQEvent.ChatMessageSent]: ChatMessageSentPayload;
+  [RabbitMQEvent.ReviewCreated]: ReviewCreatedPayload;
+  [RabbitMQEvent.ReviewPublished]: ReviewPublishedPayload;
+  [RabbitMQEvent.ReviewReplied]: ReviewRepliedPayload;
 };
 
 /** The parsed message with full type inference based on eventType */

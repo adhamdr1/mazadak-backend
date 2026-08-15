@@ -4,6 +4,19 @@ import Redis from 'ioredis';
 import { randomUUID } from 'crypto';
 import { RELEASE_LOCK_LUA_SCRIPT } from './redis.constants';
 
+const ISO_DATE_REGEX =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+
+export const dateReviver = (_key: string, value: unknown): unknown => {
+  if (typeof value === 'string' && ISO_DATE_REGEX.test(value)) {
+    const date = new Date(value);
+    if (!isNaN(date.getTime())) {
+      return date;
+    }
+  }
+  return value;
+};
+
 interface CacheEntry<T> {
   data: T;
   expiresAt: number; // soft expiration timestamp (ms)
@@ -37,7 +50,7 @@ export class RedisService {
       const raw = await this.redis.get(key);
 
       if (raw !== null) {
-        const entry = JSON.parse(raw) as CacheEntry<T>;
+        const entry = JSON.parse(raw, dateReviver) as CacheEntry<T>;
 
         if (Date.now() < entry.expiresAt) {
           // Fresh cache hit

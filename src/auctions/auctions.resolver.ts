@@ -84,6 +84,18 @@ export class AuctionsResolver {
     return this.auctionsService.findWonAuctions(currentUser.sub, input, filter);
   }
 
+  @Public()
+  @Query(() => AuctionsPage, { name: 'userAuctions' })
+  async getUserAuctions(
+    @Args('userId', { type: () => ID }) userId: string,
+    @Args('input', { nullable: true }) input?: PaginationInput,
+    @Args('filter', { nullable: true })
+    filter: AuctionsFilterInput = new AuctionsFilterInput(),
+  ): Promise<AuctionsPage> {
+    const pageInput = input ?? { page: 1, limit: 10 };
+    return this.auctionsService.findMyAuctions(userId, pageInput, filter);
+  }
+
   // ─── Mutations ────────────────────────────────────────────────────────────
 
   @Mutation(() => Auction)

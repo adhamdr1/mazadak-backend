@@ -270,4 +270,25 @@ export class MongoAuctionRepository implements IAuctionRepository {
     const query = this.buildQuery(filter, excludeStatuses);
     return await this.auctionModel.countDocuments(query).exec();
   }
+
+  async countUserAuctions(
+    sellerId: string,
+  ): Promise<{ active: number; completed: number }> {
+    const [active, completed] = await Promise.all([
+      this.auctionModel
+        .countDocuments({
+          sellerId: new Types.ObjectId(sellerId),
+          status: AuctionStatus.ACTIVE,
+        })
+        .exec(),
+      this.auctionModel
+        .countDocuments({
+          sellerId: new Types.ObjectId(sellerId),
+          status: AuctionStatus.ENDED,
+        })
+        .exec(),
+    ]);
+
+    return { active, completed };
+  }
 }
