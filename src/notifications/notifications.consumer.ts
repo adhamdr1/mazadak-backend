@@ -38,6 +38,8 @@ import {
   AccountReactivationRequestedPayload,
   AccountReactivatedPayload,
   ChatMessageSentPayload,
+  ReviewPublishedPayload,
+  ReviewRepliedPayload,
 } from '../infrastructure/rabbitmq/rabbitmq-event.types';
 import { InAppNotificationType } from './in-app/enums/in-app-notification-type.enum';
 import { NotificationReferenceType } from './in-app/enums/notification-reference-type.enum';
@@ -196,6 +198,12 @@ export class NotificationsConsumer
           break;
         case RabbitMQEvent.ChatMessageSent:
           await this.handleChatMessageSent(parsed.payload);
+          break;
+        case RabbitMQEvent.ReviewPublished:
+          await this.handleReviewPublished(parsed.payload);
+          break;
+        case RabbitMQEvent.ReviewReplied:
+          await this.handleReviewReplied(parsed.payload);
           break;
         default: {
           const unknownEvent = (parsed as { eventType?: string }).eventType;
@@ -675,6 +683,41 @@ export class NotificationsConsumer
       body: payload.preview,
       referenceId: payload.auctionId,
       referenceType: NotificationReferenceType.AUCTION,
+    });
+  }
+
+  private async handleReviewPublished(payload: ReviewPublishedPayload) {
+    if (!(await this.isUserEligibleForNotification(payload.reviewedUserId))) {
+      this.logger.warn(
+        `Skipping ReviewPublished notification for ineligible user: ${payload.reviewedUserId}`,
+      );
+      return;
+    }
+    await this.notificationsService.createInAppNotification({
+      userId: payload.reviewedUserId,
+      type: InAppNotificationType.REVIEW_RECEIVED,
+      title: InAppNotificationTitles.REVIEW_RECEIVED,
+      body: `You received a new review with a rating of ${payload.overallRating} ⭐!`,
+      referenceId: payload.reviewId,
+      referenceType: NotificationReferenceType.REVIEW,
+    });
+  }
+
+  private async handleReviewReplied(payload: ReviewRepliedPayload) {
+    if (!(await this.isUserEligibleForNotification(payload.reviewerId))) {
+      this.logger.warn(
+        `Skipping ReviewReplied notification for ineligible user: ${payload.reviewerId}`,
+      );
+      return;
+    }
+
+    await this.notificationsService.createInAppNotification({
+      userId: payload.reviewerId,
+      type: InAppNotificationType.REVIEW_REPLIED,
+      title: InAppNotificationTitles.REVIEW_REPLIED,
+      body: 'A new reply was posted to your review.',
+      referenceId: payload.reviewId,
+      referenceType: NotificationReferenceType.REVIEW,
     });
   }
 

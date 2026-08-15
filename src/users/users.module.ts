@@ -6,6 +6,7 @@ import { User, UserSchema } from './entities/user.entity';
 import { MongoUserRepository } from './repositories/mongo.user.repository';
 import { CqrsModule } from '@nestjs/cqrs';
 import { OutboxModule } from '../infrastructure/outbox/outbox.module';
+import { GetUserPublicProfileHandler } from './queries/handlers/get-user-public-profile.handler';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { OutboxModule } from '../infrastructure/outbox/outbox.module';
   providers: [
     UsersResolver,
     UsersService,
+    GetUserPublicProfileHandler,
     {
       provide: 'IUserRepository',
       useClass: MongoUserRepository,

@@ -24,6 +24,13 @@ import { CannotBanAdminException } from './exceptions/cannot-ban-admin.exception
 import { WalletHasBalanceException } from '../wallet/exceptions/wallet-has-balance.exception';
 import { QueryBus } from '@nestjs/cqrs';
 import { GetWalletBalanceQuery } from '../wallet/queries/get-wallet-balance.query';
+import { GetUserRatingStatsQuery } from '../reviews/queries/get-user-rating-stats.query';
+import { UserRatingStats } from '../reviews/entities/user-rating-stats.entity';
+import {
+  GetUserAuctionsCountQuery,
+  UserAuctionsCount,
+} from '../auctions/queries/get-user-auctions-count.query';
+import { PublicProfile } from './dto/public-profile.dto';
 import Decimal from 'decimal.js';
 
 @Injectable()
@@ -307,5 +314,32 @@ export class UsersService {
 
   async countAll(filter?: UsersFilterInput): Promise<number> {
     return this.userRepository.countAll(filter);
+  }
+
+  async getPublicProfile(userId: string): Promise<PublicProfile> {
+    const user = await this.userRepository.findById(userId);
+    if (!user) {
+      throw new UserNotFoundException();
+    }
+
+    const [ratingStats, auctionsCount] = await Promise.all([
+      this.queryBus.execute<GetUserRatingStatsQuery, UserRatingStats>(
+        new GetUserRatingStatsQuery(userId),
+      ),
+      this.queryBus.execute<GetUserAuctionsCountQuery, UserAuctionsCount>(
+        new GetUserAuctionsCountQuery(userId),
+      ),
+    ]);
+
+    return {
+      id: user._id.toString(),
+      firstName: user.firstName,
+      lastName: user.lastName,
+      city: user.address?.city,
+      memberSince: user.createdAt,
+      ratingStats,
+      activeAuctionsCount: auctionsCount?.active ?? 0,
+      completedAuctionsCount: auctionsCount?.completed ?? 0,
+    };
   }
 }
