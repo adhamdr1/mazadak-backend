@@ -14,6 +14,7 @@ export enum EmailTemplates {
   AUCTION_CANCELLED = 'auction-cancelled',
   ACCOUNT_REACTIVATION = 'account-reactivation',
   ACCOUNT_ACTIVATED = 'account-activated',
+  AUTO_BID_EXHAUSTED = 'auto-bid-exhausted',
 }
 
 export enum EmailSubjects {
@@ -31,4 +32,5 @@ export enum EmailSubjects {
   AUCTION_CANCELLED = 'Your auction has been cancelled on Mazadak',
   ACCOUNT_REACTIVATION = 'Reactivate your Mazadak account',
   ACCOUNT_ACTIVATED = 'Welcome back! Your Mazadak account is reactivated',
+  AUTO_BID_EXHAUSTED = 'Auto-Bid Limit Reached - Action Required | Mazadak',
 }

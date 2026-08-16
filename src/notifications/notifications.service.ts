@@ -152,6 +152,32 @@ export class NotificationsService {
     );
   }
 
+  async sendAutoBidExhaustedEmail(
+    email: string,
+    name: string,
+    auctionTitle: string,
+    maxAmount: number,
+    currentPrice: number,
+    auctionId: string,
+  ): Promise<void> {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'https://mazadak.com';
+    const auctionLink = `${frontendUrl}/auctions/${auctionId}`;
+
+    await this.emailService.send(
+      email,
+      EmailSubjects.AUTO_BID_EXHAUSTED,
+      EmailTemplates.AUTO_BID_EXHAUSTED,
+      {
+        name,
+        auctionTitle,
+        maxAmount,
+        currentPrice,
+        auctionLink,
+      },
+    );
+  }
+
   async sendAuctionWonEmail(
     email: string,
     name: string,

@@ -1,0 +1,45 @@
+<html lang='en'>
+  <head>
+    <meta charset='utf-8' />
+    <title>Auto-Bid Limit Reached</title>
+  </head>
+  <body
+    style='font-family: Arial, sans-serif; padding: 20px; color: #333; line-height: 1.6;'
+  >
+    <div
+      style='max-width: 600px; margin: 0 auto; text-align: center; border: 1px solid #eee; padding: 30px; border-radius: 8px;'
+    >
+      <h2 style='color: #e67e22;'>Auto-Bid Limit Reached ⚠️</h2>
+      <p>Hello <strong>{{name}}</strong>,</p>
+      <p>Your automatic bidding ceiling for the auction
+        <strong>{{auctionTitle}}</strong>
+        has been reached, and another bidder has placed a higher bid.</p>
+
+      <div
+        style='background-color: #fdf6e2; border-left: 4px solid #e67e22; padding: 20px; border-radius: 6px; margin: 25px 0; text-align: left;'
+      >
+        <p style='margin: 5px 0;'><strong>Auction:</strong> {{auctionTitle}}</p>
+        <p style='margin: 5px 0;'><strong>Your Maximum Auto-Bid Limit:</strong>
+          {{maxAmount}}
+          EGP</p>
+        <p style='margin: 5px 0;'><strong>Current Winning Bid:</strong>
+          <span style='color: #d35400; font-weight: bold;'>{{currentPrice}}
+            EGP</span></p>
+      </div>
+
+      <p>Don't miss out on winning this item! You can increase your auto-bid
+        ceiling or place a manual bid right away:</p>
+
+      <a
+        href='{{auctionLink}}'
+        style='display: inline-block; padding: 12px 24px; background-color: #e67e22; color: #ffffff; text-decoration: none; border-radius: 6px; margin: 15px 0; font-weight: bold;'
+      >
+        Raise Bid / Update Auto-Bid
+      </a>
+
+      <p style='font-size: 12px; color: #888; margin-top: 30px;'>If you no
+        longer wish to participate in this auction, no further action is
+        required.</p>
+    </div>
+  </body>
+</html>

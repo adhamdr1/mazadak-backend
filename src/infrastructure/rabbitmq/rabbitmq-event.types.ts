@@ -24,6 +24,8 @@ export enum RabbitMQEvent {
   ReviewCreated = 'ReviewCreated',
   ReviewPublished = 'ReviewPublished',
   ReviewReplied = 'ReviewReplied',
+  AutoBidPlaced = 'AutoBidPlaced',
+  AutoBidExhausted = 'AutoBidExhausted',
 }
 
 // ─── Event Payloads ────────────────────────────────────────────────────────────
@@ -38,6 +40,24 @@ export interface BidPlacedPayload {
   /** Previous winner who was outbid — undefined if no previous winner */
   outbidUserId?: string;
   outbidTransactionId?: string;
+}
+
+export interface AutoBidPlacedPayload {
+  bidId: string;
+  auctionId: string;
+  auctionTitle: string;
+  bidderId: string;
+  amount: number;
+  isAutoBid: boolean;
+}
+
+export interface AutoBidExhaustedPayload {
+  autoBidId: string;
+  auctionId: string;
+  auctionTitle: string;
+  userId: string;
+  maxAmount: number;
+  currentPrice: number;
 }
 
 export interface AuctionStartedPayload {
@@ -202,7 +222,9 @@ export type RabbitMQEventPayload =
   | ChatMessageSentPayload
   | ReviewCreatedPayload
   | ReviewPublishedPayload
-  | ReviewRepliedPayload;
+  | ReviewRepliedPayload
+  | AutoBidPlacedPayload
+  | AutoBidExhaustedPayload;
 
 /** Map for Discriminated Union Type Safety */
 export type RabbitMQEventMap = {
@@ -227,6 +249,8 @@ export type RabbitMQEventMap = {
   [RabbitMQEvent.ReviewCreated]: ReviewCreatedPayload;
   [RabbitMQEvent.ReviewPublished]: ReviewPublishedPayload;
   [RabbitMQEvent.ReviewReplied]: ReviewRepliedPayload;
+  [RabbitMQEvent.AutoBidPlaced]: AutoBidPlacedPayload;
+  [RabbitMQEvent.AutoBidExhausted]: AutoBidExhaustedPayload;
 };
 
 /** The parsed message with full type inference based on eventType */

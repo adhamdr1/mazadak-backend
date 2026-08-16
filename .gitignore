@@ -57,4 +57,6 @@ nothing.txt
 bids-test.html
 /ui-test/
 seed.ts
-clear-db.ts
+
+token.txt
+reset-db.ts

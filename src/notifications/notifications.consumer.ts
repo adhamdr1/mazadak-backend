@@ -40,6 +40,8 @@ import {
   ChatMessageSentPayload,
   ReviewPublishedPayload,
   ReviewRepliedPayload,
+  AutoBidPlacedPayload,
+  AutoBidExhaustedPayload,
 } from '../infrastructure/rabbitmq/rabbitmq-event.types';
 import { InAppNotificationType } from './in-app/enums/in-app-notification-type.enum';
 import { NotificationReferenceType } from './in-app/enums/notification-reference-type.enum';
@@ -204,6 +206,12 @@ export class NotificationsConsumer
           break;
         case RabbitMQEvent.ReviewReplied:
           await this.handleReviewReplied(parsed.payload);
+          break;
+        case RabbitMQEvent.AutoBidPlaced:
+          await this.handleAutoBidPlaced(parsed.payload);
+          break;
+        case RabbitMQEvent.AutoBidExhausted:
+          await this.handleAutoBidExhausted(parsed.payload);
           break;
         default: {
           const unknownEvent = (parsed as { eventType?: string }).eventType;
@@ -718,6 +726,59 @@ export class NotificationsConsumer
       body: 'A new reply was posted to your review.',
       referenceId: payload.reviewId,
       referenceType: NotificationReferenceType.REVIEW,
+    });
+  }
+
+  private async handleAutoBidPlaced(payload: AutoBidPlacedPayload) {
+    if (!(await this.isUserEligibleForNotification(payload.bidderId))) {
+      this.logger.warn(
+        `Skipping AutoBidPlaced notification for ineligible user: ${payload.bidderId}`,
+      );
+      return;
+    }
+
+    await this.notificationsService.createInAppNotification({
+      userId: payload.bidderId,
+      type: InAppNotificationType.AUTO_BID_PLACED,
+      title: InAppNotificationTitles.AUTO_BID_PLACED,
+      body: `Your auto-bid placed a new bid of ${payload.amount} EGP on "${payload.auctionTitle}".`,
+      referenceId: payload.auctionId,
+      referenceType: NotificationReferenceType.AUCTION,
+    });
+  }
+
+  private async handleAutoBidExhausted(payload: AutoBidExhaustedPayload) {
+    const user = await this.usersService.findByIdIncludingDeleted(
+      payload.userId,
+    );
+    if (!user || user.isBanned) {
+      this.logger.warn(
+        `Skipping AutoBidExhausted notification for ineligible user: ${payload.userId}`,
+      );
+      return;
+    }
+
+    const name =
+      [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
+
+    // Email
+    await this.notificationsService.sendAutoBidExhaustedEmail(
+      user.email,
+      name,
+      payload.auctionTitle,
+      payload.maxAmount,
+      payload.currentPrice,
+      payload.auctionId,
+    );
+
+    // In-App Notification
+    await this.notificationsService.createInAppNotification({
+      userId: payload.userId,
+      type: InAppNotificationType.AUTO_BID_EXHAUSTED,
+      title: InAppNotificationTitles.AUTO_BID_EXHAUSTED,
+      body: `Your auto-bid limit of ${payload.maxAmount} EGP on "${payload.auctionTitle}" has been reached. Current price is ${payload.currentPrice} EGP.`,
+      referenceId: payload.auctionId,
+      referenceType: NotificationReferenceType.AUCTION,
     });
   }
 
