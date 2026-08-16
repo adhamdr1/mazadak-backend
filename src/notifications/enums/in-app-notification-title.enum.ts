@@ -13,4 +13,6 @@ export enum InAppNotificationTitles {
   NEW_CHAT_MESSAGE = 'New Chat Message',
   REVIEW_RECEIVED = 'New Review Received! ⭐',
   REVIEW_REPLIED = 'New Reply to Your Review 💬',
+  AUTO_BID_PLACED = 'Auto-bid placed! 🤖',
+  AUTO_BID_EXHAUSTED = 'Auto-bid limit reached! ⚠️',
 }

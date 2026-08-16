@@ -14,10 +14,10 @@ import { BidAmountTooLowException } from './exceptions/bid-amount-too-low.except
 import { NotificationsService } from '../notifications/notifications.service';
 import { InvalidAuctionIdException } from './exceptions/invalid-auction-id.exception';
 import { OutboxService } from '../infrastructure/outbox/outbox.service';
-
 import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
 import { RedisService } from '../infrastructure/redis/redis.service';
 import { getRedisConnectionToken } from '@nestjs-modules/ioredis';
+import { ProxyBiddingEngineService } from './services/proxy-bidding-engine.service';
 
 const mockSession = {
   startTransaction: jest.fn(),
@@ -74,6 +74,19 @@ const mockOutboxService = {
   saveEvent: jest.fn().mockResolvedValue(undefined),
 };
 
+const mockAutoBidRepository = {
+  findActiveByAuctionId: jest.fn().mockResolvedValue([]),
+  findActiveByAuctionAndMaxAmount: jest.fn(),
+  findActiveByAuctionAndUser: jest.fn(),
+  findByAuctionAndUser: jest.fn(),
+  findByUserId: jest.fn().mockResolvedValue({ items: [], total: 0 }),
+  upsert: jest.fn(),
+  updateStatus: jest.fn(),
+  cancel: jest.fn(),
+  deactivateAllForAuction: jest.fn().mockResolvedValue(0),
+  countActiveByAuction: jest.fn().mockResolvedValue(0),
+};
+
 const mockRedisService = {
   invalidatePattern: jest.fn().mockResolvedValue(undefined),
 };
@@ -85,7 +98,9 @@ describe('BidsService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         BidsService,
+        ProxyBiddingEngineService,
         { provide: 'IBidRepository', useValue: mockBidRepository },
+        { provide: 'IAutoBidRepository', useValue: mockAutoBidRepository },
         { provide: 'IAuctionRepository', useValue: mockAuctionRepository },
         { provide: WalletService, useValue: mockWalletService },
         { provide: NotificationsService, useValue: mockNotificationsService },
@@ -106,6 +121,7 @@ describe('BidsService', () => {
             set: jest.fn().mockResolvedValue('OK'),
             del: jest.fn().mockResolvedValue(1),
             setex: jest.fn().mockResolvedValue('OK'),
+            eval: jest.fn().mockResolvedValue(1),
           },
         },
       ],
@@ -238,7 +254,12 @@ describe('BidsService', () => {
       const auctionId = new Types.ObjectId().toString();
       const sellerId = new Types.ObjectId().toString();
       const mockEndedAuctions = [
-        { _id: auctionId, sellerId: new Types.ObjectId(sellerId) },
+        {
+          _id: auctionId,
+          sellerId: new Types.ObjectId(sellerId),
+          title: 'Ended Auction',
+          currentPrice: 200,
+        },
       ];
       const mockWinningBid = { bidderId: new Types.ObjectId(), amount: 200 };
 

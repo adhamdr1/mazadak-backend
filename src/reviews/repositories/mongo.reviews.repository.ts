@@ -174,7 +174,7 @@ export class MongoReviewsRepository implements IReviewsRepository {
             repliedAt: new Date(),
           },
         },
-        { new: true, session: session || null },
+        { returnDocument: 'after', session: session || null },
       )
       .exec();
   }
@@ -194,7 +194,7 @@ export class MongoReviewsRepository implements IReviewsRepository {
       .findByIdAndUpdate(
         new Types.ObjectId(reviewId),
         { $set: updatePayload },
-        { new: true, session: session || null },
+        { returnDocument: 'after', session: session || null },
       )
       .exec();
   }

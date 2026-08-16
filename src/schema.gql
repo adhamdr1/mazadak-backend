@@ -182,6 +182,8 @@ enum InAppNotificationType {
   NEW_CHAT_MESSAGE
   REVIEW_RECEIVED
   REVIEW_REPLIED
+  AUTO_BID_PLACED
+  AUTO_BID_EXHAUSTED
 }
 
 enum NotificationReferenceType {
@@ -283,8 +285,32 @@ type UploadSignatureResponse {
   folder: String!
 }
 
+type AutoBid {
+  _id: ID!
+  auctionId: ID!
+  userId: ID!
+  maxAmount: String!
+  status: AutoBidStatus!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+"""The status of an auto-bid configuration (ACTIVE, EXHAUSTED, CANCELLED)"""
+enum AutoBidStatus {
+  ACTIVE
+  EXHAUSTED
+  CANCELLED
+}
+
 type BidsPage {
   items: [Bid!]!
+  total: Int!
+  totalPages: Int!
+  hasNextPage: Boolean!
+}
+
+type AutoBidsPage {
+  items: [AutoBid!]!
   total: Int!
   totalPages: Int!
   hasNextPage: Boolean!
@@ -438,6 +464,8 @@ type Query {
   auctionBids(auctionId: String!, input: PaginationInput!, filter: BidsFilterInput): BidsPage!
   adminBids(input: PaginationInput!, filter: BidsFilterInput): BidsPage!
   myBids(input: PaginationInput!, filter: BidsFilterInput): BidsPage!
+  myAutoBid(auctionId: ID!): AutoBid
+  myAutoBids(input: PaginationInput!, status: AutoBidStatus): AutoBidsPage!
   adminGetUsers(input: PaginationInput!, filter: UsersFilterInput): UsersPage!
   adminGetUserDetails(userId: ID!): AdminUserDetails!
   adminGetAuctions(input: PaginationInput!, filter: AuctionsFilterInput): AuctionsPage!
@@ -588,6 +616,8 @@ type Mutation {
   uploadImage(input: UploadImageInput!): UploadImageResponse!
   deleteImage(url: String!): Boolean!
   placeBid(input: PlaceBidInput!): Bid!
+  setAutoBid(input: SetAutoBidInput!): AutoBid!
+  cancelAutoBid(input: CancelAutoBidInput!): Boolean!
   adminToggleUserBan(userId: ID!): User!
   adminCancelAuction(auctionId: ID!, reason: String!): Boolean!
   sendMessage(input: CreateChatMessageInput!): ChatMessage!
@@ -693,6 +723,19 @@ input UploadImageInput {
 input PlaceBidInput {
   auctionId: ID!
   amount: Float!
+}
+
+input SetAutoBidInput {
+  """The ID of the auction to configure auto-bidding for"""
+  auctionId: ID!
+
+  """The maximum ceiling amount the user is willing to bid"""
+  maxAmount: Float!
+}
+
+input CancelAutoBidInput {
+  """The ID of the auction to cancel auto-bidding for"""
+  auctionId: ID!
 }
 
 input CreateChatMessageInput {
