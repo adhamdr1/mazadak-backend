@@ -11,7 +11,7 @@
 
 **A highly scalable, robust, and event-driven backend system for a real-time auction and bidding platform. Built from the ground up using NestJS, GraphQL, and enterprise-grade Microservices patterns.**
 
-[💻 Quick Start & Installation](#-quick-start--installation) • [🎯 Overview](#-overview) • [🏗️ Architecture Flow](#️-architecture-flow) • [🗄️ Database Entities](#️-database-entities) • [✨ Key Technical Features](#-key-technical-features) • [💳 Payment Integration](#-payment-gateway-integration) • [🔨 Real-Time Bidding](#-real-time-bidding-flow) • [🤖 Auto-Bidding Engine](#-auto-bidding-proxy-bidding-engine) • [💬 Real-Time Chat Engine](#-post-auction-real-time-chat-engine) • [⭐ Rating & Reviews](#-rating--reviews-system)
+[💻 Quick Start & Installation](#-quick-start--installation) • [🎯 Overview](#-overview) • [🏗️ Architecture Flow](#️-architecture-flow) • [🗄️ Database Entities](#️-database-entities) • [✨ Key Technical Features](#-key-technical-features) • [💳 Payment Integration](#-payment-gateway-integration) • [🔨 Real-Time Bidding](#-real-time-bidding-flow) • [🤖 Auto-Bidding Engine](#-auto-bidding-proxy-bidding-engine) • [💬 Real-Time Chat Engine](#-post-auction-real-time-chat-engine) • [⭐ Rating & Reviews](#-rating--reviews-system) • [🛡️ Escrow & Dispute System](#️-escrow--dispute-resolution-system)
 
 </div>
 
@@ -139,15 +139,21 @@ Our database schema is designed to handle financial transactions securely and ma
 6. **Transaction (`transactions`)**:
    - The immutable financial ledger.
    - Records every `DEPOSIT`, `WITHDRAW`, `HOLD`, `RELEASE`, and `CAPTURE` operation tied to a Wallet.
-7. **Chat Message (`chat_messages`)**:
+7. **Escrow (`escrows`)**:
+   - Holds captured auction winner funds safely during the 7-day inspection window.
+   - Manages states (`HELD`, `RELEASED`, `REFUNDED`, `DISPUTED`), expiration timestamps, and release reasons.
+8. **Dispute (`disputes`)**:
+   - Manages formal dispute cases between buyers and sellers (`OPEN`, `UNDER_REVIEW`, `RESOLVED_BUYER_REFUNDED`, `RESOLVED_SELLER_PAID`, `CANCELLED`).
+   - Stores dispute reasons, claim descriptions, evidence URLs, admin adjudications, and resolution notes.
+9. **Chat Message (`chat_messages`)**:
    - Stores post-auction messages, clientMessageId idempotency, reactions array, media URLs, edit/delete flags, and sender snapshots.
-8. **Chat Read State (`chat_read_states`)**:
-   - Tracks the latest read message ID and read timestamp per participant for real-time read receipts.
-9. **Webhook Event (`webhook_events`)**:
-   - Dedicated store ensuring idempotent, exactly-once processing of payment gateway webhook callbacks.
-10. **Outbox Event (`outbox_events`)**:
+10. **Chat Read State (`chat_read_states`)**:
+    - Tracks the latest read message ID and read timestamp per participant for real-time read receipts.
+11. **Webhook Event (`webhook_events`)**:
+    - Dedicated store ensuring idempotent, exactly-once processing of payment gateway webhook callbacks.
+12. **Outbox Event (`outbox_events`)**:
     - Temporarily stores domain events before they are picked up and published to RabbitMQ to ensure zero data loss.
-11. **Review (`reviews`)**:
+13. **Review (`reviews`)**:
     - Stores ratings (1-5), multi-dimensional criteria breakdown, mutual blind review states (`PENDING`, `PUBLISHED`, `HIDDEN`), public seller replies, and published timestamps.
 
 ---
@@ -541,6 +547,86 @@ sequenceDiagram
     Worker->>DB: Poll Expired Pending Reviews (> 14 Days Old)
     Worker->>DB: Transactionally Update to PUBLISHED
     Worker->>Redis: Invalidate Cache & Recalculate Rating Aggregates
+```
+
+---
+
+## 🛡️ Escrow & Dispute Resolution System
+
+An enterprise-grade, trust-preserving **Escrow & Dispute Resolution Engine** designed to safeguard buyer funds, protect sellers from chargeback fraud, and arbitrate marketplace transactions with absolute financial integrity.
+
+### Architectural & Business Highlights
+
+- **7-Day Inspection Window & Escrow Hold:** Upon auction finalization, the winning bidder's funds are captured and held in an Escrow contract (`status: HELD`) rather than being deposited directly into the seller's balance.
+- **Instant Buyer Confirmation (`confirmDelivery`):** Buyers can confirm receipt of the item in satisfactory condition at any time during the inspection window, instantly triggering an atomic wallet deposit to the seller and marking the escrow as `RELEASED`.
+- **Distributed Auto-Release Expiration Cron (`EscrowExpirationService`):** A scheduled background worker (running every 10 minutes) automatically releases held funds to sellers if the 7-day inspection window elapses without dispute, safeguarded by **Redis Distributed Locks (`SET NX EX` + Lua script)** across horizontal server instances.
+- **Structured Dispute Lifecycle & Evidence Submission:**
+  - Buyers or sellers can open formal dispute cases (`openDispute`) with specific reasons (`ITEM_NOT_RECEIVED`, `ITEM_NOT_AS_DESCRIBED`, `ITEM_DAMAGED`, `COUNTERFEIT_ITEM`, `SELLER_UNRESPONSIVE`, `OTHER`), detailed descriptions, and Cloudinary evidence URLs.
+  - Automatically locks the underlying escrow hold in `DISPUTED` status, freezing all direct release paths.
+- **Multi-Channel Formal Legal & Financial Notifications:**
+  - Transactional In-App notifications sent across all lifecycle state transitions.
+  - High-priority legal/financial email alerts rendered via Handlebars HTML templates (`dispute-opened.hbs`, `dispute-resolved.hbs`) dispatched to both plaintiff and defendant.
+- **Administrative Adjudication & Resolution (`resolveDispute`):**
+  - Platform administrators review evidence (`UNDER_REVIEW`) and issue binding decisions:
+    - `REFUND_BUYER`: Atomically credits funds back to the buyer's wallet and transitions escrow to `REFUNDED`.
+    - `PAY_SELLER`: Atomically credits funds to the seller's wallet and transitions escrow to `RELEASED`.
+- **Voluntary Dispute Cancellation (`cancelDispute`):** The initiating party can cancel their dispute before administrative adjudication, smoothly returning the escrow hold to `HELD` status.
+- **ACID MongoDB Transactions & Outbox Pattern:** All state mutations and financial balance adjustments execute within multi-document MongoDB `ClientSession` transactions, emitting domain events to the Outbox for guaranteed eventual consistency.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Buyer as Buyer (Winner)
+    participant Seller as Seller
+    participant Admin as Platform Admin
+    participant API as GraphQL Gateway
+    participant EscrowSvc as EscrowService
+    participant DisputeSvc as DisputesService
+    participant DB as MongoDB (ACID Transaction)
+    participant Outbox as Outbox Collection
+    participant Worker as Expiration Cron Worker
+
+    Note over Buyer,Seller: Flow 1: Buyer Confirms Delivery (Happy Path)
+    Buyer->>API: Mutation: confirmDelivery(escrowId)
+    API->>EscrowSvc: confirmDelivery(buyerId, escrowId)
+    rect rgb(35, 45, 60)
+        Note over EscrowSvc,DB: Atomic Multi-Document Transaction
+        EscrowSvc->>DB: Deposit Funds to Seller Wallet
+        EscrowSvc->>DB: Update Escrow -> status: RELEASED
+        EscrowSvc->>Outbox: Save EscrowReleased Event
+    end
+    API-->>Buyer: Escrow Released (Funds Credited to Seller 🟢)
+
+    Note over Buyer,Seller: Flow 2: 7-Day Window Expires Without Dispute (Auto-Release Path)
+    Worker->>DB: Poll Expired HELD Escrows (inspectionPeriodEndsAt <= NOW)
+    rect rgb(35, 45, 60)
+        Note over Worker,DB: Atomic Auto-Release with Redis Distributed Lock
+        Worker->>DB: Deposit Funds to Seller Wallet
+        Worker->>DB: Update Escrow -> status: RELEASED (releaseReason: EXPIRED_INSPECTION_WINDOW)
+        Worker->>Outbox: Save EscrowReleased Event
+    end
+
+    Note over Buyer,Admin: Flow 3: Buyer Opens Dispute & Admin Resolves (Dispute Path)
+    Buyer->>API: Mutation: openDispute(auctionId, reason, description, evidenceUrls)
+    API->>DisputeSvc: openDispute(buyerId, input)
+    rect rgb(45, 35, 45)
+        Note over DisputeSvc,DB: Atomic Dispute Initialization
+        DisputeSvc->>DB: Insert Dispute (status: OPEN)
+        DisputeSvc->>DB: Update Escrow -> status: DISPUTED
+        DisputeSvc->>Outbox: Save DisputeOpened & EscrowDisputed Events
+    end
+    Note over Buyer,Seller: RabbitMQ triggers urgent Email Alerts to Both Parties 📧
+
+    Admin->>API: Mutation: resolveDispute(disputeId, decision: REFUND_BUYER)
+    API->>DisputeSvc: resolveDispute(adminId, input)
+    rect rgb(35, 45, 60)
+        Note over DisputeSvc,DB: Atomic Financial Dispute Settlement
+        DisputeSvc->>DB: Refund Escrow Funds to Buyer Wallet
+        DisputeSvc->>DB: Update Escrow -> status: REFUNDED
+        DisputeSvc->>DB: Update Dispute -> status: RESOLVED_BUYER_REFUNDED
+        DisputeSvc->>Outbox: Save DisputeResolved Event
+    end
+    API-->>Admin: Dispute Resolved (Refund Completed ⚖️)
 ```
 
 ---
