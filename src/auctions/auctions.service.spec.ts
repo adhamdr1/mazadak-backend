@@ -107,6 +107,7 @@ describe('AuctionsService', () => {
             set: jest.fn().mockResolvedValue('OK'),
             del: jest.fn().mockResolvedValue(1),
             setex: jest.fn().mockResolvedValue('OK'),
+            eval: jest.fn().mockResolvedValue(1),
           },
         },
       ],
@@ -367,9 +368,10 @@ describe('AuctionsService', () => {
         mockAuction,
       ]);
       await service.activatePendingAuctions();
-      expect(mockAuctionRepository.updateManyStatus).toHaveBeenCalledWith(
-        [mockAuction._id],
+      expect(mockAuctionRepository.updateStatus).toHaveBeenCalledWith(
+        mockAuction._id.toString(),
         AuctionStatus.ACTIVE,
+        mockSession,
       );
     });
 

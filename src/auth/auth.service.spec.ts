@@ -241,12 +241,13 @@ describe('AuthService', () => {
       );
       expect(mockSession.commitTransaction).toHaveBeenCalled();
       expect(mockSession.endSession).toHaveBeenCalled();
-      expect(mockRabbitMQService.publish).toHaveBeenCalledWith(
+      expect(mockOutboxService.saveEvent).toHaveBeenCalledWith(
         RabbitMQEvent.UserRegistered,
         expect.objectContaining({
           userId: mockUser._id.toString(),
           email: mockUser.email,
         }),
+        mockSession,
       );
     });
 

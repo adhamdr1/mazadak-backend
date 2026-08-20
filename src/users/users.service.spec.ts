@@ -12,9 +12,18 @@ import { Types } from 'mongoose';
 import { User } from './entities/user.entity';
 import { UserRole } from './enums/user-role.enum';
 import { CreateUserInput } from './dto/create-user.input';
+import { QueryBus } from '@nestjs/cqrs';
+import { getRedisConnectionToken } from '@nestjs-modules/ioredis';
+import { OutboxService } from '../infrastructure/outbox/outbox.service';
+import { UserForbiddenException } from './exceptions/user-forbidden.exception';
+import { CannotBanAdminException } from './exceptions/cannot-ban-admin.exception';
+import { WalletHasBalanceException } from '../wallet/exceptions/wallet-has-balance.exception';
+import { GetWalletBalanceQuery } from '../wallet/queries/get-wallet-balance.query';
+import { RabbitMQEvent } from '../infrastructure/rabbitmq/rabbitmq-event.types';
 
 const mockUserRepository = {
   findById: jest.fn(),
+  findByIdIncludingDeleted: jest.fn(),
   findByEmail: jest.fn(),
   findByEmailWithPassword: jest.fn(),
   findByUserIdWithPassword: jest.fn(),
@@ -24,7 +33,16 @@ const mockUserRepository = {
   update: jest.fn(),
   findAll: jest.fn(),
   softDelete: jest.fn(),
+  reactivate: jest.fn(),
+  countVerified: jest.fn(),
+  countAll: jest.fn(),
   linkGoogleAccount: jest.fn(),
+  startSession: jest.fn().mockResolvedValue({
+    startTransaction: jest.fn(),
+    commitTransaction: jest.fn(),
+    abortTransaction: jest.fn(),
+    endSession: jest.fn(),
+  }),
 };
 
 const mockWalletService = {
@@ -33,6 +51,20 @@ const mockWalletService = {
 
 const mockRabbitMQService = {
   publish: jest.fn(),
+};
+
+const mockQueryBus = {
+  execute: jest.fn(),
+};
+
+const mockRedis = {
+  get: jest.fn(),
+  set: jest.fn(),
+  del: jest.fn(),
+};
+
+const mockOutboxService = {
+  saveEvent: jest.fn(),
 };
 
 describe('UsersService', () => {
@@ -54,6 +86,18 @@ describe('UsersService', () => {
         {
           provide: RabbitMQService,
           useValue: mockRabbitMQService,
+        },
+        {
+          provide: QueryBus,
+          useValue: mockQueryBus,
+        },
+        {
+          provide: getRedisConnectionToken('default'),
+          useValue: mockRedis,
+        },
+        {
+          provide: OutboxService,
+          useValue: mockOutboxService,
         },
       ],
     }).compile();
@@ -372,55 +416,61 @@ describe('UsersService', () => {
       email: 'admin@test.com',
     };
 
-    it('should throw ForbiddenException if normal user tries to delete another user', async () => {
+    it('should throw UserForbiddenException if user tries to delete themselves', async () => {
       // Act & Assert
       await expect(
-        service.softDeleteUser(normalUserPayload.sub, normalUserPayload),
-      ).rejects.toThrow(ForbiddenException);
+        service.softDeleteUser(currentUserId, normalUserPayload),
+      ).rejects.toThrow(UserForbiddenException);
 
       expect(mockUserRepository.softDelete).not.toHaveBeenCalled();
     });
 
-    it('should throw NotFoundException if user is not found', async () => {
+    it('should throw NotFoundException if target user is not found', async () => {
       // Arrange
-      // سنراقب دالة findById الموجودة داخل نفس الـ Service ونجعلها ترمي خطأ
       jest
         .spyOn(service, 'findById')
         .mockRejectedValueOnce(new NotFoundException());
 
       // Act & Assert
       await expect(
-        service.softDeleteUser(normalUserPayload.sub, normalUserPayload),
+        service.softDeleteUser(otherUserId, normalUserPayload),
       ).rejects.toThrow(NotFoundException);
 
       expect(mockUserRepository.softDelete).not.toHaveBeenCalled();
     });
 
-    it('should allow user to delete themselves', async () => {
+    it('should throw WalletHasBalanceException if wallet has balance', async () => {
       // Arrange
-      // 1. نقوم بتخزين الـ Spy في متغير لكي يرضى عنه TypeScript في النهاية
-      // 2. نستخدم as User بدلاً من as any
-      const findByIdSpy = jest
+      jest
         .spyOn(service, 'findById')
-        .mockResolvedValueOnce({ _id: currentUserId } as unknown as User);
+        .mockResolvedValueOnce({ _id: otherUserId } as unknown as User);
 
-      mockUserRepository.softDelete.mockResolvedValue(undefined); // ترجع void
+      mockQueryBus.execute.mockResolvedValueOnce({
+        balance: '50.00',
+        heldBalance: '0',
+      });
 
-      // Act
-      await service.softDeleteUser(normalUserPayload.sub, normalUserPayload);
+      // Act & Assert
+      await expect(
+        service.softDeleteUser(otherUserId, adminUserPayload),
+      ).rejects.toThrow(WalletHasBalanceException);
 
-      // Assert
-      // نفحص المتغير الذي خزنّاه بدلاً من الدالة الأصلية
-      expect(findByIdSpy).toHaveBeenCalledWith(currentUserId);
-      expect(mockUserRepository.softDelete).toHaveBeenCalledWith(currentUserId);
+      expect(mockQueryBus.execute).toHaveBeenCalledWith(
+        new GetWalletBalanceQuery(otherUserId),
+      );
+      expect(mockUserRepository.softDelete).not.toHaveBeenCalled();
     });
 
-    it('should allow ADMIN to delete any user', async () => {
+    it('should delete user if wallet is empty', async () => {
       // Arrange
       const findByIdSpy = jest
         .spyOn(service, 'findById')
         .mockResolvedValueOnce({ _id: otherUserId } as unknown as User);
 
+      mockQueryBus.execute.mockResolvedValueOnce({
+        balance: '0',
+        heldBalance: '0',
+      });
       mockUserRepository.softDelete.mockResolvedValue(undefined);
 
       // Act
@@ -428,7 +478,11 @@ describe('UsersService', () => {
 
       // Assert
       expect(findByIdSpy).toHaveBeenCalledWith(otherUserId);
-      expect(mockUserRepository.softDelete).toHaveBeenCalledWith(otherUserId);
+      expect(mockQueryBus.execute).toHaveBeenCalledWith(
+        new GetWalletBalanceQuery(otherUserId),
+      );
+      expect(mockUserRepository.softDelete).toHaveBeenCalled();
+      expect(mockOutboxService.saveEvent).toHaveBeenCalled();
     });
   });
 
@@ -671,6 +725,153 @@ describe('UsersService', () => {
       await expect(
         service.updatePassword(userId, 'new-hashed-password'),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('startSession', () => {
+    it('should start a session from repository', async () => {
+      const result = await service.startSession();
+      expect(result).toBeDefined();
+      expect(mockUserRepository.startSession).toHaveBeenCalled();
+    });
+  });
+
+  describe('findByIdIncludingDeleted', () => {
+    it('should return user including deleted', async () => {
+      const fakeId = new Types.ObjectId().toString();
+      const mockUser = { _id: fakeId, firstName: 'Deleted' };
+      mockUserRepository.findByIdIncludingDeleted.mockResolvedValue(mockUser);
+
+      const result = await service.findByIdIncludingDeleted(fakeId);
+      expect(result).toEqual(mockUser);
+      expect(mockUserRepository.findByIdIncludingDeleted).toHaveBeenCalledWith(
+        fakeId,
+      );
+    });
+
+    it('should throw NotFoundException if not found', async () => {
+      const fakeId = new Types.ObjectId().toString();
+      mockUserRepository.findByIdIncludingDeleted.mockResolvedValue(null);
+
+      await expect(service.findByIdIncludingDeleted(fakeId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('reactivateUser', () => {
+    it('should reactivate user and clear redis auth status', async () => {
+      const fakeId = new Types.ObjectId().toString();
+      const mockUser = { _id: fakeId, isDeleted: false };
+      mockUserRepository.reactivate.mockResolvedValue(mockUser);
+
+      const result = await service.reactivateUser(fakeId);
+      expect(result).toEqual(mockUser);
+      expect(mockUserRepository.reactivate).toHaveBeenCalledWith(
+        fakeId,
+        undefined,
+      );
+      expect(mockRedis.del).toHaveBeenCalledWith(`user:auth-status:${fakeId}`);
+    });
+
+    it('should throw NotFoundException if user not found for reactivation', async () => {
+      const fakeId = new Types.ObjectId().toString();
+      mockUserRepository.reactivate.mockResolvedValue(null);
+
+      await expect(service.reactivateUser(fakeId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('toggleBan', () => {
+    it('should toggle ban status, clear cache, and emit event when banned', async () => {
+      const fakeId = new Types.ObjectId().toString();
+      const mockUser = { _id: fakeId, role: UserRole.USER, isBanned: false };
+      const updatedUser = { ...mockUser, isBanned: true };
+
+      jest
+        .spyOn(service, 'findById')
+        .mockResolvedValue(mockUser as unknown as User);
+      mockUserRepository.update.mockResolvedValue(updatedUser);
+
+      const result = await service.toggleBan(fakeId);
+      expect(result).toEqual(updatedUser);
+      expect(mockRedis.del).toHaveBeenCalledWith(`user:auth-status:${fakeId}`);
+      expect(mockOutboxService.saveEvent).toHaveBeenCalledWith(
+        RabbitMQEvent.UserBanned,
+        { userId: fakeId },
+        expect.anything(),
+      );
+    });
+
+    it('should throw CannotBanAdminException when trying to ban an admin', async () => {
+      const fakeId = new Types.ObjectId().toString();
+      const mockUser = { _id: fakeId, role: UserRole.ADMIN, isBanned: false };
+
+      jest
+        .spyOn(service, 'findById')
+        .mockResolvedValue(mockUser as unknown as User);
+
+      await expect(service.toggleBan(fakeId)).rejects.toThrow(
+        CannotBanAdminException,
+      );
+      expect(mockUserRepository.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('countVerifiedUsers and countAll', () => {
+    it('should count verified users', async () => {
+      mockUserRepository.countVerified.mockResolvedValue(42);
+      const result = await service.countVerifiedUsers();
+      expect(result).toBe(42);
+      expect(mockUserRepository.countVerified).toHaveBeenCalled();
+    });
+
+    it('should count all users with optional filter', async () => {
+      mockUserRepository.countAll.mockResolvedValue(100);
+      const result = await service.countAll();
+      expect(result).toBe(100);
+      expect(mockUserRepository.countAll).toHaveBeenCalledWith(undefined);
+    });
+  });
+
+  describe('getPublicProfile', () => {
+    it('should return public profile with ratings and auction counts', async () => {
+      const fakeId = new Types.ObjectId().toString();
+      const mockUser = {
+        _id: new Types.ObjectId(fakeId),
+        firstName: 'John',
+        lastName: 'Doe',
+        address: { city: 'Cairo' },
+        createdAt: new Date(),
+      };
+
+      mockUserRepository.findById.mockResolvedValue(mockUser);
+      mockQueryBus.execute
+        .mockResolvedValueOnce({ averageRating: 4.5, totalReviews: 10 })
+        .mockResolvedValueOnce({ active: 2, completed: 5 });
+
+      const result = await service.getPublicProfile(fakeId);
+      expect(result).toEqual({
+        id: fakeId,
+        firstName: 'John',
+        lastName: 'Doe',
+        city: 'Cairo',
+        memberSince: mockUser.createdAt,
+        ratingStats: { averageRating: 4.5, totalReviews: 10 },
+        activeAuctionsCount: 2,
+        completedAuctionsCount: 5,
+      });
+    });
+
+    it('should throw NotFoundException if user not found', async () => {
+      const fakeId = new Types.ObjectId().toString();
+      mockUserRepository.findById.mockResolvedValue(null);
+
+      await expect(service.getPublicProfile(fakeId)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

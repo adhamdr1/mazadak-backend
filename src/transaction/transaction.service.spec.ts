@@ -2,11 +2,12 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { TransactionService } from './transaction.service';
 import { TransactionType } from './enums/transaction-type.enum';
 import { TransactionStatus } from './enums/transaction-status.enum';
-import { Types } from 'mongoose';
+import { ClientSession, Types } from 'mongoose';
 import { TransactionsFilterInput } from './dto/transactions-filter.input';
 import { PaginationInput } from '../common/dto/pagination.input';
 import { OutboxService } from '../infrastructure/outbox/outbox.service';
 import { RabbitMQEvent } from '../infrastructure/rabbitmq/rabbitmq-event.types';
+import { Transaction } from './entities/transaction.entity';
 
 const mockTransactionRepository = {
   create: jest.fn(),
@@ -16,11 +17,16 @@ const mockTransactionRepository = {
   countAll: jest.fn(),
   findById: jest.fn(),
   markHasChild: jest.fn(),
+  updateGatewayPaymentIntentId: jest.fn(),
+  markWalletCredited: jest.fn(),
+  sumTodayRevenue: jest.fn(),
 };
 
 const mockOutboxService = {
   saveEvent: jest.fn(),
 };
+
+const mockSession = {} as ClientSession;
 
 describe('TransactionService', () => {
   let service: TransactionService;
@@ -49,24 +55,115 @@ describe('TransactionService', () => {
   });
 
   describe('createTransaction', () => {
-    it('should create a transaction', async () => {
+    it('should create a transaction and mark hasChild if referenceId is provided', async () => {
+      const parentId = new Types.ObjectId().toString();
       const data = {
         walletId: new Types.ObjectId().toString(),
         type: TransactionType.DEPOSIT,
         amount: 100,
         currency: 'EGP',
         status: TransactionStatus.SUCCESS,
+        referenceId: parentId,
       };
-      const expectedResult = { _id: new Types.ObjectId().toString(), ...data };
+      const expectedResult = {
+        _id: new Types.ObjectId().toString(),
+        ...data,
+      } as unknown as Transaction;
       mockTransactionRepository.create.mockResolvedValue(expectedResult);
+      mockTransactionRepository.markHasChild.mockResolvedValue(undefined);
 
-      const result = await service.createTransaction(data);
+      const result = await service.createTransaction(data, mockSession);
 
       expect(result).toEqual(expectedResult);
       expect(mockTransactionRepository.create).toHaveBeenCalledWith(
         data,
-        undefined,
+        mockSession,
       );
+      expect(mockTransactionRepository.markHasChild).toHaveBeenCalledWith(
+        parentId,
+        mockSession,
+      );
+    });
+  });
+
+  describe('updateGatewayPaymentIntentId', () => {
+    it('should update gateway payment intent id if valid objectId', async () => {
+      const id = new Types.ObjectId().toString();
+      const expected = { _id: id } as unknown as Transaction;
+      mockTransactionRepository.updateGatewayPaymentIntentId.mockResolvedValue(
+        expected,
+      );
+
+      const result = await service.updateGatewayPaymentIntentId(
+        id,
+        'pi_123',
+        mockSession,
+      );
+
+      expect(result).toEqual(expected);
+      expect(
+        mockTransactionRepository.updateGatewayPaymentIntentId,
+      ).toHaveBeenCalledWith(id, 'pi_123', mockSession);
+    });
+
+    it('should return null if id is invalid', async () => {
+      const result = await service.updateGatewayPaymentIntentId(
+        'invalid-id',
+        'pi_123',
+      );
+
+      expect(result).toBeNull();
+      expect(
+        mockTransactionRepository.updateGatewayPaymentIntentId,
+      ).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('findByIdWithinSession', () => {
+    it('should find transaction within session if valid id', async () => {
+      const id = new Types.ObjectId().toString();
+      const expected = { _id: id } as unknown as Transaction;
+      mockTransactionRepository.findById.mockResolvedValue(expected);
+
+      const result = await service.findByIdWithinSession(id, mockSession);
+
+      expect(result).toEqual(expected);
+      expect(mockTransactionRepository.findById).toHaveBeenCalledWith(
+        id,
+        mockSession,
+      );
+    });
+
+    it('should return null if id is invalid', async () => {
+      const result = await service.findByIdWithinSession('invalid-id');
+
+      expect(result).toBeNull();
+      expect(mockTransactionRepository.findById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('markWalletCredited', () => {
+    it('should mark wallet credited if valid id', async () => {
+      const id = new Types.ObjectId().toString();
+      const expected = { _id: id } as unknown as Transaction;
+      mockTransactionRepository.markWalletCredited.mockResolvedValue(expected);
+
+      const result = await service.markWalletCredited(id, mockSession);
+
+      expect(result).toEqual(expected);
+      expect(mockTransactionRepository.markWalletCredited).toHaveBeenCalledWith(
+        id,
+        mockSession,
+      );
+    });
+
+    it('should return null if id is invalid', async () => {
+      const result = await service.markWalletCredited('invalid-id');
+
+      expect(result).toBeNull();
+      expect(
+        mockTransactionRepository.markWalletCredited,
+      ).not.toHaveBeenCalled();
     });
   });
 
@@ -74,7 +171,7 @@ describe('TransactionService', () => {
     const walletId = new Types.ObjectId().toString();
 
     it('should return transactions page with default pagination', async () => {
-      const items = [{ _id: 'tx1' }, { _id: 'tx2' }];
+      const items = [{ _id: 'tx1' }];
       mockTransactionRepository.findByWalletId.mockResolvedValue(items);
       mockTransactionRepository.countByWalletId.mockResolvedValue(15);
 
@@ -160,6 +257,29 @@ describe('TransactionService', () => {
     });
   });
 
+  describe('countTransactions and sumTodayRevenue', () => {
+    it('should count transactions with filter', async () => {
+      mockTransactionRepository.countAll.mockResolvedValue(42);
+
+      const filter: TransactionsFilterInput = {
+        status: TransactionStatus.SUCCESS,
+      };
+      const result = await service.countTransactions(filter);
+
+      expect(result).toBe(42);
+      expect(mockTransactionRepository.countAll).toHaveBeenCalledWith(filter);
+    });
+
+    it('should sum today revenue', async () => {
+      mockTransactionRepository.sumTodayRevenue.mockResolvedValue(12345);
+
+      const result = await service.sumTodayRevenue();
+
+      expect(result).toBe(12345);
+      expect(mockTransactionRepository.sumTodayRevenue).toHaveBeenCalled();
+    });
+  });
+
   describe('updateTransactionStatusAndEmitOutbox', () => {
     const txId = new Types.ObjectId().toString();
 
@@ -172,12 +292,24 @@ describe('TransactionService', () => {
           TransactionStatus.SUCCESS,
           1000,
           'EGP',
-          {} as unknown as any,
+          mockSession,
         ),
       ).rejects.toThrow('TRANSACTION_NOT_FOUND');
     });
 
-    it('should return early if transaction status is not PENDING', async () => {
+    it('should throw TransactionNotFoundException if transaction id is invalid', async () => {
+      await expect(
+        service.updateTransactionStatusAndEmitOutbox(
+          'invalid-id',
+          TransactionStatus.SUCCESS,
+          1000,
+          'EGP',
+          mockSession,
+        ),
+      ).rejects.toThrow('TRANSACTION_NOT_FOUND');
+    });
+
+    it('should return early if transaction hasChild is true', async () => {
       mockTransactionRepository.findById.mockResolvedValue({
         _id: txId,
         status: TransactionStatus.SUCCESS,
@@ -189,7 +321,7 @@ describe('TransactionService', () => {
         TransactionStatus.SUCCESS,
         1000,
         'EGP',
-        {} as unknown as any,
+        mockSession,
       );
 
       expect(mockTransactionRepository.create).not.toHaveBeenCalled();
@@ -207,9 +339,9 @@ describe('TransactionService', () => {
         service.updateTransactionStatusAndEmitOutbox(
           txId,
           TransactionStatus.SUCCESS,
-          1000, // 10 EGP
+          1000, // 10 EGP != 50 EGP
           'EGP',
-          {} as unknown as any,
+          mockSession,
         ),
       ).rejects.toThrow('TRANSACTION_AMOUNT_MISMATCH');
     });
@@ -228,7 +360,7 @@ describe('TransactionService', () => {
           TransactionStatus.SUCCESS,
           1000,
           'USD',
-          {} as unknown as any,
+          mockSession,
         ),
       ).rejects.toThrow('TRANSACTION_CURRENCY_MISMATCH');
     });
@@ -251,7 +383,7 @@ describe('TransactionService', () => {
         TransactionStatus.SUCCESS,
         1000,
         'EGP',
-        {} as unknown as any,
+        mockSession,
       );
 
       expect(mockOutboxService.saveEvent).not.toHaveBeenCalled();
@@ -269,14 +401,14 @@ describe('TransactionService', () => {
         status: TransactionStatus.PENDING,
       });
 
-      mockTransactionRepository.create.mockResolvedValue({} as any);
+      mockTransactionRepository.create.mockResolvedValue({});
 
       await service.updateTransactionStatusAndEmitOutbox(
         transactionId.toString(),
         TransactionStatus.SUCCESS,
         1000,
         'EGP',
-        {} as unknown as any,
+        mockSession,
       );
 
       expect(mockTransactionRepository.create).toHaveBeenCalledWith(
@@ -285,7 +417,7 @@ describe('TransactionService', () => {
           status: TransactionStatus.SUCCESS,
           referenceId: transactionId.toString(),
         }),
-        expect.any(Object),
+        mockSession,
       );
       expect(mockOutboxService.saveEvent).toHaveBeenCalledWith(
         RabbitMQEvent.WalletDepositInitiated,
@@ -294,7 +426,7 @@ describe('TransactionService', () => {
           amount: 10,
           transactionId: transactionId.toString(),
         },
-        expect.any(Object),
+        mockSession,
         transactionId.toString(),
       );
     });
