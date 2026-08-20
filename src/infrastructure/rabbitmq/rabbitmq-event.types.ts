@@ -26,6 +26,13 @@ export enum RabbitMQEvent {
   ReviewReplied = 'ReviewReplied',
   AutoBidPlaced = 'AutoBidPlaced',
   AutoBidExhausted = 'AutoBidExhausted',
+  EscrowCreated = 'EscrowCreated',
+  EscrowReleased = 'EscrowReleased',
+  EscrowRefunded = 'EscrowRefunded',
+  EscrowDisputed = 'EscrowDisputed',
+  DisputeOpened = 'DisputeOpened',
+  DisputeResolved = 'DisputeResolved',
+  DisputeCancelled = 'DisputeCancelled',
 }
 
 // ─── Event Payloads ────────────────────────────────────────────────────────────
@@ -200,6 +207,70 @@ export interface ReviewRepliedPayload {
   replierId: string;
 }
 
+export interface EscrowCreatedPayload {
+  escrowId: string;
+  auctionId: string;
+  buyerId: string;
+  sellerId: string;
+  amount: number;
+  currency: string;
+  inspectionPeriodEndsAt: string;
+}
+
+export interface EscrowReleasedPayload {
+  escrowId: string;
+  auctionId: string;
+  buyerId: string;
+  sellerId: string;
+  amount: number;
+  releaseReason: string;
+}
+
+export interface EscrowRefundedPayload {
+  escrowId: string;
+  auctionId: string;
+  buyerId: string;
+  sellerId: string;
+  amount: number;
+  refundReason?: string;
+}
+
+export interface EscrowDisputedPayload {
+  escrowId: string;
+  auctionId: string;
+  disputeId: string;
+  openedById: string;
+}
+
+export interface DisputeOpenedPayload {
+  disputeId: string;
+  escrowId: string;
+  auctionId: string;
+  openedById: string;
+  againstUserId: string;
+  reason: string;
+}
+
+export interface DisputeResolvedPayload {
+  disputeId: string;
+  escrowId: string;
+  auctionId: string;
+  openedById: string;
+  againstUserId: string;
+  adminId: string;
+  decision: string;
+  adminNotes?: string;
+}
+
+export interface DisputeCancelledPayload {
+  disputeId: string;
+  escrowId: string;
+  auctionId: string;
+  openedById: string;
+  againstUserId: string;
+  cancelledById: string;
+}
+
 /** Union type of all event payloads */
 export type RabbitMQEventPayload =
   | BidPlacedPayload
@@ -224,7 +295,14 @@ export type RabbitMQEventPayload =
   | ReviewPublishedPayload
   | ReviewRepliedPayload
   | AutoBidPlacedPayload
-  | AutoBidExhaustedPayload;
+  | AutoBidExhaustedPayload
+  | EscrowCreatedPayload
+  | EscrowReleasedPayload
+  | EscrowRefundedPayload
+  | EscrowDisputedPayload
+  | DisputeOpenedPayload
+  | DisputeResolvedPayload
+  | DisputeCancelledPayload;
 
 /** Map for Discriminated Union Type Safety */
 export type RabbitMQEventMap = {
@@ -251,6 +329,13 @@ export type RabbitMQEventMap = {
   [RabbitMQEvent.ReviewReplied]: ReviewRepliedPayload;
   [RabbitMQEvent.AutoBidPlaced]: AutoBidPlacedPayload;
   [RabbitMQEvent.AutoBidExhausted]: AutoBidExhaustedPayload;
+  [RabbitMQEvent.EscrowCreated]: EscrowCreatedPayload;
+  [RabbitMQEvent.EscrowReleased]: EscrowReleasedPayload;
+  [RabbitMQEvent.EscrowRefunded]: EscrowRefundedPayload;
+  [RabbitMQEvent.EscrowDisputed]: EscrowDisputedPayload;
+  [RabbitMQEvent.DisputeOpened]: DisputeOpenedPayload;
+  [RabbitMQEvent.DisputeResolved]: DisputeResolvedPayload;
+  [RabbitMQEvent.DisputeCancelled]: DisputeCancelledPayload;
 };
 
 /** The parsed message with full type inference based on eventType */

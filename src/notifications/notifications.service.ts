@@ -364,6 +364,44 @@ export class NotificationsService {
     );
   }
 
+  async sendDisputeOpenedEmail(
+    email: string,
+    name: string,
+    disputeId: string,
+    reason: string,
+    auctionId?: string,
+  ): Promise<void> {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'https://mazadak.com';
+    const disputeLink = `${frontendUrl}/disputes/${disputeId}`;
+
+    await this.emailService.send(
+      email,
+      EmailSubjects.DISPUTE_OPENED,
+      EmailTemplates.DISPUTE_OPENED,
+      { name, disputeId, reason, disputeLink, auctionId },
+    );
+  }
+
+  async sendDisputeResolvedEmail(
+    email: string,
+    name: string,
+    disputeId: string,
+    decision: string,
+    adminNotes?: string,
+  ): Promise<void> {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'https://mazadak.com';
+    const disputeLink = `${frontendUrl}/disputes/${disputeId}`;
+
+    await this.emailService.send(
+      email,
+      EmailSubjects.DISPUTE_RESOLVED,
+      EmailTemplates.DISPUTE_RESOLVED,
+      { name, disputeId, decision, adminNotes, disputeLink },
+    );
+  }
+
   formatDate(dateInput?: Date | string): string {
     const date = dateInput ? new Date(dateInput) : new Date();
     const timeZone =

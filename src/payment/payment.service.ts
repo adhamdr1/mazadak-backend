@@ -14,6 +14,7 @@ import { InitializePaymentDto } from './dto/initialize-payment.dto';
 import { PaymentInitResult } from './dto/payment-init-result.type';
 import { TransactionType } from '../transaction/enums/transaction-type.enum';
 import { TransactionStatus } from '../transaction/enums/transaction-status.enum';
+import { TransactionReferenceType } from '../transaction/enums/transaction-reference-type.enum';
 import { randomUUID } from 'crypto';
 import { type IWebhookEventRepository } from './interfaces/webhook-event.repository.interface';
 import { WebhookSignatureVerificationFailedException } from './exceptions/webhook-signature-verification-failed.exception';
@@ -257,6 +258,7 @@ export class PaymentService {
           currency: data.currency,
           status: TransactionStatus.FAILED,
           referenceId: transactionId,
+          referenceType: TransactionReferenceType.TRANSACTION,
           idempotencyKey,
           gatewayProvider: data.provider,
         })

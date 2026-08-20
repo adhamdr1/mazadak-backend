@@ -9,6 +9,7 @@ import { InvalidAmountException } from './exceptions/invalid-amount.exception';
 import { TransactionService } from '../transaction/transaction.service';
 import { TransactionType } from '../transaction/enums/transaction-type.enum';
 import { TransactionStatus } from '../transaction/enums/transaction-status.enum';
+import { TransactionReferenceType } from '../transaction/enums/transaction-reference-type.enum';
 import { Transaction } from '../transaction/entities/transaction.entity';
 import { WalletsPage } from './dto/wallets-page.type';
 import { PaginationInput } from '../common/dto/pagination.input';
@@ -59,6 +60,7 @@ export class WalletService {
     ) => Promise<Wallet | null>;
     onNull: () => never;
     referenceId?: string;
+    referenceType?: TransactionReferenceType;
     session?: ClientSession;
   }): Promise<{ wallet: Wallet; transaction: Transaction }> {
     this.validateAmount(params.amount);
@@ -81,6 +83,7 @@ export class WalletService {
         currency,
         status: TransactionStatus.SUCCESS,
         referenceId: params.referenceId,
+        referenceType: params.referenceType,
       },
       params.session,
     );
@@ -149,6 +152,7 @@ export class WalletService {
     referenceId?: string,
     session?: ClientSession,
     currency?: string,
+    referenceType?: TransactionReferenceType,
   ): Promise<{ wallet: Wallet; transaction: Transaction }> {
     const { wallet, transaction } = await this.executeWalletOp({
       userId,
@@ -156,6 +160,7 @@ export class WalletService {
       currency,
       type: TransactionType.DEPOSIT,
       referenceId,
+      referenceType,
       session,
       operation: (walletId, amt, sess) =>
         this.walletRepository.creditBalance(walletId, amt, sess),
@@ -188,9 +193,16 @@ export class WalletService {
     amount: number,
     referenceId?: string,
     session?: ClientSession,
+    referenceType?: TransactionReferenceType,
   ): Promise<{ wallet: Wallet; transaction: Transaction }> {
     if (session) {
-      return this.executeWithdrawal(userId, amount, referenceId, session);
+      return this.executeWithdrawal(
+        userId,
+        amount,
+        referenceId,
+        session,
+        referenceType,
+      );
     }
 
     const newSession = await this.connection.startSession();
@@ -206,6 +218,7 @@ export class WalletService {
         amount,
         referenceId,
         newSession,
+        referenceType,
       );
       await newSession.commitTransaction();
       return result;
@@ -222,6 +235,7 @@ export class WalletService {
             currency: 'EGP',
             status: TransactionStatus.FAILED,
             referenceId,
+            referenceType,
           });
         } catch (logErr) {
           this.logger.error(
@@ -241,12 +255,14 @@ export class WalletService {
     amount: number,
     referenceId?: string,
     session?: ClientSession,
+    referenceType?: TransactionReferenceType,
   ): Promise<{ wallet: Wallet; transaction: Transaction }> {
     const { wallet, transaction } = await this.executeWalletOp({
       userId,
       amount,
       type: TransactionType.WITHDRAW,
       referenceId,
+      referenceType,
       session,
       operation: (walletId, amt, sess) =>
         this.walletRepository.debitBalance(walletId, amt, sess),
@@ -316,12 +332,14 @@ export class WalletService {
     amount: number,
     referenceId?: string,
     session?: ClientSession,
+    referenceType?: TransactionReferenceType,
   ): Promise<{ wallet: Wallet; transaction: Transaction }> {
     return await this.executeWalletOp({
       userId,
       amount,
       type: TransactionType.HOLD,
       referenceId,
+      referenceType,
       session,
       operation: (walletId, amt, sess) =>
         this.walletRepository.holdBalance(walletId, amt, sess),
@@ -336,12 +354,14 @@ export class WalletService {
     amount: number,
     referenceId?: string,
     session?: ClientSession,
+    referenceType?: TransactionReferenceType,
   ): Promise<{ wallet: Wallet; transaction: Transaction }> {
     return await this.executeWalletOp({
       userId,
       amount,
       type: TransactionType.RELEASE,
       referenceId,
+      referenceType,
       session,
       operation: (walletId, amt, sess) =>
         this.walletRepository.releaseBalance(walletId, amt, sess),
@@ -356,12 +376,14 @@ export class WalletService {
     amount: number,
     referenceId?: string,
     session?: ClientSession,
+    referenceType?: TransactionReferenceType,
   ): Promise<{ wallet: Wallet; transaction: Transaction }> {
     return await this.executeWalletOp({
       userId,
       amount,
       type: TransactionType.CAPTURE,
       referenceId,
+      referenceType,
       session,
       operation: (walletId, amt, sess) =>
         this.walletRepository.captureHeldBalance(walletId, amt, sess),

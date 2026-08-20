@@ -14,6 +14,7 @@ import type { IAutoBidRepository } from '../interfaces/auto-bid-repository.inter
 import type { IBidRepository } from '../interfaces/bid-repository.interface';
 import type { IAuctionRepository } from '../../auctions/interfaces/auction-repository.interface';
 import { WalletService } from '../../wallet/wallet.service';
+import { TransactionReferenceType } from '../../transaction/enums/transaction-reference-type.enum';
 import { RealtimeService } from '../../infrastructure/pubsub/realtime.service';
 import { RedisService } from '../../infrastructure/redis/redis.service';
 import { OutboxService } from '../../infrastructure/outbox/outbox.service';
@@ -215,6 +216,7 @@ export class AutoBiddingService {
                 prevAmount,
                 input.auctionId,
                 session,
+                TransactionReferenceType.AUCTION,
               );
               outbidTransactionId = transaction._id.toString();
 
@@ -232,6 +234,7 @@ export class AutoBiddingService {
               winningCandidate.amount,
               input.auctionId,
               session,
+              TransactionReferenceType.AUCTION,
             );
 
             // Create winning bid

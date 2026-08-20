@@ -15,6 +15,8 @@ export enum EmailTemplates {
   ACCOUNT_REACTIVATION = 'account-reactivation',
   ACCOUNT_ACTIVATED = 'account-activated',
   AUTO_BID_EXHAUSTED = 'auto-bid-exhausted',
+  DISPUTE_OPENED = 'dispute-opened',
+  DISPUTE_RESOLVED = 'dispute-resolved',
 }
 
 export enum EmailSubjects {
@@ -33,4 +35,6 @@ export enum EmailSubjects {
   ACCOUNT_REACTIVATION = 'Reactivate your Mazadak account',
   ACCOUNT_ACTIVATED = 'Welcome back! Your Mazadak account is reactivated',
   AUTO_BID_EXHAUSTED = 'Auto-Bid Limit Reached - Action Required | Mazadak',
+  DISPUTE_OPENED = 'Urgent Notice: A Dispute Has Been Opened on Mazadak',
+  DISPUTE_RESOLVED = 'Official Resolution Notice: Mazadak Dispute Decided',
 }

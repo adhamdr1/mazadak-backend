@@ -10,6 +10,7 @@ import { ProxyBiddingEngineService } from './services/proxy-bidding-engine.servi
 import { AutoBiddingService } from './services/auto-bidding.service';
 import { WalletModule } from '../wallet/wallet.module';
 import { AuctionsModule } from '../auctions/auctions.module';
+import { EscrowModule } from '../escrow/escrow.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { AuctionsModule } from '../auctions/auctions.module';
     ]),
     WalletModule,
     AuctionsModule,
+    EscrowModule,
   ],
   providers: [
     BidsResolver,

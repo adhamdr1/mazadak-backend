@@ -42,6 +42,12 @@ import {
   ReviewRepliedPayload,
   AutoBidPlacedPayload,
   AutoBidExhaustedPayload,
+  EscrowCreatedPayload,
+  EscrowReleasedPayload,
+  EscrowRefundedPayload,
+  DisputeOpenedPayload,
+  DisputeResolvedPayload,
+  DisputeCancelledPayload,
 } from '../infrastructure/rabbitmq/rabbitmq-event.types';
 import { InAppNotificationType } from './in-app/enums/in-app-notification-type.enum';
 import { NotificationReferenceType } from './in-app/enums/notification-reference-type.enum';
@@ -212,6 +218,24 @@ export class NotificationsConsumer
           break;
         case RabbitMQEvent.AutoBidExhausted:
           await this.handleAutoBidExhausted(parsed.payload);
+          break;
+        case RabbitMQEvent.EscrowCreated:
+          await this.handleEscrowCreated(parsed.payload);
+          break;
+        case RabbitMQEvent.EscrowReleased:
+          await this.handleEscrowReleased(parsed.payload);
+          break;
+        case RabbitMQEvent.EscrowRefunded:
+          await this.handleEscrowRefunded(parsed.payload);
+          break;
+        case RabbitMQEvent.DisputeOpened:
+          await this.handleDisputeOpened(parsed.payload);
+          break;
+        case RabbitMQEvent.DisputeResolved:
+          await this.handleDisputeResolved(parsed.payload);
+          break;
+        case RabbitMQEvent.DisputeCancelled:
+          await this.handleDisputeCancelled(parsed.payload);
           break;
         default: {
           const unknownEvent = (parsed as { eventType?: string }).eventType;
@@ -780,6 +804,232 @@ export class NotificationsConsumer
       referenceId: payload.auctionId,
       referenceType: NotificationReferenceType.AUCTION,
     });
+  }
+
+  private async handleEscrowCreated(payload: EscrowCreatedPayload) {
+    if (await this.isUserEligibleForNotification(payload.buyerId)) {
+      await this.notificationsService.createInAppNotification({
+        userId: payload.buyerId,
+        type: InAppNotificationType.ESCROW_CREATED,
+        title: InAppNotificationTitles.ESCROW_CREATED,
+        body: `Your payment of ${payload.amount} ${payload.currency} is securely held in escrow. You have 7 days to inspect the item.`,
+        referenceId: payload.escrowId,
+        referenceType: NotificationReferenceType.ESCROW,
+      });
+    }
+
+    if (await this.isUserEligibleForNotification(payload.sellerId)) {
+      await this.notificationsService.createInAppNotification({
+        userId: payload.sellerId,
+        type: InAppNotificationType.ESCROW_CREATED,
+        title: InAppNotificationTitles.ESCROW_CREATED,
+        body: `Payment of ${payload.amount} ${payload.currency} for your auction is secured in escrow. Please deliver the item to the buyer.`,
+        referenceId: payload.escrowId,
+        referenceType: NotificationReferenceType.ESCROW,
+      });
+    }
+  }
+
+  private async handleEscrowReleased(payload: EscrowReleasedPayload) {
+    if (await this.isUserEligibleForNotification(payload.sellerId)) {
+      await this.notificationsService.createInAppNotification({
+        userId: payload.sellerId,
+        type: InAppNotificationType.ESCROW_RELEASED,
+        title: InAppNotificationTitles.ESCROW_RELEASED,
+        body: `Escrow funds of ${payload.amount} EGP have been released and deposited to your wallet!`,
+        referenceId: payload.escrowId,
+        referenceType: NotificationReferenceType.ESCROW,
+      });
+    }
+
+    if (await this.isUserEligibleForNotification(payload.buyerId)) {
+      await this.notificationsService.createInAppNotification({
+        userId: payload.buyerId,
+        type: InAppNotificationType.ESCROW_RELEASED,
+        title: InAppNotificationTitles.ESCROW_RELEASED,
+        body: `Escrow payment of ${payload.amount} EGP has been released to the seller.`,
+        referenceId: payload.escrowId,
+        referenceType: NotificationReferenceType.ESCROW,
+      });
+    }
+  }
+
+  private async handleEscrowRefunded(payload: EscrowRefundedPayload) {
+    if (await this.isUserEligibleForNotification(payload.buyerId)) {
+      await this.notificationsService.createInAppNotification({
+        userId: payload.buyerId,
+        type: InAppNotificationType.ESCROW_REFUNDED,
+        title: InAppNotificationTitles.ESCROW_REFUNDED,
+        body: `Escrow payment of ${payload.amount} EGP has been refunded back to your wallet.`,
+        referenceId: payload.escrowId,
+        referenceType: NotificationReferenceType.ESCROW,
+      });
+    }
+
+    if (await this.isUserEligibleForNotification(payload.sellerId)) {
+      await this.notificationsService.createInAppNotification({
+        userId: payload.sellerId,
+        type: InAppNotificationType.ESCROW_REFUNDED,
+        title: InAppNotificationTitles.ESCROW_REFUNDED,
+        body: `Escrow for auction was refunded to the buyer.`,
+        referenceId: payload.escrowId,
+        referenceType: NotificationReferenceType.ESCROW,
+      });
+    }
+  }
+
+  private async handleDisputeOpened(payload: DisputeOpenedPayload) {
+    // 1. In-App notifications
+    if (await this.isUserEligibleForNotification(payload.againstUserId)) {
+      await this.notificationsService.createInAppNotification({
+        userId: payload.againstUserId,
+        type: InAppNotificationType.DISPUTE_OPENED,
+        title: InAppNotificationTitles.DISPUTE_OPENED,
+        body: `A dispute has been opened regarding your auction transaction. Reason: ${payload.reason}.`,
+        referenceId: payload.disputeId,
+        referenceType: NotificationReferenceType.DISPUTE,
+      });
+    }
+
+    if (await this.isUserEligibleForNotification(payload.openedById)) {
+      await this.notificationsService.createInAppNotification({
+        userId: payload.openedById,
+        type: InAppNotificationType.DISPUTE_OPENED,
+        title: InAppNotificationTitles.DISPUTE_OPENED,
+        body: `Your dispute has been recorded and is currently under review by admin support.`,
+        referenceId: payload.disputeId,
+        referenceType: NotificationReferenceType.DISPUTE,
+      });
+    }
+
+    // 2. Email notification to both parties (Urgent legal/financial alert)
+    const againstUser = await this.usersService.findByIdIncludingDeleted(
+      payload.againstUserId,
+    );
+    if (againstUser && !againstUser.isBanned && againstUser.email) {
+      const name =
+        [againstUser.firstName, againstUser.lastName]
+          .filter(Boolean)
+          .join(' ') || 'User';
+
+      await this.notificationsService.sendDisputeOpenedEmail(
+        againstUser.email,
+        name,
+        payload.disputeId,
+        payload.reason,
+        payload.auctionId,
+      );
+    }
+
+    if (payload.openedById !== payload.againstUserId) {
+      const opener = await this.usersService.findByIdIncludingDeleted(
+        payload.openedById,
+      );
+      if (opener && !opener.isBanned && opener.email) {
+        const name =
+          [opener.firstName, opener.lastName].filter(Boolean).join(' ') ||
+          'User';
+
+        await this.notificationsService.sendDisputeOpenedEmail(
+          opener.email,
+          name,
+          payload.disputeId,
+          payload.reason,
+          payload.auctionId,
+        );
+      }
+    }
+  }
+
+  private async handleDisputeResolved(payload: DisputeResolvedPayload) {
+    const notifyBody = `The dispute has been resolved by admin: ${payload.decision}.`;
+
+    // 1. In-App notifications to both parties
+    if (await this.isUserEligibleForNotification(payload.openedById)) {
+      await this.notificationsService.createInAppNotification({
+        userId: payload.openedById,
+        type: InAppNotificationType.DISPUTE_RESOLVED,
+        title: InAppNotificationTitles.DISPUTE_RESOLVED,
+        body: notifyBody,
+        referenceId: payload.disputeId,
+        referenceType: NotificationReferenceType.DISPUTE,
+      });
+    }
+
+    if (await this.isUserEligibleForNotification(payload.againstUserId)) {
+      await this.notificationsService.createInAppNotification({
+        userId: payload.againstUserId,
+        type: InAppNotificationType.DISPUTE_RESOLVED,
+        title: InAppNotificationTitles.DISPUTE_RESOLVED,
+        body: notifyBody,
+        referenceId: payload.disputeId,
+        referenceType: NotificationReferenceType.DISPUTE,
+      });
+    }
+
+    // 2. Formal Email notification to both parties
+    const plaintiff = await this.usersService.findByIdIncludingDeleted(
+      payload.openedById,
+    );
+    if (plaintiff && !plaintiff.isBanned && plaintiff.email) {
+      const name =
+        [plaintiff.firstName, plaintiff.lastName].filter(Boolean).join(' ') ||
+        'User';
+
+      await this.notificationsService.sendDisputeResolvedEmail(
+        plaintiff.email,
+        name,
+        payload.disputeId,
+        payload.decision,
+        payload.adminNotes,
+      );
+    }
+
+    if (payload.againstUserId !== payload.openedById) {
+      const defendant = await this.usersService.findByIdIncludingDeleted(
+        payload.againstUserId,
+      );
+      if (defendant && !defendant.isBanned && defendant.email) {
+        const name =
+          [defendant.firstName, defendant.lastName].filter(Boolean).join(' ') ||
+          'User';
+
+        await this.notificationsService.sendDisputeResolvedEmail(
+          defendant.email,
+          name,
+          payload.disputeId,
+          payload.decision,
+          payload.adminNotes,
+        );
+      }
+    }
+  }
+
+  private async handleDisputeCancelled(payload: DisputeCancelledPayload) {
+    if (await this.isUserEligibleForNotification(payload.openedById)) {
+      await this.notificationsService.createInAppNotification({
+        userId: payload.openedById,
+        type: InAppNotificationType.DISPUTE_CANCELLED,
+        title: InAppNotificationTitles.DISPUTE_CANCELLED,
+        body: 'The dispute was successfully cancelled and escrow hold restored.',
+        referenceId: payload.disputeId,
+        referenceType: NotificationReferenceType.DISPUTE,
+      });
+    }
+
+    if (
+      payload.againstUserId !== payload.openedById &&
+      (await this.isUserEligibleForNotification(payload.againstUserId))
+    ) {
+      await this.notificationsService.createInAppNotification({
+        userId: payload.againstUserId,
+        type: InAppNotificationType.DISPUTE_CANCELLED,
+        title: InAppNotificationTitles.DISPUTE_CANCELLED,
+        body: 'The dispute was cancelled and escrow hold restored.',
+        referenceId: payload.disputeId,
+        referenceType: NotificationReferenceType.DISPUTE,
+      });
+    }
   }
 
   private async isUserEligibleForNotification(

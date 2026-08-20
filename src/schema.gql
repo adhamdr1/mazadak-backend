@@ -138,8 +138,9 @@ enum TransactionStatus {
 
 enum TransactionReferenceType {
   AUCTION
-  USER
   TRANSACTION
+  ESCROW
+  DISPUTE
 }
 
 type TransactionsPage {
@@ -184,6 +185,12 @@ enum InAppNotificationType {
   REVIEW_REPLIED
   AUTO_BID_PLACED
   AUTO_BID_EXHAUSTED
+  ESCROW_CREATED
+  ESCROW_RELEASED
+  ESCROW_REFUNDED
+  DISPUTE_OPENED
+  DISPUTE_RESOLVED
+  DISPUTE_CANCELLED
 }
 
 enum NotificationReferenceType {
@@ -191,6 +198,8 @@ enum NotificationReferenceType {
   TRANSACTION
   WALLET
   REVIEW
+  ESCROW
+  DISPUTE
 }
 
 type InAppNotificationsPage {
@@ -321,6 +330,87 @@ type BidAddedPayload {
   currentPrice: Float!
   leadingBidderId: ID!
   bidCount: Int!
+}
+
+type Escrow {
+  _id: ID!
+  auctionId: ID!
+  buyerId: ID!
+  sellerId: ID!
+  amount: String!
+  currency: String!
+  status: EscrowStatus!
+  inspectionPeriodEndsAt: DateTime!
+  releasedAt: DateTime
+  refundedAt: DateTime
+  disputeId: ID
+  releaseReason: String
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+"""Lifecycle status of an escrow hold"""
+enum EscrowStatus {
+  HELD
+  RELEASED
+  REFUNDED
+  DISPUTED
+}
+
+type Dispute {
+  _id: ID!
+  escrowId: ID!
+  auctionId: ID!
+  openedById: ID!
+  againstUserId: ID!
+  reason: DisputeReason!
+  description: String!
+  evidenceUrls: [String!]!
+  status: DisputeStatus!
+  adminId: ID
+  adminDecision: DisputeResolution
+  adminNotes: String
+  resolvedAt: DateTime
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+"""Reason for opening a dispute against an escrow transaction"""
+enum DisputeReason {
+  ITEM_NOT_RECEIVED
+  ITEM_DAMAGED
+  ITEM_MISMATCH
+  COUNTERFEIT_ITEM
+  OTHER
+}
+
+"""Lifecycle status of an escrow dispute"""
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED_BUYER_REFUNDED
+  RESOLVED_SELLER_PAID
+  CANCELLED
+}
+
+"""Admin resolution decision for an escrow dispute"""
+enum DisputeResolution {
+  REFUND_BUYER
+  PAY_SELLER
+}
+
+type DisputesPage {
+  items: [Dispute!]!
+  total: Int!
+  totalPages: Int!
+  hasNextPage: Boolean!
+}
+
+type EscrowsPage {
+  items: [Escrow!]!
+  total: Int!
+  totalPages: Int!
+  hasNextPage: Boolean!
 }
 
 type AdminUserDetails {
@@ -466,6 +556,14 @@ type Query {
   myBids(input: PaginationInput!, filter: BidsFilterInput): BidsPage!
   myAutoBid(auctionId: ID!): AutoBid
   myAutoBids(input: PaginationInput!, status: AutoBidStatus): AutoBidsPage!
+  escrowByAuction(auctionId: ID!): Escrow
+  escrow(id: ID!): Escrow!
+  myEscrows(input: PaginationInput, filter: EscrowFilterInput): EscrowsPage!
+  allEscrows(input: PaginationInput, filter: EscrowFilterInput): EscrowsPage!
+  dispute(id: ID!): Dispute!
+  disputeByAuction(auctionId: ID!): Dispute
+  myDisputes(input: PaginationInput, filter: DisputeFilterInput): DisputesPage!
+  allDisputes(input: PaginationInput, filter: DisputeFilterInput): DisputesPage!
   adminGetUsers(input: PaginationInput!, filter: UsersFilterInput): UsersPage!
   adminGetUserDetails(userId: ID!): AdminUserDetails!
   adminGetAuctions(input: PaginationInput!, filter: AuctionsFilterInput): AuctionsPage!
@@ -572,6 +670,22 @@ enum BidsSortField {
   AMOUNT
 }
 
+input EscrowFilterInput {
+  status: EscrowStatus
+  userId: String
+  buyerId: String
+  sellerId: String
+  auctionId: String
+}
+
+input DisputeFilterInput {
+  status: DisputeStatus
+  userId: String
+  openedById: String
+  againstUserId: String
+  auctionId: String
+}
+
 input ReviewsFilterInput {
   type: ReviewType
   minRating: Int
@@ -618,6 +732,13 @@ type Mutation {
   placeBid(input: PlaceBidInput!): Bid!
   setAutoBid(input: SetAutoBidInput!): AutoBid!
   cancelAutoBid(input: CancelAutoBidInput!): Boolean!
+  confirmDelivery(escrowId: ID!): Escrow!
+  releaseEscrow(escrowId: ID!, reason: String): Escrow!
+  refundEscrow(escrowId: ID!, reason: String): Escrow!
+  openDispute(input: CreateDisputeInput!): Dispute!
+  cancelDispute(disputeId: ID!): Dispute!
+  updateDisputeStatus(input: UpdateDisputeStatusInput!): Dispute!
+  resolveDispute(input: ResolveDisputeInput!): Dispute!
   adminToggleUserBan(userId: ID!): User!
   adminCancelAuction(auctionId: ID!, reason: String!): Boolean!
   sendMessage(input: CreateChatMessageInput!): ChatMessage!
@@ -736,6 +857,24 @@ input SetAutoBidInput {
 input CancelAutoBidInput {
   """The ID of the auction to cancel auto-bidding for"""
   auctionId: ID!
+}
+
+input CreateDisputeInput {
+  auctionId: String!
+  reason: DisputeReason!
+  description: String!
+  evidenceUrls: [String!] = []
+}
+
+input UpdateDisputeStatusInput {
+  disputeId: String!
+  status: DisputeStatus!
+}
+
+input ResolveDisputeInput {
+  disputeId: String!
+  decision: DisputeResolution!
+  adminNotes: String
 }
 
 input CreateChatMessageInput {
