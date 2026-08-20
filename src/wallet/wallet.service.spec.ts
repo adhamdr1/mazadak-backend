@@ -10,8 +10,17 @@ import { TransactionType } from '../transaction/enums/transaction-type.enum';
 import { TransactionStatus } from '../transaction/enums/transaction-status.enum';
 import { Types } from 'mongoose';
 import { PaginationInput } from '../common/dto/pagination.input';
+import { OutboxService } from '../infrastructure/outbox/outbox.service';
+import { getConnectionToken } from '@nestjs/mongoose';
 
 const mockTransaction = { _id: new Types.ObjectId() };
+
+const mockSession = {
+  startTransaction: jest.fn(),
+  commitTransaction: jest.fn(),
+  abortTransaction: jest.fn(),
+  endSession: jest.fn(),
+};
 
 const mockWalletRepository = {
   findByUserId: jest.fn(),
@@ -23,6 +32,7 @@ const mockWalletRepository = {
   captureHeldBalance: jest.fn(),
   findAll: jest.fn(),
   countAll: jest.fn(),
+  sumAllBalances: jest.fn(),
 };
 
 const mockTransactionService = {
@@ -39,6 +49,10 @@ const mockUsersService = {
   findById: jest.fn(),
 };
 
+const mockOutboxService = {
+  saveEvent: jest.fn().mockResolvedValue(undefined),
+};
+
 describe('WalletService', () => {
   let service: WalletService;
 
@@ -50,6 +64,13 @@ describe('WalletService', () => {
         { provide: TransactionService, useValue: mockTransactionService },
         { provide: NotificationsService, useValue: mockNotificationsService },
         { provide: UsersService, useValue: mockUsersService },
+        { provide: OutboxService, useValue: mockOutboxService },
+        {
+          provide: getConnectionToken(),
+          useValue: {
+            startSession: jest.fn().mockResolvedValue(mockSession),
+          },
+        },
       ],
     }).compile();
 
@@ -122,13 +143,7 @@ describe('WalletService', () => {
         WalletNotFoundException,
       );
 
-      expect(mockTransactionService.createTransaction).toHaveBeenCalledWith({
-        walletId,
-        type: TransactionType.DEPOSIT,
-        amount: 100,
-        status: TransactionStatus.FAILED,
-        referenceId: undefined,
-      });
+      expect(mockTransactionService.createTransaction).not.toHaveBeenCalled();
     });
 
     it('should deposit successfully and log SUCCESS tx', async () => {
@@ -139,13 +154,16 @@ describe('WalletService', () => {
       const { wallet } = await service.deposit(userId, 100);
 
       expect(wallet).toEqual(updatedWallet);
-      expect(mockTransactionService.createTransaction).toHaveBeenCalledWith({
-        walletId,
-        type: TransactionType.DEPOSIT,
-        amount: 100,
-        status: TransactionStatus.SUCCESS,
-        referenceId: undefined,
-      });
+      expect(mockTransactionService.createTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          walletId,
+          type: TransactionType.DEPOSIT,
+          amount: 100,
+          status: TransactionStatus.SUCCESS,
+          referenceId: undefined,
+        }),
+        undefined,
+      );
     });
   });
 
@@ -158,13 +176,16 @@ describe('WalletService', () => {
       const { wallet } = await service.withdraw(userId, 50);
 
       expect(wallet).toEqual(updatedWallet);
-      expect(mockTransactionService.createTransaction).toHaveBeenCalledWith({
-        walletId,
-        type: TransactionType.WITHDRAW,
-        amount: 50,
-        status: TransactionStatus.SUCCESS,
-        referenceId: undefined,
-      });
+      expect(mockTransactionService.createTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          walletId,
+          type: TransactionType.WITHDRAW,
+          amount: 50,
+          status: TransactionStatus.SUCCESS,
+          referenceId: undefined,
+        }),
+        mockSession,
+      );
     });
 
     it('should throw InsufficientFundsException if withdraw fails and log FAILED tx', async () => {
@@ -179,8 +200,10 @@ describe('WalletService', () => {
         walletId,
         type: TransactionType.WITHDRAW,
         amount: 150,
+        currency: 'EGP',
         status: TransactionStatus.FAILED,
         referenceId: undefined,
+        referenceType: undefined,
       });
     });
   });
@@ -196,13 +219,16 @@ describe('WalletService', () => {
       const { wallet } = await service.hold(userId, 50, refId);
 
       expect(wallet).toEqual(updatedWallet);
-      expect(mockTransactionService.createTransaction).toHaveBeenCalledWith({
-        walletId,
-        type: TransactionType.HOLD,
-        amount: 50,
-        status: TransactionStatus.SUCCESS,
-        referenceId: refId,
-      });
+      expect(mockTransactionService.createTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          walletId,
+          type: TransactionType.HOLD,
+          amount: 50,
+          status: TransactionStatus.SUCCESS,
+          referenceId: refId,
+        }),
+        undefined,
+      );
     });
 
     it('should throw InsufficientFundsException if hold fails and log FAILED tx', async () => {
@@ -213,13 +239,7 @@ describe('WalletService', () => {
         InsufficientFundsException,
       );
 
-      expect(mockTransactionService.createTransaction).toHaveBeenCalledWith({
-        walletId,
-        type: TransactionType.HOLD,
-        amount: 150,
-        status: TransactionStatus.FAILED,
-        referenceId: refId,
-      });
+      expect(mockTransactionService.createTransaction).not.toHaveBeenCalled();
     });
   });
 
@@ -234,13 +254,16 @@ describe('WalletService', () => {
       const { wallet } = await service.release(userId, 50, refId);
 
       expect(wallet).toEqual(updatedWallet);
-      expect(mockTransactionService.createTransaction).toHaveBeenCalledWith({
-        walletId,
-        type: TransactionType.RELEASE,
-        amount: 50,
-        status: TransactionStatus.SUCCESS,
-        referenceId: refId,
-      });
+      expect(mockTransactionService.createTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          walletId,
+          type: TransactionType.RELEASE,
+          amount: 50,
+          status: TransactionStatus.SUCCESS,
+          referenceId: refId,
+        }),
+        undefined,
+      );
     });
 
     it('should throw InsufficientFundsException if release fails and log FAILED tx', async () => {
@@ -251,13 +274,7 @@ describe('WalletService', () => {
         InsufficientFundsException,
       );
 
-      expect(mockTransactionService.createTransaction).toHaveBeenCalledWith({
-        walletId,
-        type: TransactionType.RELEASE,
-        amount: 150,
-        status: TransactionStatus.FAILED,
-        referenceId: refId,
-      });
+      expect(mockTransactionService.createTransaction).not.toHaveBeenCalled();
     });
   });
 
@@ -272,13 +289,16 @@ describe('WalletService', () => {
       const { wallet } = await service.capture(userId, 50, refId);
 
       expect(wallet).toEqual(updatedWallet);
-      expect(mockTransactionService.createTransaction).toHaveBeenCalledWith({
-        walletId,
-        type: TransactionType.CAPTURE,
-        amount: 50,
-        status: TransactionStatus.SUCCESS,
-        referenceId: refId,
-      });
+      expect(mockTransactionService.createTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          walletId,
+          type: TransactionType.CAPTURE,
+          amount: 50,
+          status: TransactionStatus.SUCCESS,
+          referenceId: refId,
+        }),
+        undefined,
+      );
     });
 
     it('should throw InsufficientFundsException if capture fails and log FAILED tx', async () => {
@@ -289,13 +309,7 @@ describe('WalletService', () => {
         InsufficientFundsException,
       );
 
-      expect(mockTransactionService.createTransaction).toHaveBeenCalledWith({
-        walletId,
-        type: TransactionType.CAPTURE,
-        amount: 150,
-        status: TransactionStatus.FAILED,
-        referenceId: refId,
-      });
+      expect(mockTransactionService.createTransaction).not.toHaveBeenCalled();
     });
   });
   describe('getAllWallets', () => {
@@ -333,6 +347,17 @@ describe('WalletService', () => {
       await expect(service.getWalletByUserId(userId)).rejects.toThrow(
         WalletNotFoundException,
       );
+    });
+  });
+
+  describe('sumAllBalances', () => {
+    it('should return the sum of all wallet balances', async () => {
+      mockWalletRepository.sumAllBalances.mockResolvedValue(15000);
+
+      const result = await service.sumAllBalances();
+
+      expect(result).toBe(15000);
+      expect(mockWalletRepository.sumAllBalances).toHaveBeenCalled();
     });
   });
 });

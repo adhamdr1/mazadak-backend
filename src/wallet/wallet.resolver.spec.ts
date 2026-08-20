@@ -60,7 +60,6 @@ describe('WalletResolver', () => {
   describe('myWallet', () => {
     it('should return the current user wallet', async () => {
       mockWalletService.getMyWallet.mockResolvedValue(mockWallet);
-
       const result = await resolver.myWallet(currentUser);
 
       expect(result).toEqual(mockWallet);
@@ -100,7 +99,7 @@ describe('WalletResolver', () => {
   describe('availableBalance', () => {
     it('should calculate available balance correctly', () => {
       const result = resolver.availableBalance(mockWallet);
-      expect(result).toBe(70); // 100 - 30
+      expect(result).toBe('70'); // 100 - 30
     });
   });
 

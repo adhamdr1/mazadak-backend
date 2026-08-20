@@ -8,6 +8,7 @@ const mockRedis = {
   set: jest.fn(),
   del: jest.fn().mockResolvedValue(1),
   scan: jest.fn(),
+  eval: jest.fn().mockResolvedValue(1),
 };
 
 describe('RedisService', () => {

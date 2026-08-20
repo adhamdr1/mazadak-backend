@@ -9,7 +9,7 @@ const mockUsersService = {
   findById: jest.fn(),
   findAll: jest.fn(),
   updateProfile: jest.fn(),
-  softDelete: jest.fn(),
+  softDeleteUser: jest.fn(),
 };
 
 describe('UsersResolver', () => {
@@ -122,14 +122,14 @@ describe('UsersResolver', () => {
   // 6. اختبار دالة deleteAccount (User)
   describe('deleteAccount', () => {
     it('should delete the current user account and return true', async () => {
-      mockUsersService.softDelete.mockResolvedValue(undefined);
+      mockUsersService.softDeleteUser.mockResolvedValue(undefined);
 
       const result = await resolver.deleteAccount(currentUserPayload);
 
       expect(result).toBe(true);
-      expect(mockUsersService.softDelete).toHaveBeenCalledWith(
-        currentUserPayload,
+      expect(mockUsersService.softDeleteUser).toHaveBeenCalledWith(
         currentUserId,
+        currentUserPayload,
       );
     });
   });
@@ -159,16 +159,16 @@ describe('UsersResolver', () => {
   // 8. اختبار دالة adminDeleteUser (Admin)
   describe('adminDeleteUser', () => {
     it('should delete another user account and return true', async () => {
-      mockUsersService.softDelete.mockResolvedValue(undefined);
+      mockUsersService.softDeleteUser.mockResolvedValue(undefined);
 
       const result = await resolver.adminDeleteUser(adminUserPayload, {
         id: otherUserId,
       });
 
       expect(result).toBe(true);
-      expect(mockUsersService.softDelete).toHaveBeenCalledWith(
-        adminUserPayload,
+      expect(mockUsersService.softDeleteUser).toHaveBeenCalledWith(
         otherUserId, // تم تمرير الـ ID الخاص بالمستخدم المستهدف
+        adminUserPayload,
       );
     });
   });
