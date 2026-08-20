@@ -16,6 +16,7 @@ import type { IBidRepository } from './interfaces/bid-repository.interface';
 import type { IAutoBidRepository } from './interfaces/auto-bid-repository.interface';
 import type { IAuctionRepository } from '../auctions/interfaces/auction-repository.interface';
 import { WalletService } from '../wallet/wallet.service';
+import { TransactionReferenceType } from '../transaction/enums/transaction-reference-type.enum';
 import { AuctionStatus } from '../auctions/enums/auction-status.enum';
 import { AlreadyHighestBidderException } from './exceptions/already-highest-bidder.exception';
 import { AuctionNotActiveException } from './exceptions/auction-not-active.exception';
@@ -29,6 +30,7 @@ import { RedisService } from '../infrastructure/redis/redis.service';
 import { OutboxService } from '../infrastructure/outbox/outbox.service';
 import { RabbitMQEvent } from '../infrastructure/rabbitmq/rabbitmq-event.types';
 import { ProxyBiddingEngineService } from './services/proxy-bidding-engine.service';
+import { EscrowService } from '../escrow/services';
 import Decimal from 'decimal.js';
 
 const ACTIVE_AUCTIONS_PATTERN = 'auction:active:*';
@@ -51,6 +53,7 @@ export class BidsService {
     private readonly auctionRepository: IAuctionRepository,
     private readonly proxyEngine: ProxyBiddingEngineService,
     private readonly walletService: WalletService,
+    private readonly escrowService: EscrowService,
     private readonly realtimeService: RealtimeService,
     private readonly redisService: RedisService,
     private readonly outboxService: OutboxService,
@@ -185,6 +188,7 @@ export class BidsService {
             input.amount,
             input.auctionId,
             session,
+            TransactionReferenceType.AUCTION,
           );
 
           // 2. Release previous winner's funds and mark OUTBID
@@ -194,6 +198,7 @@ export class BidsService {
               Number(currentWinner.amount.toString()),
               input.auctionId,
               session,
+              TransactionReferenceType.AUCTION,
             );
             outbidTransactionId = transaction._id.toString();
 
@@ -261,6 +266,7 @@ export class BidsService {
               Number(currentWinner.amount.toString()),
               input.auctionId,
               session,
+              TransactionReferenceType.AUCTION,
             );
             outbidTransactionId = transaction._id.toString();
 
@@ -279,6 +285,7 @@ export class BidsService {
               Number(currentWinner.amount.toString()),
               input.auctionId,
               session,
+              TransactionReferenceType.AUCTION,
             );
             await this.bidRepository.updateStatus(
               currentWinner._id.toString(),
@@ -293,6 +300,7 @@ export class BidsService {
             engineResult.winningAmount,
             input.auctionId,
             session,
+            TransactionReferenceType.AUCTION,
           );
 
           // 4. Create the winning auto-bid
@@ -467,16 +475,20 @@ export class BidsService {
               Number(winningBid.amount.toString()),
               auctionId,
               session,
+              TransactionReferenceType.AUCTION,
             );
 
-          // 2. Deposit the funds to the seller
-          const { transaction: depositTransaction } =
-            await this.walletService.deposit(
-              sellerId,
-              Number(winningBid.amount.toString()),
+          // 2. Create Escrow hold with 7-day inspection window
+          const escrow = await this.escrowService.createEscrow(
+            {
               auctionId,
-              session,
-            );
+              buyerId: winnerId,
+              sellerId,
+              amount: Number(winningBid.amount.toString()),
+              currency: 'EGP',
+            },
+            session,
+          );
 
           // 3. Assign the winner to the auction and mark as finalized
           await this.auctionRepository.finalizeAuction(
@@ -492,7 +504,7 @@ export class BidsService {
             session,
           );
 
-          // Send Outbox Event
+          // 5. Send Outbox Event
           await this.outboxService.saveEvent(
             RabbitMQEvent.AuctionEnded,
             {
@@ -504,7 +516,7 @@ export class BidsService {
               ),
               winnerId,
               captureTransactionId: captureTransaction._id.toString(),
-              depositTransactionId: depositTransaction._id.toString(),
+              escrowId: escrow._id.toString(),
             },
             session,
           );

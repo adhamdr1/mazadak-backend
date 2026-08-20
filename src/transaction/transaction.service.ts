@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { ClientSession, Types } from 'mongoose';
 import { TransactionStatus } from './enums/transaction-status.enum';
 import { TransactionType } from './enums/transaction-type.enum';
+import { TransactionReferenceType } from './enums/transaction-reference-type.enum';
 import { RabbitMQEvent } from '../infrastructure/rabbitmq/rabbitmq-event.types';
 import { OutboxService } from '../infrastructure/outbox/outbox.service';
 import {
@@ -106,7 +107,8 @@ export class TransactionService {
             transaction.gatewayPaymentIntentId ?? undefined,
           gatewayTransactionId: transaction.gatewayTransactionId ?? undefined,
           gatewayProvider: transaction.gatewayProvider ?? undefined,
-          referenceType: transaction.referenceType ?? undefined,
+          referenceType:
+            transaction.referenceType ?? TransactionReferenceType.TRANSACTION,
           expiresAt: transaction.expiresAt ?? undefined,
         },
         session,

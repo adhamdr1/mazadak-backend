@@ -15,4 +15,10 @@ export enum InAppNotificationTitles {
   REVIEW_REPLIED = 'New Reply to Your Review 💬',
   AUTO_BID_PLACED = 'Auto-bid placed! 🤖',
   AUTO_BID_EXHAUSTED = 'Auto-bid limit reached! ⚠️',
+  ESCROW_CREATED = 'Payment in Escrow 🔒',
+  ESCROW_RELEASED = 'Payment Released 💰',
+  ESCROW_REFUNDED = 'Payment Refunded 💸',
+  DISPUTE_OPENED = 'Dispute Opened ⚠️',
+  DISPUTE_RESOLVED = 'Dispute Resolved ⚖️',
+  DISPUTE_CANCELLED = 'Dispute Cancelled ℹ️',
 }

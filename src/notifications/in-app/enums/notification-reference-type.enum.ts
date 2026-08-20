@@ -5,6 +5,8 @@ export enum NotificationReferenceType {
   TRANSACTION = 'TRANSACTION',
   WALLET = 'WALLET',
   REVIEW = 'REVIEW',
+  ESCROW = 'ESCROW',
+  DISPUTE = 'DISPUTE',
 }
 
 registerEnumType(NotificationReferenceType, {

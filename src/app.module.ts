@@ -36,6 +36,7 @@ import { PubSubModule } from './infrastructure/pubsub/pubsub.module';
 import type { JwtPayload } from './auth/interfaces/jwt-payload.interface';
 import { ChatModule } from './chat/chat.module';
 import { ReviewsModule } from './reviews/reviews.module';
+import { EscrowModule } from './escrow/escrow.module';
 
 @Module({
   imports: [
@@ -160,6 +161,7 @@ import { ReviewsModule } from './reviews/reviews.module';
     PaymentModule,
     ChatModule,
     ReviewsModule,
+    EscrowModule,
   ],
   providers: [
     // Global Authentication Guards
