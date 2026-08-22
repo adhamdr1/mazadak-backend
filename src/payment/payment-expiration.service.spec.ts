@@ -108,7 +108,7 @@ describe('PaymentExpirationService', () => {
         'payment:expiration:lock',
         expect.any(String),
         'EX',
-        30,
+        300,
         'NX',
       );
       expect(mockTransactionRepository.findAll).toHaveBeenCalledWith(

@@ -95,7 +95,8 @@ export class MongoAuctionRepository implements IAuctionRepository {
     session?: ClientSession,
     adminActionReason?: string,
   ): Promise<void> {
-    const updatePayload: Record<string, any> = { status };
+    const updatePayload: { status: AuctionStatus; adminActionReason?: string } =
+      { status };
     if (adminActionReason) {
       updatePayload.adminActionReason = adminActionReason;
     }

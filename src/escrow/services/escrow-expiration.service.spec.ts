@@ -47,7 +47,7 @@ describe('EscrowExpirationService', () => {
         'escrow:expiration:lock',
         expect.any(String),
         'EX',
-        30,
+        600,
         'NX',
       );
       expect(mockEscrowService.releaseExpiredHeldEscrows).toHaveBeenCalled();

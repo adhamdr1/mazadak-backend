@@ -7,7 +7,7 @@ import { ReviewsService } from './reviews.service';
 import { RELEASE_LOCK_LUA_SCRIPT } from '../infrastructure/redis/redis.constants';
 
 const EXPIRATION_LOCK_KEY = 'reviews:expiration:lock';
-const LOCK_TTL_SECONDS = 30;
+const LOCK_TTL_SECONDS = 600;
 
 @Injectable()
 export class ReviewsExpirationService {

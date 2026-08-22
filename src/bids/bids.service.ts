@@ -36,7 +36,7 @@ import Decimal from 'decimal.js';
 const ACTIVE_AUCTIONS_PATTERN = 'auction:active:*';
 
 const FINALIZE_AUCTIONS_LOCK_KEY = 'auction:finalize:lock';
-const LOCK_TTL_SECONDS = 30;
+const FINALIZE_LOCK_TTL_SECONDS = 55;
 
 export const BID_ADDED = 'BID_ADDED';
 
@@ -399,7 +399,7 @@ export class BidsService {
           FINALIZE_AUCTIONS_LOCK_KEY,
           lockValue,
           'EX',
-          LOCK_TTL_SECONDS,
+          FINALIZE_LOCK_TTL_SECONDS,
           'NX',
         )
         .catch((err) => {

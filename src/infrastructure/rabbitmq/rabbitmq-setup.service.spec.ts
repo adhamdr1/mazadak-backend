@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { RabbitMQSetupService } from './rabbitmq-setup.service';
 import { ConfigService } from '@nestjs/config';
-import * as amqplib from 'amqplib';
+import * as amqpManager from 'amqp-connection-manager';
 import {
   MAZADAK_EXCHANGE,
   DEAD_LETTER_QUEUE,
@@ -11,8 +11,9 @@ import {
   WALLET_QUEUE,
   AUCTION_QUEUE,
 } from './rabbitmq.constants';
+import { RabbitMQEvent } from './rabbitmq-event.types';
 
-jest.mock('amqplib', () => ({
+jest.mock('amqp-connection-manager', () => ({
   connect: jest.fn(),
 }));
 
@@ -25,28 +26,50 @@ describe('RabbitMQSetupService', () => {
   let mockChannel: {
     assertExchange: jest.Mock;
     assertQueue: jest.Mock;
+    unbindQueue: jest.Mock;
     bindQueue: jest.Mock;
+    close: jest.Mock;
+  };
+  let mockChannelWrapper: {
+    waitForConnect: jest.Mock;
     close: jest.Mock;
   };
   let mockConnection: {
     createChannel: jest.Mock;
     close: jest.Mock;
+    on: jest.Mock;
   };
+
+  let setupCallback: (ch: unknown) => Promise<unknown>;
 
   beforeEach(async () => {
     mockChannel = {
       assertExchange: jest.fn().mockResolvedValue(undefined),
       assertQueue: jest.fn().mockResolvedValue(undefined),
+      unbindQueue: jest.fn().mockResolvedValue(undefined),
       bindQueue: jest.fn().mockResolvedValue(undefined),
       close: jest.fn().mockResolvedValue(undefined),
     };
 
-    mockConnection = {
-      createChannel: jest.fn().mockResolvedValue(mockChannel),
+    mockChannelWrapper = {
+      waitForConnect: jest.fn().mockResolvedValue(undefined),
       close: jest.fn().mockResolvedValue(undefined),
     };
 
-    (amqplib.connect as jest.Mock).mockResolvedValue(mockConnection);
+    mockConnection = {
+      createChannel: jest
+        .fn()
+        .mockImplementation(
+          (options: { setup: (ch: unknown) => Promise<unknown> }) => {
+            setupCallback = options.setup;
+            return mockChannelWrapper;
+          },
+        ),
+      close: jest.fn().mockResolvedValue(undefined),
+      on: jest.fn(),
+    };
+
+    (amqpManager.connect as jest.Mock).mockReturnValue(mockConnection);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -70,10 +93,13 @@ describe('RabbitMQSetupService', () => {
   });
 
   describe('onApplicationBootstrap', () => {
-    it('should assert exchange, queues, bindings, and close connection', async () => {
+    it('should assert exchange, queues, and explicit notification bindings', async () => {
       await service.onApplicationBootstrap();
+      await setupCallback(mockChannel);
 
-      expect(amqplib.connect).toHaveBeenCalledWith('amqp://localhost:5672');
+      expect(amqpManager.connect).toHaveBeenCalledWith([
+        'amqp://localhost:5672',
+      ]);
       expect(mockConnection.createChannel).toHaveBeenCalled();
       expect(mockChannel.assertExchange).toHaveBeenCalledWith(
         MAZADAK_EXCHANGE,
@@ -103,17 +129,38 @@ describe('RabbitMQSetupService', () => {
         AUCTION_QUEUE,
         expect.any(Object),
       );
-      expect(mockChannel.bindQueue).toHaveBeenCalled();
-      expect(mockChannel.close).toHaveBeenCalled();
-      expect(mockConnection.close).toHaveBeenCalled();
-    });
 
-    it('should catch error without rethrowing if connection fails', async () => {
-      (amqplib.connect as jest.Mock).mockRejectedValue(
-        new Error('Broker connection refused'),
+      // Verify explicit notification binding (e.g. AuctionStarted)
+      expect(mockChannel.bindQueue).toHaveBeenCalledWith(
+        NOTIFICATIONS_QUEUE,
+        MAZADAK_EXCHANGE,
+        RabbitMQEvent.AuctionStarted,
       );
 
+      // Verify unbind of wildcard
+      expect(mockChannel.unbindQueue).toHaveBeenCalledWith(
+        NOTIFICATIONS_QUEUE,
+        MAZADAK_EXCHANGE,
+        '#',
+      );
+    });
+
+    it('should catch error without throwing if bootstrap setup fails', async () => {
+      (amqpManager.connect as jest.Mock).mockImplementation(() => {
+        throw new Error('Broker connection refused');
+      });
+
       await expect(service.onApplicationBootstrap()).resolves.not.toThrow();
+    });
+  });
+
+  describe('onModuleDestroy', () => {
+    it('should close connection and channel wrapper', async () => {
+      await service.onApplicationBootstrap();
+      await service.onModuleDestroy();
+
+      expect(mockChannelWrapper.close).toHaveBeenCalled();
+      expect(mockConnection.close).toHaveBeenCalled();
     });
   });
 });

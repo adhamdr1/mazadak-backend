@@ -4,7 +4,7 @@ import { WebhookEvent } from '../entities/webhook-event.entity';
 export interface CreateWebhookEventData {
   providerEventId: string;
   provider: string;
-  payload: Record<string, any>;
+  payload: Record<string, unknown>;
   providerSignature: string;
   processed?: boolean;
 }

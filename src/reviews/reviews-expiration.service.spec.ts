@@ -54,7 +54,7 @@ describe('ReviewsExpirationService', () => {
         'reviews:expiration:lock',
         expect.any(String),
         'EX',
-        30,
+        600,
         'NX',
       );
       expect(

@@ -39,7 +39,7 @@ export class PaymentService {
     rawBody: Buffer,
     signature: string,
     providerEventId: string,
-    payload: Record<string, any>,
+    payload: Record<string, unknown>,
   ): Promise<void> {
     const provider = this.providerFactory.getProvider(providerType);
 
