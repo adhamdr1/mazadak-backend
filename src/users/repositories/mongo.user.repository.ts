@@ -107,7 +107,7 @@ export class MongoUserRepository implements IUserRepository {
   ): Promise<{ items: User[]; total: number }> {
     const skip = (page - 1) * limit;
 
-    const query: Record<string, any> = {
+    const query: Record<string, unknown> = {
       deletedAt: null,
     };
 
@@ -145,7 +145,7 @@ export class MongoUserRepository implements IUserRepository {
   }
 
   async countAll(filter?: UsersFilter): Promise<number> {
-    const query: Record<string, any> = {
+    const query: Record<string, unknown> = {
       deletedAt: null,
     };
 

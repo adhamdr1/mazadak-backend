@@ -15,7 +15,7 @@ import { TransactionService } from '../transaction/transaction.service';
 import { PaymentStatus } from './enums/payment-status.enum';
 
 const RECONCILIATION_LOCK_KEY = 'reconciliation:lock';
-const LOCK_TTL_SECONDS = 60;
+const LOCK_TTL_SECONDS = 600;
 
 @Injectable()
 export class ReconciliationService {

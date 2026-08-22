@@ -8,7 +8,7 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
-import { Types } from 'mongoose';
+import { Types, ClientSession } from 'mongoose';
 import { User } from './entities/user.entity';
 import { UserRole } from './enums/user-role.enum';
 import { CreateUserInput } from './dto/create-user.input';
@@ -20,6 +20,13 @@ import { CannotBanAdminException } from './exceptions/cannot-ban-admin.exception
 import { WalletHasBalanceException } from '../wallet/exceptions/wallet-has-balance.exception';
 import { GetWalletBalanceQuery } from '../wallet/queries/get-wallet-balance.query';
 import { RabbitMQEvent } from '../infrastructure/rabbitmq/rabbitmq-event.types';
+
+const mockSession = {
+  startTransaction: jest.fn(),
+  commitTransaction: jest.fn(),
+  abortTransaction: jest.fn(),
+  endSession: jest.fn(),
+} as unknown as ClientSession;
 
 const mockUserRepository = {
   findById: jest.fn(),
@@ -37,12 +44,7 @@ const mockUserRepository = {
   countVerified: jest.fn(),
   countAll: jest.fn(),
   linkGoogleAccount: jest.fn(),
-  startSession: jest.fn().mockResolvedValue({
-    startTransaction: jest.fn(),
-    commitTransaction: jest.fn(),
-    abortTransaction: jest.fn(),
-    endSession: jest.fn(),
-  }),
+  startSession: jest.fn().mockResolvedValue(mockSession),
 };
 
 const mockWalletService = {
@@ -456,7 +458,7 @@ describe('UsersService', () => {
       ).rejects.toThrow(WalletHasBalanceException);
 
       expect(mockQueryBus.execute).toHaveBeenCalledWith(
-        new GetWalletBalanceQuery(otherUserId),
+        new GetWalletBalanceQuery(otherUserId, mockSession),
       );
       expect(mockUserRepository.softDelete).not.toHaveBeenCalled();
     });
@@ -479,7 +481,7 @@ describe('UsersService', () => {
       // Assert
       expect(findByIdSpy).toHaveBeenCalledWith(otherUserId);
       expect(mockQueryBus.execute).toHaveBeenCalledWith(
-        new GetWalletBalanceQuery(otherUserId),
+        new GetWalletBalanceQuery(otherUserId, mockSession),
       );
       expect(mockUserRepository.softDelete).toHaveBeenCalled();
       expect(mockOutboxService.saveEvent).toHaveBeenCalled();

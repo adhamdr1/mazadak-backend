@@ -7,7 +7,7 @@ import { EscrowService } from './escrow.service';
 import { RELEASE_LOCK_LUA_SCRIPT } from '../../infrastructure/redis/redis.constants';
 
 const ESCROW_EXPIRATION_LOCK_KEY = 'escrow:expiration:lock';
-const LOCK_TTL_SECONDS = 30;
+const LOCK_TTL_SECONDS = 600;
 
 @Injectable()
 export class EscrowExpirationService {

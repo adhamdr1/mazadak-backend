@@ -11,7 +11,10 @@ export class GetWalletBalanceHandler implements IQueryHandler<GetWalletBalanceQu
   ) {}
 
   async execute(query: GetWalletBalanceQuery) {
-    const wallet = await this.walletRepository.findByUserId(query.userId);
+    const wallet = await this.walletRepository.findByUserId(
+      query.userId,
+      query.session,
+    );
     return {
       balance: wallet ? wallet.balance.toString() : '0.00',
       heldBalance: wallet ? wallet.heldBalance.toString() : '0.00',

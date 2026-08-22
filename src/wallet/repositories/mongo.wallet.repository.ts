@@ -17,9 +17,13 @@ export class MongoWalletRepository implements IWalletRepository {
     return await wallet.save({ session });
   }
 
-  async findByUserId(userId: string): Promise<Wallet | null> {
+  async findByUserId(
+    userId: string,
+    session?: ClientSession,
+  ): Promise<Wallet | null> {
     return await this.walletModel
       .findOne({ userId: new Types.ObjectId(userId) })
+      .session(session || null)
       .exec();
   }
 

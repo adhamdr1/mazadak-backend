@@ -49,7 +49,9 @@ export class MongoBidRepository implements IBidRepository {
     filter: BidsFilterInput,
   ): Promise<{ items: Bid[]; total: number }> {
     const skip = (page - 1) * limit;
-    const query = filter?.status ? { status: filter.status } : {};
+    const query: Record<string, unknown> = filter?.status
+      ? { status: filter.status }
+      : {};
 
     const sortParams: Record<string, 1 | -1> = {};
     if (filter?.sort) {
@@ -80,7 +82,7 @@ export class MongoBidRepository implements IBidRepository {
     filter: BidsFilterInput,
   ): Promise<{ items: Bid[]; total: number }> {
     const skip = (page - 1) * limit;
-    const query: Record<string, any> = {
+    const query: Record<string, unknown> = {
       auctionId: new Types.ObjectId(auctionId),
     };
     if (filter?.status) {
@@ -117,7 +119,7 @@ export class MongoBidRepository implements IBidRepository {
     filter: BidsFilterInput,
   ): Promise<{ items: Bid[]; total: number }> {
     const skip = (page - 1) * limit;
-    const query: Record<string, any> = {
+    const query: Record<string, unknown> = {
       bidderId: new Types.ObjectId(bidderId),
     };
     if (filter?.status) {

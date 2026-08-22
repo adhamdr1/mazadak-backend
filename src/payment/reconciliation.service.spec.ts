@@ -126,7 +126,7 @@ describe('ReconciliationService', () => {
         'reconciliation:lock',
         expect.any(String),
         'EX',
-        60,
+        600,
         'NX',
       );
       expect(mockProviderFactory.getProvider).toHaveBeenCalledWith(

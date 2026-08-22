@@ -103,7 +103,7 @@ export interface AuctionCancelledByAdminPayload {
 export interface PaymentWebhookReceivedPayload {
   providerEventId: string;
   provider: string;
-  payload: Record<string, any>;
+  payload: Record<string, unknown>;
 }
 
 export interface UserRegisteredPayload {

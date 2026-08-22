@@ -210,22 +210,22 @@ export class UsersService {
     }
     await this.findById(targetId);
 
-    // Verify wallet has zero balance (available balance + held balance = 0) before deletion.
-    const wallet = await this.queryBus.execute<{
-      balance: string;
-      heldBalance: string;
-    }>(new GetWalletBalanceQuery(targetId));
-
-    if (
-      new Decimal(wallet.balance).greaterThan(0) ||
-      new Decimal(wallet.heldBalance).greaterThan(0)
-    ) {
-      throw new WalletHasBalanceException();
-    }
-
     const session = await this.startSession();
     try {
       session.startTransaction();
+
+      // Verify wallet has zero balance (available balance + held balance = 0) within transaction session.
+      const wallet = await this.queryBus.execute<{
+        balance: string;
+        heldBalance: string;
+      }>(new GetWalletBalanceQuery(targetId, session));
+
+      if (
+        new Decimal(wallet.balance).greaterThan(0) ||
+        new Decimal(wallet.heldBalance).greaterThan(0)
+      ) {
+        throw new WalletHasBalanceException();
+      }
 
       await this.userRepository.softDelete(targetId, session);
       await this.redis.del(`user:auth-status:${targetId}`);

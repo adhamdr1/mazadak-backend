@@ -18,7 +18,7 @@ export class WebhookEvent {
   provider!: PaymentProviderType;
 
   @Prop({ type: Object, required: true })
-  payload!: Record<string, any>;
+  payload!: Record<string, unknown>;
 
   @Prop({ type: String, required: true })
   providerSignature!: string;

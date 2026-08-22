@@ -100,32 +100,32 @@ export class EscrowService {
    * Buyer confirms receipt of the product. Escrow is released to the seller immediately.
    */
   async confirmDelivery(buyerId: string, escrowId: string): Promise<Escrow> {
-    const escrow = await this.escrowRepository.findById(escrowId);
-    if (!escrow) {
-      throw new EscrowNotFoundException();
-    }
-
-    if (escrow.buyerId.toString() !== buyerId) {
-      throw new EscrowUnauthorizedException();
-    }
-
-    if (escrow.status === EscrowStatus.RELEASED) {
-      throw new EscrowAlreadyReleasedException();
-    }
-
-    if (escrow.status === EscrowStatus.DISPUTED) {
-      throw new EscrowAlreadyDisputedException();
-    }
-
-    if (escrow.status !== EscrowStatus.HELD) {
-      throw new Error(
-        `Cannot confirm delivery for escrow in status ${escrow.status}`,
-      );
-    }
-
     const session = await this.connection.startSession();
     try {
       session.startTransaction();
+
+      const escrow = await this.escrowRepository.findById(escrowId, session);
+      if (!escrow) {
+        throw new EscrowNotFoundException();
+      }
+
+      if (escrow.buyerId.toString() !== buyerId) {
+        throw new EscrowUnauthorizedException();
+      }
+
+      if (escrow.status === EscrowStatus.RELEASED) {
+        throw new EscrowAlreadyReleasedException();
+      }
+
+      if (escrow.status === EscrowStatus.DISPUTED) {
+        throw new EscrowAlreadyDisputedException();
+      }
+
+      if (escrow.status !== EscrowStatus.HELD) {
+        throw new Error(
+          `Cannot confirm delivery for escrow in status ${escrow.status}`,
+        );
+      }
 
       const amountNumber = Number(escrow.amount.toString());
       const sellerId = escrow.sellerId.toString();

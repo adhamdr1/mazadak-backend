@@ -12,7 +12,7 @@ import { TransactionStatus } from '../transaction/enums/transaction-status.enum'
 import { TransactionType } from '../transaction/enums/transaction-type.enum';
 
 const EXPIRATION_LOCK_KEY = 'payment:expiration:lock';
-const LOCK_TTL_SECONDS = 30;
+const LOCK_TTL_SECONDS = 300;
 
 @Injectable()
 export class PaymentExpirationService {

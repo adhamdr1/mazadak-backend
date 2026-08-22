@@ -4,7 +4,7 @@ import { Wallet } from '../entities/wallet.entity';
 export interface IWalletRepository {
   create(userId: string, session?: ClientSession): Promise<Wallet>;
 
-  findByUserId(userId: string): Promise<Wallet | null>;
+  findByUserId(userId: string, session?: ClientSession): Promise<Wallet | null>;
 
   findById(walletId: string): Promise<Wallet | null>;
 
