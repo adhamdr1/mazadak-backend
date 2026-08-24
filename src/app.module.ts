@@ -53,7 +53,9 @@ import { EscrowModule } from './escrow/escrow.module';
           {
             name: 'global',
             ttl: 60_000,
-            limit: 100,
+            // Configurable via THROTTLE_GLOBAL_LIMIT env var — raise it temporarily for load testing.
+            // Default: 100 requests/minute per IP (production safe value).
+            limit: configService.get<number>('THROTTLE_GLOBAL_LIMIT', 100),
           },
           // 'global' throttler applies to all routes (100 requests/minute).
           // 'strict' throttler has a high global limit (99999) by design so it does not

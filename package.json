@@ -17,7 +17,12 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:load:smoke": "k6 run load-tests/scenarios/01-smoke.js",
+    "test:load:browse": "k6 run load-tests/scenarios/02-browse-load.js",
+    "test:load:stress": "k6 run load-tests/scenarios/03-bidding-stress.js",
+    "test:load:spike": "k6 run load-tests/scenarios/04-spike.js",
+    "test:load:reset": "docker exec mazadak_redis redis-cli --scan --pattern \"blacklist:ip:*\" | ForEach-Object { docker exec mazadak_redis redis-cli DEL $_ }"
   },
   "dependencies": {
     "@apollo/server": "^5.5.1",
@@ -82,6 +87,7 @@
     "@types/bcrypt": "^6.0.0",
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
+    "@types/k6": "^2.2.0",
     "@types/ms": "^2.1.0",
     "@types/node": "^24.0.0",
     "@types/nodemailer": "^8.0.1",
