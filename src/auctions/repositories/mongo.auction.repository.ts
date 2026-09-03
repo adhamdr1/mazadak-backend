@@ -206,8 +206,14 @@ export class MongoAuctionRepository implements IAuctionRepository {
       query.status = { $nin: excludeStatuses };
     }
 
-    if (filter.search) {
-      query.$text = { $search: filter.search };
+    if (filter.search && filter.search.trim()) {
+      const sanitizedSearch = filter.search
+        .trim()
+        .replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      query.$or = [
+        { title: { $regex: sanitizedSearch, $options: 'i' } },
+        { description: { $regex: sanitizedSearch, $options: 'i' } },
+      ];
     }
 
     return query;
