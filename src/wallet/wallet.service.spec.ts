@@ -11,6 +11,7 @@ import { TransactionStatus } from '../transaction/enums/transaction-status.enum'
 import { Types } from 'mongoose';
 import { PaginationInput } from '../common/dto/pagination.input';
 import { OutboxService } from '../infrastructure/outbox/outbox.service';
+import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
 import { getConnectionToken } from '@nestjs/mongoose';
 
 const mockTransaction = { _id: new Types.ObjectId() };
@@ -53,6 +54,10 @@ const mockOutboxService = {
   saveEvent: jest.fn().mockResolvedValue(undefined),
 };
 
+const mockRealtimeService = {
+  publishWalletUpdated: jest.fn().mockResolvedValue(undefined),
+};
+
 describe('WalletService', () => {
   let service: WalletService;
 
@@ -65,6 +70,7 @@ describe('WalletService', () => {
         { provide: NotificationsService, useValue: mockNotificationsService },
         { provide: UsersService, useValue: mockUsersService },
         { provide: OutboxService, useValue: mockOutboxService },
+        { provide: RealtimeService, useValue: mockRealtimeService },
         {
           provide: getConnectionToken(),
           useValue: {
@@ -154,6 +160,9 @@ describe('WalletService', () => {
       const { wallet } = await service.deposit(userId, 100);
 
       expect(wallet).toEqual(updatedWallet);
+      expect(mockRealtimeService.publishWalletUpdated).toHaveBeenCalledWith(
+        updatedWallet,
+      );
       expect(mockTransactionService.createTransaction).toHaveBeenCalledWith(
         expect.objectContaining({
           walletId,

@@ -11,6 +11,7 @@ import { ChatMessageType } from '../../chat/enums/chat-message-type.enum';
 import { Types } from 'mongoose';
 import { Bid } from '../../bids/entities/bid.entity';
 import { Auction } from '../../auctions/entities/auction.entity';
+import { Wallet } from '../../wallet/entities/wallet.entity';
 
 const mockPubSub = {
   publish: jest.fn().mockResolvedValue(undefined),
@@ -161,6 +162,23 @@ describe('RealtimeService', () => {
     expect(mockPubSub.publish).toHaveBeenCalledWith(
       PUB_SUB_EVENTS.CHAT_READ_STATUS_UPDATED,
       { chatReadStatusUpdated: payload },
+    );
+  });
+
+  it('should publish wallet updated event', async () => {
+    const payload = {
+      _id: new Types.ObjectId(),
+      userId: new Types.ObjectId(),
+      balance: 5000,
+      heldBalance: 1000,
+      currency: 'EGP',
+    } as unknown as Wallet;
+
+    await service.publishWalletUpdated(payload);
+
+    expect(mockPubSub.publish).toHaveBeenCalledWith(
+      PUB_SUB_EVENTS.WALLET_UPDATED,
+      { walletUpdated: payload },
     );
   });
 

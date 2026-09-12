@@ -6,6 +6,7 @@ import { BidAddedPayload } from '../../bids/dto/bid-added.payload';
 import { InAppNotification } from '../../notifications/in-app/entities/in-app-notification.entity';
 import { AuctionStatusChangedPayload } from '../../auctions/dto/auction-status-changed.payload';
 import { ChatMessage } from '../../chat/entities/chat-message.entity';
+import { Wallet } from '../../wallet/entities/wallet.entity';
 
 @Injectable()
 export class RealtimeService {
@@ -90,6 +91,15 @@ export class RealtimeService {
   }): Promise<void> {
     await this.publishSafely(PUB_SUB_EVENTS.CHAT_READ_STATUS_UPDATED, {
       chatReadStatusUpdated: payload,
+    });
+  }
+
+  /**
+   * Publish a real-time event when a user's wallet balances or status change.
+   */
+  async publishWalletUpdated(payload: Wallet): Promise<void> {
+    await this.publishSafely(PUB_SUB_EVENTS.WALLET_UPDATED, {
+      walletUpdated: payload,
     });
   }
 }

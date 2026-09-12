@@ -121,11 +121,31 @@ export class AutoBiddingService {
         }
 
         // 3. Check Wallet Available Balance
+        // The real "committed" amount for this auction is the user's current
+        // WINNING BID amount (which is already held in the wallet), NOT the
+        // auto-bid maxAmount (which is just a ceiling, never held directly).
+        //
+        // Cases:
+        //   - User is currently winning at X  → only need (newMax - X) more
+        //   - User is not winning (no bid / exhausted / outbid) → hold = 0 → need full newMax
+        //
+        // This correctly handles all auto-bid states without an extra DB query
+        // because currentWinner is already fetched above.
+        const isUserCurrentWinner =
+          currentWinner?.bidderId.toString() === userId;
+        const currentAuctionCommitment = isUserCurrentWinner
+          ? new Decimal(currentWinner.amount.toString()).toNumber()
+          : 0;
+        const requiredDelta = new Decimal(input.maxAmount)
+          .minus(currentAuctionCommitment)
+          .toNumber();
+
         const wallet = await this.walletService.getWalletByUserId(userId);
         const availableBalance = new Decimal(wallet.balance.toString())
           .minus(wallet.heldBalance.toString())
           .toNumber();
-        if (availableBalance < input.maxAmount) {
+
+        if (requiredDelta > 0 && availableBalance < requiredDelta) {
           throw new AutoBidInsufficientBalanceException();
         }
 
@@ -205,84 +225,129 @@ export class AutoBiddingService {
             priceChanged = true;
             let outbidTransactionId: string | undefined;
 
-            // Handle funds for previous winner
-            if (currentWinner) {
-              const prevWinnerId = currentWinner.bidderId.toString();
-              const prevAmount = Number(currentWinner.amount.toString());
+            // Pre-flight: verify the winning auto-bidder still has sufficient funds.
+            // Their balance may have been drained by concurrent holds on other auctions.
+            //
+            // The previousHold from THIS auction will be released just below,
+            // so we add it back to compute the true available capacity.
+            const isWinnerAlreadyWinning =
+              currentWinner?.bidderId.toString() === winningCandidate.bidderId;
+            const previousHoldToRelease = isWinnerAlreadyWinning
+              ? new Decimal(currentWinner.amount.toString()).toNumber()
+              : 0;
+            const winnerWallet = await this.walletService.getWalletByUserId(
+              winningCandidate.bidderId,
+            );
+            const winnerAvailable = new Decimal(winnerWallet.balance.toString())
+              .minus(winnerWallet.heldBalance.toString())
+              .plus(previousHoldToRelease)
+              .toNumber();
 
-              // Release previous winner's held funds
-              const { transaction } = await this.walletService.release(
-                prevWinnerId,
-                prevAmount,
+            if (
+              winnerAvailable < winningCandidate.amount &&
+              engineResult.winningAutoBidId
+            ) {
+              // ─── Multi-auction exhaustion: winner has no funds ───
+              // Mark their auto-bid as EXHAUSTED and skip bid creation.
+              // The upsert that just ran will be rolled-back with the session.
+              priceChanged = false;
+              await this.autoBidRepository.updateStatus(
+                engineResult.winningAutoBidId,
+                AutoBidStatus.EXHAUSTED,
+                session,
+              );
+              await this.outboxService.saveEvent(
+                RabbitMQEvent.AutoBidExhausted,
+                {
+                  autoBidId: engineResult.winningAutoBidId,
+                  auctionId: input.auctionId,
+                  auctionTitle: auction.title,
+                  userId: winningCandidate.bidderId,
+                  maxAmount: winningCandidate.amount,
+                  currentPrice: winningCandidate.amount,
+                },
+                session,
+              );
+            } else {
+              // Handle funds for previous winner
+              if (currentWinner) {
+                const prevWinnerId = currentWinner.bidderId.toString();
+                const prevAmount = Number(currentWinner.amount.toString());
+
+                // Release previous winner's held funds
+                const { transaction } = await this.walletService.release(
+                  prevWinnerId,
+                  prevAmount,
+                  input.auctionId,
+                  session,
+                  TransactionReferenceType.AUCTION,
+                );
+                outbidTransactionId = transaction._id.toString();
+
+                // Mark previous bid as OUTBID
+                await this.bidRepository.updateStatus(
+                  currentWinner._id.toString(),
+                  BidStatus.OUTBID,
+                  session,
+                );
+              }
+
+              // Hold funds for the new winner
+              await this.walletService.hold(
+                winningCandidate.bidderId,
+                winningCandidate.amount,
                 input.auctionId,
                 session,
                 TransactionReferenceType.AUCTION,
               );
-              outbidTransactionId = transaction._id.toString();
 
-              // Mark previous bid as OUTBID
-              await this.bidRepository.updateStatus(
-                currentWinner._id.toString(),
-                BidStatus.OUTBID,
+              // Create winning bid
+              newWinningBid = await this.bidRepository.create(
+                {
+                  auctionId: new Types.ObjectId(input.auctionId),
+                  bidderId: new Types.ObjectId(winningCandidate.bidderId),
+                  amount: winningCandidate.amount,
+                  status: BidStatus.WINNING,
+                },
                 session,
               );
-            }
 
-            // Hold funds for the new winner
-            await this.walletService.hold(
-              winningCandidate.bidderId,
-              winningCandidate.amount,
-              input.auctionId,
-              session,
-              TransactionReferenceType.AUCTION,
-            );
+              // Update Auction Current Price
+              await this.auctionRepository.updateCurrentPrice(
+                input.auctionId,
+                winningCandidate.amount,
+                session,
+              );
 
-            // Create winning bid
-            newWinningBid = await this.bidRepository.create(
-              {
-                auctionId: new Types.ObjectId(input.auctionId),
-                bidderId: new Types.ObjectId(winningCandidate.bidderId),
-                amount: winningCandidate.amount,
-                status: BidStatus.WINNING,
-              },
-              session,
-            );
+              // Transactional Outbox Events
+              await this.outboxService.saveEvent(
+                RabbitMQEvent.BidPlaced,
+                {
+                  bidId: newWinningBid._id.toString(),
+                  auctionId: input.auctionId,
+                  auctionTitle: auction.title,
+                  sellerId: auction.sellerId.toString(),
+                  bidderId: winningCandidate.bidderId,
+                  amount: winningCandidate.amount,
+                  outbidUserId: currentWinner?.bidderId.toString(),
+                  outbidTransactionId,
+                },
+                session,
+              );
 
-            // Update Auction Current Price
-            await this.auctionRepository.updateCurrentPrice(
-              input.auctionId,
-              winningCandidate.amount,
-              session,
-            );
-
-            // Transactional Outbox Events
-            await this.outboxService.saveEvent(
-              RabbitMQEvent.BidPlaced,
-              {
-                bidId: newWinningBid._id.toString(),
-                auctionId: input.auctionId,
-                auctionTitle: auction.title,
-                sellerId: auction.sellerId.toString(),
-                bidderId: winningCandidate.bidderId,
-                amount: winningCandidate.amount,
-                outbidUserId: currentWinner?.bidderId.toString(),
-                outbidTransactionId,
-              },
-              session,
-            );
-
-            await this.outboxService.saveEvent(
-              RabbitMQEvent.AutoBidPlaced,
-              {
-                bidId: newWinningBid._id.toString(),
-                auctionId: input.auctionId,
-                auctionTitle: auction.title,
-                bidderId: winningCandidate.bidderId,
-                amount: winningCandidate.amount,
-                isAutoBid: true,
-              },
-              session,
-            );
+              await this.outboxService.saveEvent(
+                RabbitMQEvent.AutoBidPlaced,
+                {
+                  bidId: newWinningBid._id.toString(),
+                  auctionId: input.auctionId,
+                  auctionTitle: auction.title,
+                  bidderId: winningCandidate.bidderId,
+                  amount: winningCandidate.amount,
+                  isAutoBid: true,
+                },
+                session,
+              );
+            } // end else: sufficient funds path
           }
         }
 
