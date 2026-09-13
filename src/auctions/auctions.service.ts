@@ -121,6 +121,8 @@ export class AuctionsService {
     // Invalidate active auctions cache (new auction may become active soon)
     void this.redisService.invalidatePattern(ACTIVE_AUCTIONS_PATTERN);
 
+    await this.realtimeService.publishAuctionCreated(auction);
+
     return auction;
   }
 

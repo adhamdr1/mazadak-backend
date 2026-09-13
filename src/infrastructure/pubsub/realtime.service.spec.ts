@@ -182,6 +182,21 @@ describe('RealtimeService', () => {
     );
   });
 
+  it('should publish auction created event', async () => {
+    const payload = {
+      _id: new Types.ObjectId(),
+      sellerId: new Types.ObjectId(),
+      title: 'New Auction',
+    } as unknown as Auction;
+
+    await service.publishAuctionCreated(payload);
+
+    expect(mockPubSub.publish).toHaveBeenCalledWith(
+      PUB_SUB_EVENTS.AUCTION_CREATED,
+      { auctionCreated: payload },
+    );
+  });
+
   it('should handle pubsub errors gracefully without throwing', async () => {
     mockPubSub.publish.mockRejectedValue(new Error('Redis connection down'));
 

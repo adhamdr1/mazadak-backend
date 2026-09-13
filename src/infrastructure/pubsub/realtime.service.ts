@@ -5,6 +5,7 @@ import { PUB_SUB_EVENTS } from './events.constants';
 import { BidAddedPayload } from '../../bids/dto/bid-added.payload';
 import { InAppNotification } from '../../notifications/in-app/entities/in-app-notification.entity';
 import { AuctionStatusChangedPayload } from '../../auctions/dto/auction-status-changed.payload';
+import { Auction } from '../../auctions/entities/auction.entity';
 import { ChatMessage } from '../../chat/entities/chat-message.entity';
 import { Wallet } from '../../wallet/entities/wallet.entity';
 
@@ -31,6 +32,15 @@ export class RealtimeService {
         }`,
       );
     }
+  }
+
+  /**
+   * Publish a real-time event when a new auction is created.
+   */
+  async publishAuctionCreated(payload: Auction): Promise<void> {
+    await this.publishSafely(PUB_SUB_EVENTS.AUCTION_CREATED, {
+      auctionCreated: payload,
+    });
   }
 
   /**

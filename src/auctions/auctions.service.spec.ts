@@ -69,6 +69,13 @@ const mockNotificationsService = {
   createInAppNotification: jest.fn().mockResolvedValue(undefined),
 };
 
+const mockRealtimeService = {
+  publishAuctionCreated: jest.fn().mockResolvedValue(undefined),
+  publishBidAdded: jest.fn().mockResolvedValue(undefined),
+  publishNotificationAdded: jest.fn().mockResolvedValue(undefined),
+  publishAuctionStatusChanged: jest.fn().mockResolvedValue(undefined),
+};
+
 describe('AuctionsService', () => {
   let service: AuctionsService;
 
@@ -83,14 +90,7 @@ describe('AuctionsService', () => {
         },
         { provide: NotificationsService, useValue: mockNotificationsService },
         { provide: WalletService, useValue: mockWalletService },
-        {
-          provide: RealtimeService,
-          useValue: {
-            publishBidAdded: jest.fn().mockResolvedValue(undefined),
-            publishNotificationAdded: jest.fn().mockResolvedValue(undefined),
-            publishAuctionStatusChanged: jest.fn().mockResolvedValue(undefined),
-          },
-        },
+        { provide: RealtimeService, useValue: mockRealtimeService },
         { provide: RedisService, useValue: mockRedisService },
         {
           provide: RabbitMQService,
@@ -160,6 +160,9 @@ describe('AuctionsService', () => {
       const result = await service.createAuction(sellerId, input);
       expect(result).toEqual(mockAuction);
       expect(mockAuctionRepository.create).toHaveBeenCalled();
+      expect(mockRealtimeService.publishAuctionCreated).toHaveBeenCalledWith(
+        mockAuction,
+      );
     });
 
     it('should throw AuctionStartTimeTooSoonException if start time is < 15 mins', async () => {
