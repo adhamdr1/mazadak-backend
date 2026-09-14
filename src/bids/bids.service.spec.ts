@@ -98,6 +98,13 @@ const mockEscrowService = {
   createEscrow: jest.fn().mockResolvedValue({ _id: new Types.ObjectId() }),
 };
 
+const mockRealtimeService = {
+  publishBidAdded: jest.fn().mockResolvedValue(undefined),
+  publishNotificationAdded: jest.fn().mockResolvedValue(undefined),
+  publishAuctionStatusChanged: jest.fn().mockResolvedValue(undefined),
+  publishWalletUpdated: jest.fn().mockResolvedValue(undefined),
+};
+
 const mockProxyBiddingEngineService = {
   processProxyBids: jest.fn().mockResolvedValue(undefined),
   calculateNextState: jest.fn().mockReturnValue({
@@ -126,14 +133,7 @@ describe('BidsService', () => {
         { provide: EscrowService, useValue: mockEscrowService },
         { provide: NotificationsService, useValue: mockNotificationsService },
         { provide: OutboxService, useValue: mockOutboxService },
-        {
-          provide: RealtimeService,
-          useValue: {
-            publishBidAdded: jest.fn().mockResolvedValue(undefined),
-            publishNotificationAdded: jest.fn().mockResolvedValue(undefined),
-            publishAuctionStatusChanged: jest.fn().mockResolvedValue(undefined),
-          },
-        },
+        { provide: RealtimeService, useValue: mockRealtimeService },
         { provide: RedisService, useValue: mockRedisService },
         {
           provide: getRedisConnectionToken(),
@@ -324,8 +324,20 @@ describe('BidsService', () => {
         }),
         mockSession,
       );
-      // Removed mockAuctionRepository.finalizeAuction check since it might not be there anymore.
       expect(mockSession.commitTransaction).toHaveBeenCalled();
+      expect(mockRedisService.invalidatePattern).toHaveBeenCalledWith(
+        'auction:active:*',
+      );
+      expect(
+        mockRealtimeService.publishAuctionStatusChanged,
+      ).toHaveBeenCalledWith({
+        auction: expect.objectContaining({
+          _id: auctionId,
+          status: AuctionStatus.ENDED,
+          winnerId: mockWinningBid.bidderId,
+          isFinalized: true,
+        }) as unknown,
+      });
     });
 
     it('should do nothing if no ended auctions', async () => {

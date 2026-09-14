@@ -128,6 +128,20 @@ export class AuctionsResolver {
   }
 
   /**
+   * Real-time subscription: fires whenever a new auction is created.
+   * Public — anyone browsing auctions can subscribe to receive new auction announcements.
+   */
+  @Public()
+  @Subscription(() => Auction, {
+    name: 'auctionCreated',
+  })
+  auctionCreated() {
+    return this.pubSub.asyncIterableIterator(
+      PUB_SUB_EVENTS.AUCTION_CREATED,
+    ) as AsyncIterable<{ auctionCreated: Auction }>;
+  }
+
+  /**
    * Real-time subscription: fires when an auction status changes.
    * Covers: PENDING→ACTIVE (Cron), ACTIVE→ENDED (Cron), any→CANCELLED (manual).
    * Public — anyone watching an auction page should receive status updates.

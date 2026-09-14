@@ -9,6 +9,8 @@ import { Types } from 'mongoose';
 import { WithdrawInput } from './dto/withdraw.input';
 
 import { PaginationInput } from '../common/dto/pagination.input';
+import { PUB_SUB } from '../infrastructure/pubsub/pubsub.provider';
+import { PUB_SUB_EVENTS } from '../infrastructure/pubsub/events.constants';
 
 const mockWalletService = {
   getMyWallet: jest.fn(),
@@ -22,6 +24,10 @@ const mockTransactionService = {
   getTransactionsByWalletId: jest.fn(),
 };
 
+const mockPubSub = {
+  asyncIterableIterator: jest.fn(),
+};
+
 describe('WalletResolver', () => {
   let resolver: WalletResolver;
 
@@ -31,6 +37,7 @@ describe('WalletResolver', () => {
         WalletResolver,
         { provide: WalletService, useValue: mockWalletService },
         { provide: TransactionService, useValue: mockTransactionService },
+        { provide: PUB_SUB, useValue: mockPubSub },
       ],
     }).compile();
 
@@ -148,6 +155,26 @@ describe('WalletResolver', () => {
 
       expect(result).toEqual(mockWallet);
       expect(mockWalletService.getWalletByUserId).toHaveBeenCalledWith(userId);
+    });
+  });
+
+  describe('walletUpdated subscription', () => {
+    it('should return asyncIterator when user is authenticated', () => {
+      const mockIterator = {} as AsyncIterable<{ walletUpdated: Wallet }>;
+      mockPubSub.asyncIterableIterator.mockReturnValue(mockIterator);
+
+      const result = resolver.walletUpdated(currentUser);
+
+      expect(result).toBe(mockIterator);
+      expect(mockPubSub.asyncIterableIterator).toHaveBeenCalledWith(
+        PUB_SUB_EVENTS.WALLET_UPDATED,
+      );
+    });
+
+    it('should throw UnauthorizedException when user is not in context', () => {
+      expect(() =>
+        resolver.walletUpdated(undefined as unknown as JwtPayload),
+      ).toThrow('Authentication required to subscribe to wallet updates');
     });
   });
 });

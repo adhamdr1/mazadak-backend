@@ -15,6 +15,7 @@ import { WalletsPage } from './dto/wallets-page.type';
 import { PaginationInput } from '../common/dto/pagination.input';
 import { RabbitMQEvent } from '../infrastructure/rabbitmq/rabbitmq-event.types';
 import { OutboxService } from '../infrastructure/outbox/outbox.service';
+import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
 import Decimal from 'decimal.js';
 
 @Injectable()
@@ -26,6 +27,7 @@ export class WalletService {
     private readonly walletRepository: IWalletRepository,
     private readonly transactionService: TransactionService,
     private readonly outboxService: OutboxService,
+    private readonly realtimeService: RealtimeService,
     @InjectConnection() private readonly connection: Connection,
   ) {}
 
@@ -87,6 +89,9 @@ export class WalletService {
       },
       params.session,
     );
+
+    // Publish real-time wallet update (non-blocking)
+    void this.realtimeService.publishWalletUpdated(updated);
 
     return { wallet: updated, transaction };
   }

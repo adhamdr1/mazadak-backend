@@ -2,11 +2,12 @@ import {
   Resolver,
   Query,
   Mutation,
+  Subscription,
   Args,
   ResolveField,
   Parent,
 } from '@nestjs/graphql';
-import { UseGuards } from '@nestjs/common';
+import { Inject, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { WalletService } from './wallet.service';
 import { Wallet } from './entities/wallet.entity';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -22,6 +23,9 @@ import { WithdrawInput } from './dto/withdraw.input';
 import { WalletsPage } from './dto/wallets-page.type';
 import { PaginationInput } from '../common/dto/pagination.input';
 import Decimal from 'decimal.js';
+import { PUB_SUB } from '../infrastructure/pubsub/pubsub.provider';
+import { PUB_SUB_EVENTS } from '../infrastructure/pubsub/events.constants';
+import type { RedisPubSub } from 'graphql-redis-subscriptions';
 
 @Resolver(() => Wallet)
 @UseGuards(JwtAuthGuard)
@@ -29,6 +33,8 @@ export class WalletResolver {
   constructor(
     private readonly walletService: WalletService,
     private readonly transactionService: TransactionService,
+    @Inject(PUB_SUB)
+    private readonly pubSub: RedisPubSub,
   ) {}
 
   // ─── Queries ──────────────────────────────────────────────────────────────
@@ -93,5 +99,33 @@ export class WalletResolver {
       input.amount,
     );
     return wallet;
+  }
+
+  // ─── Subscriptions ────────────────────────────────────────────────────────
+
+  /**
+   * Real-time subscription: delivers wallet balance and held updates only to the owner.
+   * Security: userId is strictly filtered against the authenticated WebSocket context.
+   */
+  @Subscription(() => Wallet, {
+    name: 'walletUpdated',
+    filter: (
+      payload: { walletUpdated: Wallet },
+      _variables: Record<string, never>,
+      context: { user?: JwtPayload },
+    ) => {
+      if (!context.user) return false;
+      return payload.walletUpdated.userId.toString() === context.user.sub;
+    },
+  })
+  walletUpdated(@CurrentUser() user: JwtPayload) {
+    if (!user) {
+      throw new UnauthorizedException(
+        'Authentication required to subscribe to wallet updates',
+      );
+    }
+    return this.pubSub.asyncIterableIterator(
+      PUB_SUB_EVENTS.WALLET_UPDATED,
+    ) as AsyncIterable<{ walletUpdated: Wallet }>;
   }
 }
