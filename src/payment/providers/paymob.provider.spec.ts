@@ -13,11 +13,12 @@ describe('PaymobProvider', () => {
 
   const mockConfigService = {
     get: jest.fn((key: string) => {
-      if (key === 'PAYMOB_HMAC_SECRET') return 'test_hmac_secret';
+      if (key === 'PAYMOB_SECRET_KEY') return 'test_secret_key';
+      if (key === 'PAYMOB_PUBLIC_KEY') return 'test_public_key';
       if (key === 'PAYMOB_API_KEY') return 'test_api_key';
-      if (key === 'PAYMOB_INTEGRATION_ID') return 12345;
-      if (key === 'PAYMOB_API_BASE_URL') return 'https://accept.paymob.com/api';
-      if (key === 'PAYMOB_IFRAME_ID') return '9999';
+      if (key === 'PAYMOB_HMAC_SECRET') return 'test_hmac_secret';
+      if (key === 'PAYMOB_INTEGRATION_IDS') return '5920300,5920296,5920302';
+      if (key === 'PAYMOB_API_BASE_URL') return 'https://accept.paymob.com';
       return undefined;
     }),
   };
@@ -45,11 +46,14 @@ describe('PaymobProvider', () => {
   });
 
   describe('createPayment', () => {
-    it('should create payment through Paymob workflow', async () => {
-      mockedAxios.post
-        .mockResolvedValueOnce({ data: { token: 'auth_token_123' } }) // auth
-        .mockResolvedValueOnce({ data: { id: 67890 } }) // order
-        .mockResolvedValueOnce({ data: { token: 'payment_token_456' } }); // payment key
+    it('should create payment intention through modern Paymob API', async () => {
+      mockedAxios.post.mockResolvedValueOnce({
+        data: {
+          client_secret: 'cs_test_12345',
+          id: 67890,
+          intention_order_id: 998877,
+        },
+      });
 
       const result = await provider.createPayment({
         amount: 5000,
@@ -63,16 +67,35 @@ describe('PaymobProvider', () => {
 
       expect(result).toEqual({
         gatewayPaymentIntentId: '67890',
-        clientSecret: 'payment_token_456',
+        clientSecret: 'cs_test_12345',
         paymentUrl:
-          'https://accept.paymob.com/api/acceptance/iframes/9999?payment_token=payment_token_456',
+          'https://accept.paymob.com/unifiedcheckout/?publicKey=test_public_key&clientSecret=cs_test_12345',
       });
+
       // eslint-disable-next-line @typescript-eslint/unbound-method
-      expect(mockedAxios.post).toHaveBeenCalledTimes(3);
+      expect(mockedAxios.post).toHaveBeenCalledTimes(1);
+      // eslint-disable-next-line @typescript-eslint/unbound-method
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        'https://accept.paymob.com/v1/intention/',
+        expect.objectContaining({
+          amount: 5000,
+          currency: 'EGP',
+          payment_methods: [5920300, 5920296, 5920302],
+          special_reference: 'tx_123',
+        }),
+        expect.objectContaining({
+          headers: {
+            Authorization: 'Token test_secret_key',
+            'Content-Type': 'application/json',
+          },
+        }),
+      );
     });
 
-    it('should throw InternalServerErrorException if any step fails', async () => {
-      mockedAxios.post.mockRejectedValueOnce(new Error('Network error'));
+    it('should throw InternalServerErrorException if Intention creation fails', async () => {
+      mockedAxios.post.mockRejectedValueOnce(
+        new Error('Paymob connection timeout'),
+      );
 
       await expect(
         provider.createPayment({
@@ -94,7 +117,7 @@ describe('PaymobProvider', () => {
         error_occured: false,
         has_parent_transaction: false,
         id: 11111,
-        integration_id: 12345,
+        integration_id: 5920300,
         is_3d_secure: true,
         is_auth: false,
         is_capture: false,
@@ -147,6 +170,14 @@ describe('PaymobProvider', () => {
       const rawBody = Buffer.from(JSON.stringify({ obj: { id: 123 } }));
 
       const isValid = provider.verifyWebhookSignature(rawBody, 'invalid_hmac');
+
+      expect(isValid).toBe(false);
+    });
+
+    it('should return false if signature is empty', () => {
+      const rawBody = Buffer.from(JSON.stringify({ obj: { id: 123 } }));
+
+      const isValid = provider.verifyWebhookSignature(rawBody, '');
 
       expect(isValid).toBe(false);
     });
@@ -235,13 +266,38 @@ describe('PaymobProvider', () => {
   });
 
   describe('extractWebhookData', () => {
-    it('should extract data from Paymob webhook payload', () => {
+    it('should extract data using special_reference', () => {
+      const payload = {
+        obj: {
+          special_reference: 'tx_special_123',
+          success: true,
+          pending: false,
+          is_voided: false,
+          is_refunded: false,
+          error_occured: false,
+          amount_cents: 5000,
+          currency: 'egp',
+        },
+      };
+
+      const result = provider.extractWebhookData(payload);
+
+      expect(result).toEqual({
+        transactionId: 'tx_special_123',
+        isSuccess: true,
+        amountMinorUnits: 5000,
+        currency: 'EGP',
+      });
+    });
+
+    it('should extract data using merchant_order_id fallback', () => {
       const payload = {
         obj: {
           order: { merchant_order_id: 'tx_999' },
           success: true,
+          pending: false,
           amount_cents: 5000,
-          currency: 'egp',
+          currency: 'EGP',
         },
       };
 
@@ -253,6 +309,39 @@ describe('PaymobProvider', () => {
         amountMinorUnits: 5000,
         currency: 'EGP',
       });
+    });
+
+    it('should NOT treat pending transactions as success (Zero False-Credit Rule)', () => {
+      const payload = {
+        obj: {
+          special_reference: 'tx_pending_123',
+          success: true,
+          pending: true, // e.g. Wallet cash awaiting user pin
+          amount_cents: 5000,
+          currency: 'EGP',
+        },
+      };
+
+      const result = provider.extractWebhookData(payload);
+
+      expect(result.isSuccess).toBe(false);
+    });
+
+    it('should NOT treat voided or refunded transactions as success', () => {
+      const payload = {
+        obj: {
+          special_reference: 'tx_voided_123',
+          success: true,
+          pending: false,
+          is_voided: true,
+          amount_cents: 5000,
+          currency: 'EGP',
+        },
+      };
+
+      const result = provider.extractWebhookData(payload);
+
+      expect(result.isSuccess).toBe(false);
     });
   });
 });
