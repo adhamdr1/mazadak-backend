@@ -50,4 +50,6 @@ export interface IEscrowRepository {
     limit?: number,
     session?: ClientSession,
   ): Promise<{ items: Escrow[]; total: number }>;
+
+  sumHeldEscrows(): Promise<number>;
 }

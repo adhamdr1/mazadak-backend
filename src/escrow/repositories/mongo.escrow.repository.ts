@@ -9,6 +9,7 @@ import {
 import { Escrow, EscrowDocument } from '../entities';
 import { EscrowStatus } from '../enums';
 import { EscrowFilterInput } from '../dto';
+import Decimal from 'decimal.js';
 
 @Injectable()
 export class MongoEscrowRepository implements IEscrowRepository {
@@ -138,5 +139,27 @@ export class MongoEscrowRepository implements IEscrowRepository {
     ]);
 
     return { items, total };
+  }
+
+  async sumHeldEscrows(): Promise<number> {
+    const result = await this.escrowModel.aggregate<{
+      total: Types.Decimal128 | null;
+    }>([
+      {
+        $match: {
+          status: { $in: [EscrowStatus.HELD, EscrowStatus.DISPUTED] },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: '$amount' },
+        },
+      },
+    ]);
+
+    return result.length > 0 && result[0].total
+      ? new Decimal(result[0].total.toString()).toNumber()
+      : 0;
   }
 }
