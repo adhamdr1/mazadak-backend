@@ -12,6 +12,8 @@ export enum RabbitMQEvent {
   PasswordChanged = 'PasswordChanged',
   WalletDeposited = 'WalletDeposited',
   WithdrawalCompleted = 'WithdrawalCompleted',
+  WithdrawalRequested = 'WithdrawalRequested',
+  WithdrawalRejected = 'WithdrawalRejected',
   EmailVerified = 'EmailVerified',
   AuctionCancelledByAdmin = 'AuctionCancelledByAdmin',
   PaymentWebhookReceived = 'PaymentWebhookReceived',
@@ -142,7 +144,29 @@ export interface WalletDepositInitiatedPayload {
 export interface WithdrawalCompletedPayload {
   userId: string;
   amount: number;
+  netAmount: number;
   transactionId: string;
+  adminReference?: string;
+  receiptUrl?: string;
+  payoutMethod?: string;
+  withdrawalId?: string;
+}
+
+export interface WithdrawalRequestedPayload {
+  userId: string;
+  amount: number;
+  netAmount: number;
+  fee: number;
+  payoutMethod: string;
+  estimatedDelivery?: string;
+  withdrawalId: string;
+}
+
+export interface WithdrawalRejectedPayload {
+  userId: string;
+  amount: number;
+  withdrawalId: string;
+  rejectionReason: string;
 }
 
 export interface EmailVerifiedPayload {
@@ -282,6 +306,8 @@ export type RabbitMQEventPayload =
   | PasswordChangedPayload
   | WalletDepositedPayload
   | WithdrawalCompletedPayload
+  | WithdrawalRequestedPayload
+  | WithdrawalRejectedPayload
   | EmailVerifiedPayload
   | AuctionCancelledByAdminPayload
   | PaymentWebhookReceivedPayload
@@ -315,6 +341,8 @@ export type RabbitMQEventMap = {
   [RabbitMQEvent.PasswordChanged]: PasswordChangedPayload;
   [RabbitMQEvent.WalletDeposited]: WalletDepositedPayload;
   [RabbitMQEvent.WithdrawalCompleted]: WithdrawalCompletedPayload;
+  [RabbitMQEvent.WithdrawalRequested]: WithdrawalRequestedPayload;
+  [RabbitMQEvent.WithdrawalRejected]: WithdrawalRejectedPayload;
   [RabbitMQEvent.EmailVerified]: EmailVerifiedPayload;
   [RabbitMQEvent.AuctionCancelledByAdmin]: AuctionCancelledByAdminPayload;
   [RabbitMQEvent.PaymentWebhookReceived]: PaymentWebhookReceivedPayload;

@@ -54,6 +54,14 @@ export interface IWithdrawalRepository {
     session?: ClientSession,
   ): Promise<WithdrawalRequest | null>;
 
+  transitionStatus(
+    id: string,
+    fromStatuses: WithdrawalStatus[],
+    toStatus: WithdrawalStatus,
+    extra?: Partial<WithdrawalRequest>,
+    session?: ClientSession,
+  ): Promise<WithdrawalRequest | null>;
+
   hasActivePendingRequest(
     userId: string,
     session?: ClientSession,

@@ -163,6 +163,30 @@ export class MongoWithdrawalRepository implements IWithdrawalRepository {
       .exec();
   }
 
+  async transitionStatus(
+    id: string,
+    fromStatuses: WithdrawalStatus[],
+    toStatus: WithdrawalStatus,
+    extra?: Partial<WithdrawalRequest>,
+    session?: ClientSession,
+  ): Promise<WithdrawalRequest | null> {
+    return await this.withdrawalModel
+      .findOneAndUpdate(
+        {
+          _id: new Types.ObjectId(id),
+          status: { $in: fromStatuses },
+        },
+        {
+          $set: {
+            status: toStatus,
+            ...extra,
+          },
+        },
+        { returnDocument: 'after', session: session || null },
+      )
+      .exec();
+  }
+
   async hasActivePendingRequest(
     userId: string,
     session?: ClientSession,

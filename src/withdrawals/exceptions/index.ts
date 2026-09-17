@@ -4,3 +4,6 @@ export * from './withdrawal-below-minimum.exception';
 export * from './active-withdrawal-exists.exception';
 export * from './daily-withdrawal-limit-reached.exception';
 export * from './payout-method-amount-exceeded.exception';
+export * from './withdrawal-not-pending.exception';
+export * from './withdrawal-not-in-progress.exception';
+export * from './withdrawal-not-rejectable.exception';
