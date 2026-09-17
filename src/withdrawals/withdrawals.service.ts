@@ -26,6 +26,7 @@ import { OutboxService } from '../infrastructure/outbox/outbox.service';
 import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
 import { RabbitMQEvent } from '../infrastructure/rabbitmq/rabbitmq-event.types';
 import { TransactionReferenceType } from '../transaction/enums/transaction-reference-type.enum';
+import { TransactionType } from '../transaction/enums/transaction-type.enum';
 import { InsufficientFundsException } from '../wallet/exceptions/insufficient-funds.exception';
 import {
   WithdrawalNotFoundException,
@@ -36,7 +37,9 @@ import {
   WithdrawalNotPendingException,
   WithdrawalNotInProgressException,
   WithdrawalNotRejectableException,
+  InvalidPayoutDetailsException,
 } from './exceptions';
+import { PayoutDetailsInput } from './dto/payout-details.input';
 
 @Injectable()
 export class WithdrawalsService {
@@ -61,6 +64,37 @@ export class WithdrawalsService {
       month: '2-digit',
       day: '2-digit',
     }).format(date);
+  }
+
+  private validatePayoutDetails(
+    method: PayoutMethod,
+    details?: PayoutDetailsInput,
+  ): void {
+    if (!details) {
+      throw new InvalidPayoutDetailsException('PAYOUT_DETAILS_REQUIRED');
+    }
+
+    if (method === PayoutMethod.BANK_ACCOUNT) {
+      if (!details.bankName?.trim() || !details.accountHolderName?.trim()) {
+        throw new InvalidPayoutDetailsException(
+          'BANK_NAME_AND_HOLDER_NAME_REQUIRED',
+        );
+      }
+      if (!details.accountNumber?.trim() && !details.iban?.trim()) {
+        throw new InvalidPayoutDetailsException(
+          'ACCOUNT_NUMBER_OR_IBAN_REQUIRED',
+        );
+      }
+    } else if (method === PayoutMethod.INSTAPAY) {
+      if (!details.phoneNumber?.trim() && !details.ipaAddress?.trim()) {
+        throw new InvalidPayoutDetailsException('PHONE_NUMBER_OR_IPA_REQUIRED');
+      }
+    } else {
+      // Mobile Wallets (VODAFONE_CASH, ORANGE_CASH, ETISALAT_CASH, WE_PAY)
+      if (!details.phoneNumber?.trim()) {
+        throw new InvalidPayoutDetailsException('PHONE_NUMBER_REQUIRED');
+      }
+    }
   }
 
   // ─── Fee Preview & Estimation ──────────────────────────────────────────────────
@@ -101,6 +135,9 @@ export class WithdrawalsService {
     userId: string,
     input: RequestWithdrawalInput,
   ): Promise<WithdrawalRequest> {
+    // 0. Fail-fast validation on payout details per method
+    this.validatePayoutDetails(input.payoutMethod, input.payoutDetails);
+
     // 1. Minimum limit check (50 EGP)
     if (input.amount < 50) {
       throw new WithdrawalBelowMinimumException();
@@ -226,12 +263,14 @@ export class WithdrawalsService {
 
     try {
       // Atomically transition status from PENDING to CANCELLED within the transaction
+      // matching strictly BOTH id, status, AND userId
       const updated = await this.withdrawalRepository.transitionStatus(
         requestId,
         [WithdrawalStatus.PENDING],
         WithdrawalStatus.CANCELLED,
         {},
         session,
+        { userId },
       );
 
       if (!updated) {
@@ -239,13 +278,9 @@ export class WithdrawalsService {
           requestId,
           session,
         );
-        if (!existing) {
+        if (!existing || existing.userId.toString() !== userId) {
           throw new WithdrawalNotFoundException();
         }
-        throw new WithdrawalNotCancellableException();
-      }
-
-      if (updated.userId.toString() !== userId) {
         throw new WithdrawalNotCancellableException();
       }
 
@@ -510,6 +545,7 @@ export class WithdrawalsService {
         undefined,
         'EGP',
         TransactionReferenceType.TRANSACTION,
+        TransactionType.ADMIN_CREDIT,
       );
       this.logger.log(
         `Admin ${adminId} CREDITED ${input.amount} EGP to User ${input.userId}. Reason: ${input.reason}`,
@@ -522,6 +558,7 @@ export class WithdrawalsService {
         reasonTag,
         undefined,
         TransactionReferenceType.TRANSACTION,
+        TransactionType.ADMIN_DEBIT,
       );
       this.logger.log(
         `Admin ${adminId} DEBITED ${input.amount} EGP from User ${input.userId}. Reason: ${input.reason}`,

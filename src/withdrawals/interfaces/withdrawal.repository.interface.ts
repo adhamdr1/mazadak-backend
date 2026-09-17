@@ -60,6 +60,7 @@ export interface IWithdrawalRepository {
     toStatus: WithdrawalStatus,
     extra?: Partial<WithdrawalRequest>,
     session?: ClientSession,
+    filter?: { userId?: string },
   ): Promise<WithdrawalRequest | null>;
 
   hasActivePendingRequest(

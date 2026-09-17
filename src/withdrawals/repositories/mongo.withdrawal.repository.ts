@@ -169,13 +169,20 @@ export class MongoWithdrawalRepository implements IWithdrawalRepository {
     toStatus: WithdrawalStatus,
     extra?: Partial<WithdrawalRequest>,
     session?: ClientSession,
+    filter?: { userId?: string },
   ): Promise<WithdrawalRequest | null> {
+    const query: Record<string, unknown> = {
+      _id: new Types.ObjectId(id),
+      status: { $in: fromStatuses },
+    };
+
+    if (filter?.userId) {
+      query.userId = new Types.ObjectId(filter.userId);
+    }
+
     return await this.withdrawalModel
       .findOneAndUpdate(
-        {
-          _id: new Types.ObjectId(id),
-          status: { $in: fromStatuses },
-        },
+        query,
         {
           $set: {
             status: toStatus,
