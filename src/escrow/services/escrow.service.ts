@@ -451,4 +451,11 @@ export class EscrowService {
 
     return releasedCount;
   }
+
+  /**
+   * Sums all funds currently held in Escrow (HELD and DISPUTED states) across the platform.
+   */
+  async sumHeldEscrows(): Promise<number> {
+    return this.escrowRepository.sumHeldEscrows();
+  }
 }

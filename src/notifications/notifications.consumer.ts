@@ -34,7 +34,9 @@ import {
   AuctionCancelledByAdminPayload,
   AuctionCancelledPayload,
   WalletDepositedPayload,
+  WithdrawalRequestedPayload,
   WithdrawalCompletedPayload,
+  WithdrawalRejectedPayload,
   AccountReactivationRequestedPayload,
   AccountReactivatedPayload,
   ChatMessageSentPayload,
@@ -192,8 +194,14 @@ export class NotificationsConsumer
         case RabbitMQEvent.WalletDeposited:
           await this.handleWalletDeposited(parsed.payload);
           break;
+        case RabbitMQEvent.WithdrawalRequested:
+          await this.handleWithdrawalRequested(parsed.payload);
+          break;
         case RabbitMQEvent.WithdrawalCompleted:
           await this.handleWithdrawalCompleted(parsed.payload);
+          break;
+        case RabbitMQEvent.WithdrawalRejected:
+          await this.handleWithdrawalRejected(parsed.payload);
           break;
         case RabbitMQEvent.AuctionCancelled:
           await this.handleAuctionCancelled(parsed.payload);
@@ -644,6 +652,24 @@ export class NotificationsConsumer
     });
   }
 
+  private async handleWithdrawalRequested(payload: WithdrawalRequestedPayload) {
+    const user = await this.usersService.findByIdIncludingDeleted(
+      payload.userId,
+    );
+    if (!user || user.isBanned) return;
+
+    const email = user.email;
+    const name =
+      [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
+
+    // Send email confirmation & security notice
+    await this.notificationsService.sendWithdrawalRequestedEmail(
+      email,
+      name,
+      payload,
+    );
+  }
+
   private async handleWithdrawalCompleted(payload: WithdrawalCompletedPayload) {
     const user = await this.usersService.findByIdIncludingDeleted(
       payload.userId,
@@ -659,15 +685,52 @@ export class NotificationsConsumer
       name,
       payload.amount,
       payload.transactionId,
+      {
+        netAmount: payload.netAmount,
+        payoutMethod: payload.payoutMethod,
+        adminReference: payload.adminReference,
+        receiptUrl: payload.receiptUrl,
+        withdrawalId: payload.withdrawalId,
+      },
     );
+
+    const refText = payload.adminReference
+      ? ` (Ref: ${payload.adminReference})`
+      : '';
 
     await this.notificationsService.createInAppNotification({
       userId: payload.userId,
       type: InAppNotificationType.WITHDRAWAL_COMPLETED,
       title: InAppNotificationTitles.WITHDRAWAL_COMPLETED,
-      body: `An amount of ${payload.amount} EGP has been withdrawn from your wallet. Ref: ${payload.transactionId}.`,
-      referenceId: payload.transactionId,
-      referenceType: NotificationReferenceType.TRANSACTION,
+      body: `Your withdrawal of ${payload.amount} EGP has been successfully transferred${refText}.`,
+      referenceId: payload.withdrawalId || payload.transactionId,
+      referenceType: NotificationReferenceType.WITHDRAWAL,
+    });
+  }
+
+  private async handleWithdrawalRejected(payload: WithdrawalRejectedPayload) {
+    const user = await this.usersService.findByIdIncludingDeleted(
+      payload.userId,
+    );
+    if (!user || user.isBanned) return;
+
+    const email = user.email;
+    const name =
+      [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
+
+    await this.notificationsService.sendWithdrawalRejectedEmail(
+      email,
+      name,
+      payload,
+    );
+
+    await this.notificationsService.createInAppNotification({
+      userId: payload.userId,
+      type: InAppNotificationType.WITHDRAWAL_REJECTED,
+      title: InAppNotificationTitles.WITHDRAWAL_REJECTED,
+      body: `Your withdrawal request of ${payload.amount} EGP was rejected. Reason: ${payload.rejectionReason}. Funds have been restored to your wallet.`,
+      referenceId: payload.withdrawalId,
+      referenceType: NotificationReferenceType.WITHDRAWAL,
     });
   }
 

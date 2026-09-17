@@ -186,6 +186,8 @@ export class RabbitMQSetupService
       RabbitMQEvent.PasswordChanged,
       RabbitMQEvent.WalletDeposited,
       RabbitMQEvent.WithdrawalCompleted,
+      RabbitMQEvent.WithdrawalRequested,
+      RabbitMQEvent.WithdrawalRejected,
       RabbitMQEvent.AccountReactivationRequested,
       RabbitMQEvent.AccountReactivated,
       RabbitMQEvent.ChatMessageSent,

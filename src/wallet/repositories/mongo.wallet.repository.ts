@@ -61,6 +61,22 @@ export class MongoWalletRepository implements IWalletRepository {
       : 0;
   }
 
+  async sumHeldBalances(): Promise<number> {
+    const result = await this.walletModel.aggregate<{
+      totalHeld: Types.Decimal128 | null;
+    }>([
+      {
+        $group: {
+          _id: null,
+          totalHeld: { $sum: '$heldBalance' },
+        },
+      },
+    ]);
+    return result.length > 0 && result[0].totalHeld
+      ? new Decimal(result[0].totalHeld.toString()).toNumber()
+      : 0;
+  }
+
   // Deposit: no condition needed, always safe to credit.
   async creditBalance(
     walletId: string,

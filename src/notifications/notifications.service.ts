@@ -344,11 +344,50 @@ export class NotificationsService {
     );
   }
 
+  async sendWithdrawalRequestedEmail(
+    email: string,
+    name: string,
+    data: {
+      amount: number;
+      netAmount: number;
+      fee: number;
+      payoutMethod: string;
+      estimatedDelivery?: string;
+      withdrawalId: string;
+    },
+  ): Promise<void> {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'https://mazadak.com';
+    const withdrawalLink = `${frontendUrl}/wallet/withdrawals/${data.withdrawalId}`;
+
+    await this.emailService.send(
+      email,
+      EmailSubjects.WITHDRAWAL_REQUESTED,
+      EmailTemplates.WITHDRAWAL_REQUESTED,
+      {
+        name,
+        amount: data.amount,
+        netAmount: data.netAmount,
+        fee: data.fee,
+        payoutMethod: data.payoutMethod,
+        estimatedDelivery: data.estimatedDelivery,
+        withdrawalLink,
+      },
+    );
+  }
+
   async sendWithdrawalCompletedEmail(
     email: string,
     name: string,
     amount: number,
     transactionId?: string,
+    details?: {
+      netAmount?: number;
+      payoutMethod?: string;
+      adminReference?: string;
+      receiptUrl?: string;
+      withdrawalId?: string;
+    },
   ): Promise<void> {
     const frontendUrl =
       this.configService.get<string>('FRONTEND_URL') || 'https://mazadak.com';
@@ -360,7 +399,42 @@ export class NotificationsService {
       email,
       EmailSubjects.WITHDRAWAL_COMPLETED,
       EmailTemplates.WITHDRAWAL_COMPLETED,
-      { name, amount, transactionId, transactionLink },
+      {
+        name,
+        amount,
+        netAmount: details?.netAmount,
+        payoutMethod: details?.payoutMethod,
+        adminReference: details?.adminReference,
+        receiptUrl: details?.receiptUrl,
+        transactionId,
+        transactionLink,
+      },
+    );
+  }
+
+  async sendWithdrawalRejectedEmail(
+    email: string,
+    name: string,
+    data: {
+      amount: number;
+      rejectionReason: string;
+      withdrawalId: string;
+    },
+  ): Promise<void> {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'https://mazadak.com';
+    const walletLink = `${frontendUrl}/wallet`;
+
+    await this.emailService.send(
+      email,
+      EmailSubjects.WITHDRAWAL_REJECTED,
+      EmailTemplates.WITHDRAWAL_REJECTED,
+      {
+        name,
+        amount: data.amount,
+        rejectionReason: data.rejectionReason,
+        walletLink,
+      },
     );
   }
 

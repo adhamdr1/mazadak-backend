@@ -112,4 +112,23 @@ export class RealtimeService {
       walletUpdated: payload,
     });
   }
+
+  /**
+   * Publish a real-time event when a new withdrawal request is submitted (for Admin live feed).
+   */
+  async publishWithdrawalRequested(payload: unknown): Promise<void> {
+    await this.publishSafely(PUB_SUB_EVENTS.WITHDRAWAL_REQUESTED, {
+      adminWithdrawalFeed: payload,
+    });
+  }
+
+  /**
+   * Publish a real-time event when a withdrawal request status changes (for both User and Admin).
+   */
+  async publishWithdrawalStatusChanged(payload: unknown): Promise<void> {
+    await this.publishSafely(PUB_SUB_EVENTS.WITHDRAWAL_STATUS_CHANGED, {
+      myWithdrawalUpdated: payload,
+      adminWithdrawalFeed: payload,
+    });
+  }
 }

@@ -42,6 +42,10 @@ describe('AdminAnalyticsResolver', () => {
       totalWalletBalance: 50000,
       todaysRevenue: 1500,
       totalTransactions: 200,
+      pendingWithdrawalsCount: 2,
+      pendingWithdrawalsAmount: 5000,
+      totalCompletedPayouts: 30000,
+      totalCollectedFees: 600,
     };
     mockAdminAnalyticsService.getDashboardStats.mockResolvedValue(stats);
 

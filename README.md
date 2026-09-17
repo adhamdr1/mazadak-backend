@@ -11,7 +11,7 @@
 
 **A highly scalable, robust, and event-driven backend system for a real-time auction and bidding platform. Built from the ground up using NestJS, GraphQL, and enterprise-grade Microservices patterns.**
 
-[💻 Quick Start & Installation](#-quick-start--installation) • [🎯 Overview](#-overview) • [🏗️ Architecture Flow](#️-architecture-flow) • [🗄️ Database Entities](#️-database-entities) • [✨ Key Technical Features](#-key-technical-features) • [💳 Payment Integration](#-payment-gateway-integration) • [🔨 Real-Time Bidding](#-real-time-bidding-flow) • [🤖 Auto-Bidding Engine](#-auto-bidding-proxy-bidding-engine) • [💬 Real-Time Chat Engine](#-post-auction-real-time-chat-engine) • [⭐ Rating & Reviews](#-rating--reviews-system) • [🛡️ Escrow & Dispute System](#️-escrow--dispute-resolution-system)
+[💻 Quick Start & Installation](#-quick-start--installation) • [🎯 Overview](#-overview) • [🏗️ Architecture Flow](#️-architecture-flow) • [🗄️ Database Entities](#️-database-entities) • [✨ Key Technical Features](#-key-technical-features) • [💳 Payment Integration](#-payment-gateway-integration) • [🔨 Real-Time Bidding](#-real-time-bidding-flow) • [🤖 Auto-Bidding Engine](#-auto-bidding-proxy-bidding-engine) • [💬 Real-Time Chat Engine](#-post-auction-real-time-chat-engine) • [⭐ Rating & Reviews](#-rating--reviews-system) • [🛡️ Escrow & Dispute System](#️-escrow--dispute-resolution-system) • [💸 Withdrawals & Treasury](#-withdrawals--financial-admin-system)
 
 </div>
 
@@ -138,7 +138,7 @@ Our database schema is designed to handle financial transactions securely and ma
    - Enforces unique index `{ auctionId, userId }` and composite sorting index `{ auctionId, status, maxAmount: -1, createdAt: 1 }` for FIFO deterministic tie-breaking.
 6. **Transaction (`transactions`)**:
    - The immutable financial ledger.
-   - Records every `DEPOSIT`, `WITHDRAW`, `HOLD`, `RELEASE`, and `CAPTURE` operation tied to a Wallet.
+   - Records every `DEPOSIT`, `WITHDRAW`, `HOLD`, `RELEASE`, `CAPTURE`, `REFUND`, `ADMIN_CREDIT`, and `ADMIN_DEBIT` operation tied to a Wallet.
 7. **Escrow (`escrows`)**:
    - Holds captured auction winner funds safely during the 7-day inspection window.
    - Manages states (`HELD`, `RELEASED`, `REFUNDED`, `DISPUTED`), expiration timestamps, and release reasons.
@@ -155,6 +155,10 @@ Our database schema is designed to handle financial transactions securely and ma
     - Temporarily stores domain events before they are picked up and published to RabbitMQ to ensure zero data loss.
 13. **Review (`reviews`)**:
     - Stores ratings (1-5), multi-dimensional criteria breakdown, mutual blind review states (`PENDING`, `PUBLISHED`, `HIDDEN`), public seller replies, and published timestamps.
+14. **Withdrawal Request (`withdrawal_requests`)**:
+    - Manages multi-method payout requests (Bank Accounts, Vodafone/Orange/Etisalat/WE Cash, and InstaPay).
+    - Tracks states (`PENDING`, `PROCESSING`, `COMPLETED`, `REJECTED`, `CANCELLED`), fee breakdowns, Cairo calendar date (`requestDate`), hold transaction references, and admin audit receipts.
+    - Enforces partial unique index `{ userId: 1, requestDate: 1 }` filtered on active/completed statuses to guarantee daily quota limits.
 
 ---
 
@@ -628,6 +632,59 @@ sequenceDiagram
     end
     API-->>Admin: Dispute Resolved (Refund Completed ⚖️)
 ```
+
+---
+
+### 💸 Withdrawals & Financial Admin System
+
+Enterprise-grade withdrawal and platform treasury management engine supporting multi-tiered payout channels with finite state machine transitions and auditability.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as 👤 User
+    actor Admin as 🛡️ Financial Admin
+    participant API as 🌐 GraphQL API
+    participant WReq as 📦 Withdrawals Service
+    participant Wallet as 💳 Wallet Ledger
+    participant Outbox as 📬 Outbox Pattern
+    participant PubSub as ⚡ Redis PubSub
+    participant Rabbit as 🐇 RabbitMQ / Email
+
+    Note over User,API: 1. Request Withdrawal Flow
+    User->>API: Mutation: requestWithdrawal(amount: 5000, payoutMethod: INSTAPAY)
+    API->>WReq: requestWithdrawal(userId, input)
+    rect rgb(30, 45, 60)
+        Note over WReq,Wallet: Atomic MongoDB Multi-Doc Transaction
+        WReq->>Wallet: walletService.hold(amount) -> Hold funds in ledger
+        WReq->>WReq: Create WithdrawalRequest (status: PENDING)
+        WReq->>Outbox: Save WithdrawalRequested Event
+    end
+    WReq->>PubSub: publishWithdrawalRequested() -> Live Admin Feed
+    Outbox->>Rabbit: Async Consumer sends Email Receipt & Security Notice 📧
+
+    Note over Admin,API: 2. Processing & Settlement Flow
+    Admin->>API: Mutation: adminStartWithdrawalProcessing(requestId)
+    API->>WReq: adminStartProcessing() -> status: PROCESSING
+    WReq->>PubSub: Live status update push
+
+    Admin->>API: Mutation: adminCompleteWithdrawal(withdrawalId, receiptUrl, adminReference)
+    API->>WReq: adminCompleteWithdrawal(adminId, input)
+    rect rgb(30, 50, 40)
+        Note over WReq,Wallet: Atomic Settlement Transaction
+        WReq->>WReq: transitionStatus([PROCESSING, PENDING] -> COMPLETED)
+        WReq->>Wallet: walletService.capture(amount) -> Permanent debit
+        WReq->>WReq: Link completionTransactionId
+        WReq->>Outbox: Save WithdrawalCompleted Event
+    end
+    WReq->>PubSub: Real-Time broadcast (myWithdrawalUpdated, adminFeed)
+    Outbox->>Rabbit: Dispatch In-App Notification & Email with Receipt Link 🧾
+```
+
+- **Smart Tiering & Multi-Method Payouts:** Bank Account (up to 10,000,000 EGP), Mobile Wallets (Vodafone, Orange, Etisalat, WE) & InstaPay (up to 50,000 EGP).
+- **Daily Frequency Rate Limiting:** Enforces maximum 1 active/completed withdrawal request per user per calendar day calculated precisely in the `Africa/Cairo` timezone via DB-level partial unique index.
+- **Treasury Analytics Engine:** Aggregates platform-wide available wallet balances, held funds, pending payouts, escrow deposits, and platform collected fees in real time.
+- **Full Transactional & Concurrency Isolation:** Double-spending prevention through atomic `transitionStatus` conditional queries and distributed ledger holds.
 
 ---
 

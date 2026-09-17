@@ -132,6 +132,10 @@ export class WalletService {
     return this.walletRepository.sumAllBalances();
   }
 
+  async sumHeldBalances(): Promise<number> {
+    return this.walletRepository.sumHeldBalances();
+  }
+
   // ─── User-Facing ─────────────────────────────────────────────────────────────
 
   async getMyWallet(userId: string): Promise<Wallet> {
@@ -158,12 +162,13 @@ export class WalletService {
     session?: ClientSession,
     currency?: string,
     referenceType?: TransactionReferenceType,
+    customType?: TransactionType,
   ): Promise<{ wallet: Wallet; transaction: Transaction }> {
     const { wallet, transaction } = await this.executeWalletOp({
       userId,
       amount,
       currency,
-      type: TransactionType.DEPOSIT,
+      type: customType ?? TransactionType.DEPOSIT,
       referenceId,
       referenceType,
       session,
@@ -199,6 +204,7 @@ export class WalletService {
     referenceId?: string,
     session?: ClientSession,
     referenceType?: TransactionReferenceType,
+    customType?: TransactionType,
   ): Promise<{ wallet: Wallet; transaction: Transaction }> {
     if (session) {
       return this.executeWithdrawal(
@@ -207,6 +213,7 @@ export class WalletService {
         referenceId,
         session,
         referenceType,
+        customType,
       );
     }
 
@@ -224,6 +231,7 @@ export class WalletService {
         referenceId,
         newSession,
         referenceType,
+        customType,
       );
       await newSession.commitTransaction();
       return result;
@@ -235,7 +243,7 @@ export class WalletService {
         try {
           await this.transactionService.createTransaction({
             walletId,
-            type: TransactionType.WITHDRAW,
+            type: customType ?? TransactionType.WITHDRAW,
             amount,
             currency: 'EGP',
             status: TransactionStatus.FAILED,
@@ -261,11 +269,12 @@ export class WalletService {
     referenceId?: string,
     session?: ClientSession,
     referenceType?: TransactionReferenceType,
+    customType?: TransactionType,
   ): Promise<{ wallet: Wallet; transaction: Transaction }> {
     const { wallet, transaction } = await this.executeWalletOp({
       userId,
       amount,
-      type: TransactionType.WITHDRAW,
+      type: customType ?? TransactionType.WITHDRAW,
       referenceId,
       referenceType,
       session,
