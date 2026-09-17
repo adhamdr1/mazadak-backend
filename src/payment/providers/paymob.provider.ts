@@ -20,129 +20,161 @@ interface PaymobAuthResponse {
   token: string;
 }
 
-interface PaymobOrderResponse {
-  id: number;
-}
-
-interface PaymobPaymentKeyResponse {
-  token: string;
+interface PaymobIntentionResponse {
+  client_secret: string;
+  id?: number | string;
+  intention_order_id?: number | string;
+  payment_keys?: Array<{
+    key: string;
+    gateway_type: string;
+    integration_id: number;
+  }>;
 }
 
 interface PaymobWebhookPayload {
-  obj: {
-    id: number;
+  type?: string;
+  special_reference?: string;
+  obj?: {
+    id: number | string;
     amount_cents: number;
     created_at: string;
     currency: string;
-    error_occured: boolean;
-    has_parent_transaction: boolean;
-    integration_id: number;
-    is_3d_secure: boolean;
-    is_auth: boolean;
-    is_capture: boolean;
-    is_refunded: boolean;
-    is_standalone_payment: boolean;
-    is_voided: boolean;
-    order?: { id: number };
-    owner: number;
-    pending: boolean;
-    source_data?: { pan?: string; sub_type?: string; type?: string };
-    success: boolean;
+    error_occured?: boolean;
+    has_parent_transaction?: boolean;
+    integration_id?: number;
+    is_3d_secure?: boolean;
+    is_auth?: boolean;
+    is_capture?: boolean;
+    is_refunded?: boolean;
+    is_standalone_payment?: boolean;
+    is_voided?: boolean;
+    order?: {
+      id?: number;
+      merchant_order_id?: string | null;
+    };
+    owner?: number;
+    pending?: boolean;
+    source_data?: {
+      pan?: string;
+      sub_type?: string;
+      type?: string;
+    };
+    special_reference?: string;
+    success?: boolean | string;
+    merchant_order_id?: string;
   };
 }
+
 @Injectable()
 export class PaymobProvider implements IPaymentProvider {
   private readonly logger = new Logger(PaymobProvider.name);
-  private readonly hmacSecret: string;
+  private readonly secretKey: string;
+  private readonly publicKey: string;
   private readonly apiKey: string;
-  private readonly integrationId: number;
+  private readonly hmacSecret: string;
+  private readonly integrationIds: number[];
   private readonly apiBaseUrl: string;
 
   constructor(private readonly configService: ConfigService) {
+    this.secretKey = this.configService.get<string>('PAYMOB_SECRET_KEY') || '';
+    this.publicKey = this.configService.get<string>('PAYMOB_PUBLIC_KEY') || '';
+    this.apiKey = this.configService.get<string>('PAYMOB_API_KEY') || '';
     this.hmacSecret =
-      this.configService.get<string>('PAYMOB_HMAC_SECRET') || 'hmac_mock';
-    this.apiKey =
-      this.configService.get<string>('PAYMOB_API_KEY') || 'api_mock';
-    this.integrationId =
-      this.configService.get<number>('PAYMOB_INTEGRATION_ID') || 12345;
-    this.apiBaseUrl =
+      this.configService.get<string>('PAYMOB_HMAC_SECRET') || '';
+
+    const integrationIdsRaw = this.configService.get<string>(
+      'PAYMOB_INTEGRATION_IDS',
+    );
+    if (integrationIdsRaw) {
+      this.integrationIds = integrationIdsRaw
+        .split(',')
+        .map((id) => Number(id.trim()))
+        .filter((id) => !isNaN(id) && id > 0);
+    } else {
+      const singleId = this.configService.get<number>('PAYMOB_INTEGRATION_ID');
+      this.integrationIds = singleId ? [Number(singleId)] : [];
+      if (this.integrationIds.length === 0) {
+        this.logger.warn(
+          'No Paymob Integration IDs configured in PAYMOB_INTEGRATION_IDS or PAYMOB_INTEGRATION_ID',
+        );
+      }
+    }
+
+    const rawBaseUrl =
       this.configService.get<string>('PAYMOB_API_BASE_URL') ||
-      'https://accept.paymob.com/api';
+      'https://accept.paymob.com';
+    this.apiBaseUrl = rawBaseUrl.replace(/\/+$/, '').replace(/\/api$/, '');
   }
 
   async createPayment(data: CreatePaymentData): Promise<PaymentCreationResult> {
-    if (this.apiKey === 'api_mock') {
-      this.logger.log('Mocking Paymob payment creation for testing...');
-      const mockOrderId = Math.floor(Math.random() * 100000).toString();
-      const mockPaymentToken = 'mock_payment_token_' + Date.now();
-      const iframeId =
-        this.configService.get<string>('PAYMOB_IFRAME_ID') || '1234';
-
-      return {
-        gatewayPaymentIntentId: mockOrderId,
-        clientSecret: mockPaymentToken,
-        paymentUrl: `https://accept.paymob.com/api/acceptance/iframes/${iframeId}?payment_token=${mockPaymentToken}`,
-      };
-    }
-
     try {
-      const token = await this.getAuthToken();
+      const specialReference =
+        data.metadata?.transactionId || data.idempotencyKey;
 
-      // 2. Register Order
-      const orderResponse = await axios.post<PaymobOrderResponse>(
-        `${this.apiBaseUrl}/ecommerce/orders`,
-        {
-          auth_token: token,
-          delivery_needed: 'false',
-          amount_cents: data.amount,
-          currency: data.currency.toUpperCase(),
-          merchant_order_id:
-            data.metadata?.transactionId || data.idempotencyKey,
-        },
-      );
-      const orderId = orderResponse.data.id;
-
-      // 3. Get Payment Key
-      const paymentKeyResponse = await axios.post<PaymobPaymentKeyResponse>(
-        `${this.apiBaseUrl}/acceptance/payment_keys`,
-        {
-          auth_token: token,
-          amount_cents: data.amount,
-          expiration: 3600,
-          order_id: orderId,
-          billing_data: {
-            apartment: 'NA',
-            email: data.email || 'dummy@mazadak.com',
-            floor: 'NA',
-            first_name: data.firstName || 'NA',
-            street: 'NA',
-            building: 'NA',
-            phone_number: data.phone || 'NA',
-            shipping_method: 'NA',
-            postal_code: 'NA',
-            city: 'NA',
-            country: 'NA',
-            last_name: data.lastName || 'NA',
-            state: 'NA',
+      const payload = {
+        amount: data.amount,
+        currency: data.currency.toUpperCase(),
+        payment_methods: this.integrationIds,
+        items: [
+          {
+            name: 'Wallet Deposit',
+            amount: data.amount,
+            description: 'Mazadak Wallet Deposit',
+            quantity: 1,
           },
-          currency: data.currency.toUpperCase(),
-          integration_id: this.integrationId,
+        ],
+        billing_data: {
+          apartment: 'NA',
+          first_name: data.firstName || 'Customer',
+          last_name: data.lastName || 'User',
+          street: 'NA',
+          building: 'NA',
+          phone_number: data.phone || '+201000000000',
+          city: 'Cairo',
+          country: 'EGY',
+          email: data.email || 'customer@mazadak.com',
+          floor: 'NA',
+          state: 'Cairo',
+          shipping_method: 'NA',
+          postal_code: 'NA',
+        },
+        customer: {
+          first_name: data.firstName || 'Customer',
+          last_name: data.lastName || 'User',
+          email: data.email || 'customer@mazadak.com',
+        },
+        special_reference: specialReference,
+      };
+
+      const response = await axios.post<PaymobIntentionResponse>(
+        `${this.apiBaseUrl}/v1/intention/`,
+        payload,
+        {
+          headers: {
+            Authorization: `Token ${this.secretKey}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 10000,
         },
       );
 
-      const paymentToken = paymentKeyResponse.data.token;
-      const iframeId =
-        this.configService.get<string>('PAYMOB_IFRAME_ID') || '1234';
+      const clientSecret = response.data.client_secret;
+      const gatewayPaymentIntentId =
+        response.data.id?.toString() ||
+        response.data.intention_order_id?.toString() ||
+        specialReference;
+
+      const paymentUrl = `https://accept.paymob.com/unifiedcheckout/?publicKey=${this.publicKey}&clientSecret=${clientSecret}`;
 
       return {
-        gatewayPaymentIntentId: orderId.toString(),
-        clientSecret: paymentToken,
-        paymentUrl: `${this.apiBaseUrl}/acceptance/iframes/${iframeId}?payment_token=${paymentToken}`,
+        gatewayPaymentIntentId,
+        clientSecret,
+        paymentUrl,
       };
     } catch (error: unknown) {
       const err = error as Error;
       this.logger.error(
-        `Failed to create Paymob payment: ${err.message}`,
+        `Failed to create Paymob Intention payment: ${err.message}`,
         err.stack,
       );
       throw new InternalServerErrorException('Payment creation failed');
@@ -154,12 +186,11 @@ export class PaymobProvider implements IPaymentProvider {
     signature: string,
     secret?: string,
   ): boolean {
-    if (this.apiKey === 'api_mock') {
-      this.logger.log('Bypassing Paymob HMAC verification for mock testing...');
-      return true;
-    }
-
     try {
+      if (!signature) {
+        return false;
+      }
+
       const body = JSON.parse(rawBody.toString()) as PaymobWebhookPayload;
       const obj = body.obj;
       if (!obj) return false;
@@ -191,7 +222,14 @@ export class PaymobProvider implements IPaymentProvider {
       hmac.update(concatenatedString);
       const calculatedHmac = hmac.digest('hex');
 
-      return calculatedHmac === signature;
+      const calculatedBuf = Buffer.from(calculatedHmac, 'hex');
+      const signatureBuf = Buffer.from(signature, 'hex');
+
+      if (calculatedBuf.length !== signatureBuf.length) {
+        return false;
+      }
+
+      return crypto.timingSafeEqual(calculatedBuf, signatureBuf);
     } catch (error: unknown) {
       this.logger.error(
         `Paymob Webhook Signature Verification Failed: ${String(error)}`,
@@ -200,12 +238,43 @@ export class PaymobProvider implements IPaymentProvider {
     }
   }
 
+  extractWebhookData(payload: Record<string, unknown>): ExtractedWebhookData {
+    const paymobPayload = payload as PaymobWebhookPayload;
+    const obj = paymobPayload.obj;
+
+    const transactionId =
+      obj?.special_reference ??
+      paymobPayload?.special_reference ??
+      obj?.order?.merchant_order_id ??
+      obj?.merchant_order_id;
+
+    const success = obj?.success;
+    const isSuccess =
+      (success === true || success === 'true') &&
+      obj?.pending !== true &&
+      obj?.is_voided !== true &&
+      obj?.is_refunded !== true &&
+      obj?.error_occured !== true;
+
+    const amountMinorUnits = Number(obj?.amount_cents || 0);
+    const rawCurrency = obj?.currency;
+    const currency = String(rawCurrency || 'EGP').toUpperCase();
+
+    return {
+      transactionId: transactionId || undefined,
+      isSuccess,
+      amountMinorUnits,
+      currency,
+    };
+  }
+
   private async getAuthToken(): Promise<string> {
     const authResponse = await axios.post<PaymobAuthResponse>(
-      `${this.apiBaseUrl}/auth/tokens`,
+      `${this.apiBaseUrl}/api/auth/tokens`,
       {
         api_key: this.apiKey,
       },
+      { timeout: 10000 },
     );
     return authResponse.data.token;
   }
@@ -213,11 +282,15 @@ export class PaymobProvider implements IPaymentProvider {
   async refund(data: RefundPaymentData): Promise<void> {
     try {
       const token = await this.getAuthToken();
-      await axios.post(`${this.apiBaseUrl}/acceptance/void_refund/refund`, {
-        auth_token: token,
-        transaction_id: Number(data.gatewayPaymentIntentId),
-        amount_cents: data.amount,
-      });
+      await axios.post(
+        `${this.apiBaseUrl}/api/acceptance/void_refund/refund`,
+        {
+          auth_token: token,
+          transaction_id: Number(data.gatewayPaymentIntentId),
+          amount_cents: data.amount,
+        },
+        { timeout: 10000 },
+      );
       this.logger.log(
         `Successfully refunded Paymob transaction ${data.gatewayPaymentIntentId} with amount ${data.amount}`,
       );
@@ -234,73 +307,95 @@ export class PaymobProvider implements IPaymentProvider {
   async getPaymentStatus(
     gatewayPaymentIntentId: string,
   ): Promise<PaymentStatusResult> {
-    if (this.apiKey === 'api_mock') {
-      this.logger.log(
-        `Mocking Paymob getPaymentStatus for orderId: ${gatewayPaymentIntentId}`,
+    try {
+      // 1. Try modern Intention API lookup using Secret Key
+      if (this.secretKey) {
+        try {
+          const response = await axios.get<{
+            is_voided?: boolean;
+            is_refunded?: boolean;
+            paid_amount_cents?: number;
+            intention_order?: {
+              paid_amount_cents?: number;
+            };
+            status?: string;
+          }>(`${this.apiBaseUrl}/v1/intention/${gatewayPaymentIntentId}/`, {
+            headers: {
+              Authorization: `Token ${this.secretKey}`,
+            },
+            timeout: 10000,
+          });
+
+          const resData = response.data;
+          let status = PaymentStatus.PENDING;
+          const paidAmount = Number(
+            resData.paid_amount_cents ??
+              resData.intention_order?.paid_amount_cents ??
+              0,
+          );
+
+          if (
+            paidAmount > 0 ||
+            resData.status === 'success' ||
+            resData.status === 'CONFIRMED'
+          ) {
+            status = PaymentStatus.SUCCESS;
+          } else if (resData.is_voided || resData.status === 'failed') {
+            status = PaymentStatus.FAILED;
+          }
+
+          return {
+            status,
+            gatewayTransactionId: gatewayPaymentIntentId,
+          };
+        } catch {
+          // Intention lookup failed, fallback to legacy ecommerce order lookup below
+        }
+      }
+
+      // 2. Legacy order lookup fallback
+      if (this.apiKey) {
+        const token = await this.getAuthToken();
+        const response = await axios.get<{
+          paid_amount_cents: number;
+          is_voided: boolean;
+        }>(
+          `${this.apiBaseUrl}/api/ecommerce/orders/${gatewayPaymentIntentId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            timeout: 10000,
+          },
+        );
+
+        const order = response.data;
+        let status = PaymentStatus.PENDING;
+        if (order.paid_amount_cents > 0) {
+          status = PaymentStatus.SUCCESS;
+        } else if (order.is_voided) {
+          status = PaymentStatus.FAILED;
+        }
+
+        return {
+          status,
+          gatewayTransactionId: gatewayPaymentIntentId,
+        };
+      }
+
+      return {
+        status: PaymentStatus.PENDING,
+        gatewayTransactionId: gatewayPaymentIntentId,
+      };
+    } catch (error: unknown) {
+      const err = error as Error;
+      this.logger.warn(
+        `Could not retrieve Paymob status for ${gatewayPaymentIntentId}: ${err.message}`,
       );
       return {
         status: PaymentStatus.PENDING,
         gatewayTransactionId: gatewayPaymentIntentId,
       };
     }
-
-    try {
-      const token = await this.getAuthToken();
-      const response = await axios.get<{
-        paid_amount_cents: number;
-        is_voided: boolean;
-      }>(`${this.apiBaseUrl}/ecommerce/orders/${gatewayPaymentIntentId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const order = response.data;
-      let status = PaymentStatus.PENDING;
-      if (order.paid_amount_cents > 0) {
-        status = PaymentStatus.SUCCESS;
-      } else if (order.is_voided) {
-        status = PaymentStatus.FAILED;
-      }
-
-      return {
-        status,
-        gatewayTransactionId: gatewayPaymentIntentId,
-      };
-    } catch (error: unknown) {
-      const err = error as Error;
-      this.logger.error(
-        `Failed to retrieve Paymob order status: ${err.message}`,
-        err.stack,
-      );
-      throw err;
-    }
-  }
-
-  extractWebhookData(payload: Record<string, unknown>): ExtractedWebhookData {
-    const paymobPayload = payload as {
-      obj?: {
-        order?: { merchant_order_id?: string };
-        merchant_order_id?: string;
-        success?: boolean | string;
-        amount_cents?: number;
-        currency?: string;
-      };
-    };
-    const obj = paymobPayload.obj;
-    const transactionId =
-      obj?.order?.merchant_order_id ?? obj?.merchant_order_id;
-    const success = obj?.success;
-    const isSuccess = success === true || success === 'true';
-    const amountMinorUnits = Number(obj?.amount_cents || 0);
-    const rawCurrency = obj?.currency;
-    const currency = String(rawCurrency || 'EGP').toUpperCase();
-
-    return {
-      transactionId,
-      isSuccess,
-      amountMinorUnits,
-      currency,
-    };
   }
 }
