@@ -9,6 +9,8 @@ export enum InAppNotificationTitles {
   WELCOME = 'Welcome to Mazadak! 🌟',
   DEPOSIT_SUCCESSFUL = 'Deposit Successful 💰',
   WITHDRAWAL_COMPLETED = 'Withdrawal Completed 💸',
+  WITHDRAWAL_REQUESTED = 'Withdrawal Request Received 📨',
+  WITHDRAWAL_REJECTED = 'Withdrawal Request Rejected ❌',
   WELCOME_BACK = 'Welcome Back to Mazadak! 🌟',
   NEW_CHAT_MESSAGE = 'New Chat Message',
   REVIEW_RECEIVED = 'New Review Received! ⭐',

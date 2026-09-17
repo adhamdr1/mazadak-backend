@@ -5,6 +5,7 @@ export enum TransactionReferenceType {
   TRANSACTION = 'TRANSACTION',
   ESCROW = 'ESCROW',
   DISPUTE = 'DISPUTE',
+  WITHDRAWAL = 'WITHDRAWAL',
 }
 
 registerEnumType(TransactionReferenceType, {

@@ -18,6 +18,12 @@ export enum TransactionType {
 
   // استرداد مبلغ مدفوع
   REFUND = 'REFUND',
+
+  // تعديل إداري - إضافة رصيد
+  ADMIN_CREDIT = 'ADMIN_CREDIT',
+
+  // تعديل إداري - خصم رصيد
+  ADMIN_DEBIT = 'ADMIN_DEBIT',
 }
 
 registerEnumType(TransactionType, {
