@@ -92,9 +92,12 @@ export class PaymobProvider implements IPaymentProvider {
         .filter((id) => !isNaN(id) && id > 0);
     } else {
       const singleId = this.configService.get<number>('PAYMOB_INTEGRATION_ID');
-      this.integrationIds = singleId
-        ? [Number(singleId)]
-        : [5920300, 5920296, 5920302];
+      this.integrationIds = singleId ? [Number(singleId)] : [];
+      if (this.integrationIds.length === 0) {
+        this.logger.warn(
+          'No Paymob Integration IDs configured in PAYMOB_INTEGRATION_IDS or PAYMOB_INTEGRATION_ID',
+        );
+      }
     }
 
     const rawBaseUrl =
@@ -151,6 +154,7 @@ export class PaymobProvider implements IPaymentProvider {
             Authorization: `Token ${this.secretKey}`,
             'Content-Type': 'application/json',
           },
+          timeout: 10000,
         },
       );
 
@@ -270,6 +274,7 @@ export class PaymobProvider implements IPaymentProvider {
       {
         api_key: this.apiKey,
       },
+      { timeout: 10000 },
     );
     return authResponse.data.token;
   }
@@ -277,11 +282,15 @@ export class PaymobProvider implements IPaymentProvider {
   async refund(data: RefundPaymentData): Promise<void> {
     try {
       const token = await this.getAuthToken();
-      await axios.post(`${this.apiBaseUrl}/api/acceptance/void_refund/refund`, {
-        auth_token: token,
-        transaction_id: Number(data.gatewayPaymentIntentId),
-        amount_cents: data.amount,
-      });
+      await axios.post(
+        `${this.apiBaseUrl}/api/acceptance/void_refund/refund`,
+        {
+          auth_token: token,
+          transaction_id: Number(data.gatewayPaymentIntentId),
+          amount_cents: data.amount,
+        },
+        { timeout: 10000 },
+      );
       this.logger.log(
         `Successfully refunded Paymob transaction ${data.gatewayPaymentIntentId} with amount ${data.amount}`,
       );
@@ -299,35 +308,94 @@ export class PaymobProvider implements IPaymentProvider {
     gatewayPaymentIntentId: string,
   ): Promise<PaymentStatusResult> {
     try {
-      const token = await this.getAuthToken();
-      const response = await axios.get<{
-        paid_amount_cents: number;
-        is_voided: boolean;
-      }>(`${this.apiBaseUrl}/api/ecommerce/orders/${gatewayPaymentIntentId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      // 1. Try modern Intention API lookup using Secret Key
+      if (this.secretKey) {
+        try {
+          const response = await axios.get<{
+            is_voided?: boolean;
+            is_refunded?: boolean;
+            paid_amount_cents?: number;
+            intention_order?: {
+              paid_amount_cents?: number;
+            };
+            status?: string;
+          }>(`${this.apiBaseUrl}/v1/intention/${gatewayPaymentIntentId}/`, {
+            headers: {
+              Authorization: `Token ${this.secretKey}`,
+            },
+            timeout: 10000,
+          });
 
-      const order = response.data;
-      let status = PaymentStatus.PENDING;
-      if (order.paid_amount_cents > 0) {
-        status = PaymentStatus.SUCCESS;
-      } else if (order.is_voided) {
-        status = PaymentStatus.FAILED;
+          const resData = response.data;
+          let status = PaymentStatus.PENDING;
+          const paidAmount = Number(
+            resData.paid_amount_cents ??
+              resData.intention_order?.paid_amount_cents ??
+              0,
+          );
+
+          if (
+            paidAmount > 0 ||
+            resData.status === 'success' ||
+            resData.status === 'CONFIRMED'
+          ) {
+            status = PaymentStatus.SUCCESS;
+          } else if (resData.is_voided || resData.status === 'failed') {
+            status = PaymentStatus.FAILED;
+          }
+
+          return {
+            status,
+            gatewayTransactionId: gatewayPaymentIntentId,
+          };
+        } catch {
+          // Intention lookup failed, fallback to legacy ecommerce order lookup below
+        }
+      }
+
+      // 2. Legacy order lookup fallback
+      if (this.apiKey) {
+        const token = await this.getAuthToken();
+        const response = await axios.get<{
+          paid_amount_cents: number;
+          is_voided: boolean;
+        }>(
+          `${this.apiBaseUrl}/api/ecommerce/orders/${gatewayPaymentIntentId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            timeout: 10000,
+          },
+        );
+
+        const order = response.data;
+        let status = PaymentStatus.PENDING;
+        if (order.paid_amount_cents > 0) {
+          status = PaymentStatus.SUCCESS;
+        } else if (order.is_voided) {
+          status = PaymentStatus.FAILED;
+        }
+
+        return {
+          status,
+          gatewayTransactionId: gatewayPaymentIntentId,
+        };
       }
 
       return {
-        status,
+        status: PaymentStatus.PENDING,
         gatewayTransactionId: gatewayPaymentIntentId,
       };
     } catch (error: unknown) {
       const err = error as Error;
-      this.logger.error(
-        `Failed to retrieve Paymob order status: ${err.message}`,
-        err.stack,
+      this.logger.warn(
+        `Could not retrieve Paymob status for ${gatewayPaymentIntentId}: ${err.message}`,
       );
-      throw err;
+      return {
+        status: PaymentStatus.PENDING,
+        gatewayTransactionId: gatewayPaymentIntentId,
+      };
     }
   }
 }

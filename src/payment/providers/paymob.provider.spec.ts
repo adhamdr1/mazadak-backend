@@ -211,6 +211,7 @@ describe('PaymobProvider', () => {
           transaction_id: 12345,
           amount_cents: 5000,
         },
+        { timeout: 10000 },
       );
     });
   });

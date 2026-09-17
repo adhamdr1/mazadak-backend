@@ -22,8 +22,11 @@ import { MissingHmacSignatureException } from './exceptions/missing-hmac-signatu
 
 interface BaseWebhookPayload {
   id?: string | number;
+  hmac?: string;
   obj?: {
     id?: string | number;
+    hmac?: string;
+    [key: string]: unknown;
   };
   [key: string]: unknown;
 }
@@ -77,10 +80,18 @@ export class PaymentController {
   @Post('webhooks/paymob')
   async handlePaymobWebhook(
     @Req() req: RawBodyRequest<Request>,
-    @Query('hmac') querySignature: string,
+    @Query('hmac') querySignature?: string,
+    @Headers('hmac') headerHmac?: string,
+    @Headers('x-paymob-hmac') headerXPaymobHmac?: string,
   ) {
-    // Paymob mostly uses HMAC in query parameters
-    const signature = querySignature;
+    const payload = req.body as BaseWebhookPayload;
+    const signature =
+      querySignature ||
+      headerHmac ||
+      headerXPaymobHmac ||
+      (typeof payload?.hmac === 'string' ? payload.hmac : undefined) ||
+      (typeof payload?.obj?.hmac === 'string' ? payload.obj.hmac : undefined);
+
     if (!signature) {
       throw new MissingHmacSignatureException();
     }
@@ -90,7 +101,6 @@ export class PaymentController {
       throw new MissingRawBodyException();
     }
 
-    const payload = req.body as BaseWebhookPayload;
     // Paymob obj.id is the transaction id
     const eventId = payload.obj?.id?.toString() || payload.id?.toString();
 
