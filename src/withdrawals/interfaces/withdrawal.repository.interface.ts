@@ -20,7 +20,7 @@ export interface CreateWithdrawalData {
   payoutDetails: PayoutDetailsInput;
   status?: WithdrawalStatus;
   holdTransactionId?: Types.ObjectId;
-  requestDate: string;
+  requestDate?: string;
 }
 
 export interface IWithdrawalRepository {

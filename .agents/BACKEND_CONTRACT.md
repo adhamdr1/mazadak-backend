@@ -42,6 +42,7 @@ Authorization: Bearer <accessToken>
 * في المزايدات (`Bid`): `amount: String!`
 * في المزايدة التلقائية (`AutoBid`): `maxAmount: String!`
 * في المعاملات (`Transaction`): `amount: String!`
+* في طلبات السحب (`WithdrawalRequest`): `amount: String!`, `fee: String!`, `netAmount: String!`
 
 > **السبب وطريقة التعامل:**
 > يتم إرجاع المبالغ كـ `String` لحماية دقة الحسابات المالية (Decimal Precision) ومنع أخطاء الـ Floating Points.
@@ -801,7 +802,7 @@ query {
   myTransactions(
     input: { page: 1, limit: 10 }
     filter: {
-      type: DEPOSIT       # اختياري: DEPOSIT | WITHDRAW | HOLD | RELEASE | CAPTURE | REFUND
+      type: DEPOSIT       # اختياري: DEPOSIT | WITHDRAW | HOLD | RELEASE | CAPTURE | REFUND | ADMIN_CREDIT | ADMIN_DEBIT
       status: SUCCESS     # اختياري: PENDING | PROCESSING | SUCCESS | FAILED | CANCELLED | EXPIRED
       startDate: DateTime
       endDate: DateTime
@@ -1311,7 +1312,7 @@ mutation {
     payoutDetails: {
       accountHolderName: "Adham Mohamed"
       phoneNumber: "01012345678"
-      instapayAddress: "adham@instapay"
+      ipaAddress: "adham@instapay"
     }
   }) {
     _id
@@ -1371,6 +1372,17 @@ subscription {
 }
 ```
 
+**الأخطاء المحتملة لطلبات السحب (User Operations):**
+| كود الخطأ | المعنى / سبب الحدوث |
+|:---|:---|
+| `INVALID_PAYOUT_DETAILS` | بيانات وسيلة السحب غير مكتملة (نقص رقم الحساب/IBAN للبنك، أو نقص IPA/الهاتف لانستاباي، أو نقص الهاتف للمحفظة) |
+| `WITHDRAWAL_BELOW_MINIMUM` | المبلغ المطلوب سحبه أقل من الحد الأدنى المسموح به (50 ج.م) |
+| `WITHDRAWAL_EXCEEDS_MAX_FOR_...` | المبلغ يتجاوز السقف المحدد للوسيلة (50,000 ج.م للمحافظ وانستاباي / 10,000,000 ج.م للحساب البنكي) |
+| `INSUFFICIENT_FUNDS` | الرصيد المتاح في المحفظة (الرصيد الكلي - الرصيد المحجوز) غير كافٍ لتغطية المبلغ |
+| `DAILY_WITHDRAWAL_LIMIT_REACHED` | تم استنفاد الحد اليومي (مسموح بطلب سحب نشط أو مكتمل واحد فقط يومياً حسب تقويم القاهرة `Africa/Cairo`) |
+| `WITHDRAWAL_NOT_FOUND` | طلب السحب غير موجود أو لا ينتمي للمستخدم الحالي |
+| `WITHDRAWAL_NOT_CANCELLABLE` | لا يمكن إلغاء الطلب لأنه لم يعد في حالة انتظار (`PENDING`)، حيث دخل حيز المعالجة أو اكتمل بالفعل |
+
 ---
 
 ### ب) استعلامات ومعاملات الأدمن المالي (Admin Financial Endpoints)
@@ -1400,7 +1412,7 @@ query {
         accountNumber
         iban
         phoneNumber
-        instapayAddress
+        ipaAddress
       }
       status
       createdAt
@@ -1487,6 +1499,16 @@ subscription {
   }
 }
 ```
+
+**الأخطاء المحتملة لعمليات الأدمن المالي (Admin Operations):**
+| كود الخطأ | المعنى / سبب الحدوث |
+|:---|:---|
+| `WITHDRAWAL_NOT_FOUND` | طلب السحب المحدد غير موجود بالمعرف الممرر |
+| `WITHDRAWAL_NOT_PENDING` | الطلب ليس في حالة `PENDING` ولا يمكن قفله أو بدء معالجته |
+| `WITHDRAWAL_NOT_IN_PROGRESS` | الطلب ليس في حالة قيد التنفيذ (`PENDING` أو `PROCESSING`) ولا يمكن إتمامه |
+| `WITHDRAWAL_NOT_REJECTABLE` | الطلب مكتمل بالفعل (`COMPLETED`) أو ملغي ولا يمكن رفضه |
+| `AMOUNT_MUST_BE_POSITIVE` | مبلغ تعديل الرصيد اليدوي بواسطة الأدمن يجب أن يكون أكبر من الصفر |
+| `REASON_REQUIRED` / `REASON_TOO_SHORT` | سبب التعديل المالي اليدوي للأدمن إلزامي ولا يقل عن 10 أحرف لضمان التوثيق المالي |
 
 ---
 

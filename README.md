@@ -11,7 +11,7 @@
 
 **A highly scalable, robust, and event-driven backend system for a real-time auction and bidding platform. Built from the ground up using NestJS, GraphQL, and enterprise-grade Microservices patterns.**
 
-[💻 Quick Start & Installation](#-quick-start--installation) • [🎯 Overview](#-overview) • [🏗️ Architecture Flow](#️-architecture-flow) • [🗄️ Database Entities](#️-database-entities) • [✨ Key Technical Features](#-key-technical-features) • [💳 Payment Integration](#-payment-gateway-integration) • [🔨 Real-Time Bidding](#-real-time-bidding-flow) • [🤖 Auto-Bidding Engine](#-auto-bidding-proxy-bidding-engine) • [💬 Real-Time Chat Engine](#-post-auction-real-time-chat-engine) • [⭐ Rating & Reviews](#-rating--reviews-system) • [🛡️ Escrow & Dispute System](#️-escrow--dispute-resolution-system)
+[💻 Quick Start & Installation](#-quick-start--installation) • [🎯 Overview](#-overview) • [🏗️ Architecture Flow](#️-architecture-flow) • [🗄️ Database Entities](#️-database-entities) • [✨ Key Technical Features](#-key-technical-features) • [💳 Payment Integration](#-payment-gateway-integration) • [🔨 Real-Time Bidding](#-real-time-bidding-flow) • [🤖 Auto-Bidding Engine](#-auto-bidding-proxy-bidding-engine) • [💬 Real-Time Chat Engine](#-post-auction-real-time-chat-engine) • [⭐ Rating & Reviews](#-rating--reviews-system) • [🛡️ Escrow & Dispute System](#️-escrow--dispute-resolution-system) • [💸 Withdrawals & Treasury](#-withdrawals--financial-admin-system)
 
 </div>
 
@@ -138,7 +138,7 @@ Our database schema is designed to handle financial transactions securely and ma
    - Enforces unique index `{ auctionId, userId }` and composite sorting index `{ auctionId, status, maxAmount: -1, createdAt: 1 }` for FIFO deterministic tie-breaking.
 6. **Transaction (`transactions`)**:
    - The immutable financial ledger.
-   - Records every `DEPOSIT`, `WITHDRAW`, `HOLD`, `RELEASE`, and `CAPTURE` operation tied to a Wallet.
+   - Records every `DEPOSIT`, `WITHDRAW`, `HOLD`, `RELEASE`, `CAPTURE`, `REFUND`, `ADMIN_CREDIT`, and `ADMIN_DEBIT` operation tied to a Wallet.
 7. **Escrow (`escrows`)**:
    - Holds captured auction winner funds safely during the 7-day inspection window.
    - Manages states (`HELD`, `RELEASED`, `REFUNDED`, `DISPUTED`), expiration timestamps, and release reasons.
@@ -155,6 +155,10 @@ Our database schema is designed to handle financial transactions securely and ma
     - Temporarily stores domain events before they are picked up and published to RabbitMQ to ensure zero data loss.
 13. **Review (`reviews`)**:
     - Stores ratings (1-5), multi-dimensional criteria breakdown, mutual blind review states (`PENDING`, `PUBLISHED`, `HIDDEN`), public seller replies, and published timestamps.
+14. **Withdrawal Request (`withdrawal_requests`)**:
+    - Manages multi-method payout requests (Bank Accounts, Vodafone/Orange/Etisalat/WE Cash, and InstaPay).
+    - Tracks states (`PENDING`, `PROCESSING`, `COMPLETED`, `REJECTED`, `CANCELLED`), fee breakdowns, Cairo calendar date (`requestDate`), hold transaction references, and admin audit receipts.
+    - Enforces partial unique index `{ userId: 1, requestDate: 1 }` filtered on active/completed statuses to guarantee daily quota limits.
 
 ---
 
