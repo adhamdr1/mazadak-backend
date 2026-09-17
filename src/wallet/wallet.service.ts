@@ -132,6 +132,10 @@ export class WalletService {
     return this.walletRepository.sumAllBalances();
   }
 
+  async sumHeldBalances(): Promise<number> {
+    return this.walletRepository.sumHeldBalances();
+  }
+
   // ─── User-Facing ─────────────────────────────────────────────────────────────
 
   async getMyWallet(userId: string): Promise<Wallet> {

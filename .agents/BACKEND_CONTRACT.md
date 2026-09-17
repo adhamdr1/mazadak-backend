@@ -1286,6 +1286,210 @@ mutation {
 
 ---
 
+## 13. Withdrawals & Financial Admin Module (نظام السحوبات والإدارة المالية)
+
+### أ) استعلامات ومعاملات المستخدم (User Endpoints)
+
+```graphql
+# 1. حساب العمولة والمبلغ الصافي والوقت المتوقع قبل تقديم الطلب (Public/Auth)
+query {
+  withdrawalFeePreview(amount: 5000, payoutMethod: INSTAPAY) {
+    requestedAmount    # "5000.00"
+    fee                # "100.00" (2%)
+    feePercentage      # 2
+    netAmount          # "4900.00"
+    maxAllowed         # 50000 (أو 10,000,000 للحساب البنكي)
+    estimatedDelivery  # "Within 24 business hours"
+  }
+}
+
+# 2. طلب سحب جديد (User Auth)
+mutation {
+  requestWithdrawal(input: {
+    amount: 5000
+    payoutMethod: INSTAPAY   # BANK_ACCOUNT | VODAFONE_CASH | ORANGE_CASH | ETISALAT_CASH | WE_PAY | INSTAPAY
+    payoutDetails: {
+      accountHolderName: "Adham Mohamed"
+      phoneNumber: "01012345678"
+      instapayAddress: "adham@instapay"
+    }
+  }) {
+    _id
+    amount
+    fee
+    netAmount
+    currency
+    payoutMethod
+    status        # PENDING
+    createdAt
+  }
+}
+
+# 3. إلغاء طلب السحب المعلق (User Auth)
+mutation {
+  cancelWithdrawal(id: "66123abc456def789") {
+    _id
+    status        # CANCELLED
+  }
+}
+
+# 4. عرض طلباتي مع الفلترة والترتيب (User Auth)
+query {
+  myWithdrawals(
+    pagination: { page: 1, limit: 10 }
+    filter: {
+      status: PENDING
+      payoutMethod: INSTAPAY
+      sortOrder: DESC
+    }
+  ) {
+    items {
+      _id
+      amount
+      fee
+      netAmount
+      status
+      payoutMethod
+      createdAt
+    }
+    total
+    totalPages
+    hasNextPage
+  }
+}
+
+# 5. متابعة التحديثات اللحظية لطلباتي (WebSocket Subscription)
+subscription {
+  myWithdrawalUpdated {
+    _id
+    status
+    rejectionReason
+    receiptUrl
+    adminReference
+    completedAt
+  }
+}
+```
+
+---
+
+### ب) استعلامات ومعاملات الأدمن المالي (Admin Financial Endpoints)
+
+> تتطلب صلاحية `role: ADMIN`.
+
+```graphql
+# 1. استعراض كافة طلبات السحب في النظام مع الفلترة
+query {
+  adminGetWithdrawals(
+    pagination: { page: 1, limit: 20 }
+    filter: {
+      status: PENDING
+      sortOrder: DESC
+    }
+  ) {
+    items {
+      _id
+      userId
+      amount
+      fee
+      netAmount
+      payoutMethod
+      payoutDetails {
+        accountHolderName
+        bankName
+        accountNumber
+        iban
+        phoneNumber
+        instapayAddress
+      }
+      status
+      createdAt
+    }
+    total
+  }
+}
+
+# 2. بدء معالجة الطلب (Lock to Admin)
+mutation {
+  adminStartWithdrawalProcessing(requestId: "66123abc456def789") {
+    _id
+    status        # PROCESSING
+    processedBy
+    processedAt
+  }
+}
+
+# 3. إتمام السحب وإرفاق بيانات وإيصال التحويل البنكي
+mutation {
+  adminCompleteWithdrawal(input: {
+    withdrawalId: "66123abc456def789"
+    adminReference: "CIB-TRX-987654321"
+    receiptUrl: "https://storage.mazadak.com/receipts/rec_98765.pdf"
+  }) {
+    _id
+    status                  # COMPLETED
+    adminReference
+    receiptUrl
+    completionTransactionId
+    completedAt
+  }
+}
+
+# 4. رفض طلب السحب مع ذكر السبب وإعادة الرصيد للمحفظة فوراً
+mutation {
+  adminRejectWithdrawal(input: {
+    withdrawalId: "66123abc456def789"
+    rejectionReason: "Invalid Instapay IPA address provided."
+  }) {
+    _id
+    status          # REJECTED
+    rejectionReason
+  }
+}
+
+# 5. تقرير الخزينة والسيولة الشامل (Treasury Liquidity Stats)
+query {
+  adminGetTreasuryStats {
+    totalWalletBalance         # إجمالي أرصدة المستخدمين في المنصة
+    totalHeldInWallets         # إجمالي الأموال المعلقة داخل المحافظ (مزادات/سحوبات)
+    totalPendingWithdrawals    # إجمالي مبالغ السحوبات المعلقة
+    pendingWithdrawalsCount    # عدد طلبات السحب المعلقة
+    totalHeldInEscrow          # إجمالي المبالغ المحتجزة في الوساطة (Escrow)
+    totalCompletedPayouts      # إجمالي الأموال التي تم تحويلها وسحبها بنجاح
+    totalCollectedFees         # إجمالي العمولات التي جنتها المنصة من السحوبات
+  }
+}
+
+# 6. تعديل رصيد مستخدم يدوياً (تسوية مالية / تعويض)
+mutation {
+  adminAdjustUserBalance(input: {
+    userId: "660abc123456789"
+    amount: 500
+    type: CREDIT   # CREDIT (إضافة) | DEBIT (خصم)
+    reason: "Compensating user for delivery disruption"
+  }) {
+    _id
+    balance
+    heldBalance
+  }
+}
+
+# 7. البث المباشر لطلبات السحب في لوحة تحكم الإدارة (Live Admin Feed)
+subscription {
+  adminWithdrawalFeed {
+    _id
+    userId
+    amount
+    netAmount
+    payoutMethod
+    status
+    createdAt
+  }
+}
+```
+
+---
+
 ## ملخص سريع — جميع نقاط الـ API
 
 | نوع الطلب | الـ Endpoint | الوصف |
@@ -1296,4 +1500,5 @@ mutation {
 | **POST** | `/payments/webhooks/stripe` | Webhook من Stripe (Public) |
 | **POST** | `/payments/webhooks/paymob` | Webhook من Paymob (Public) |
 | **WS** | `/graphql` | WebSocket للـ Subscriptions |
+
 

@@ -37,6 +37,7 @@ import type { JwtPayload } from './auth/interfaces/jwt-payload.interface';
 import { ChatModule } from './chat/chat.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { EscrowModule } from './escrow/escrow.module';
+import { WithdrawalsModule } from './withdrawals/withdrawals.module';
 
 @Module({
   imports: [
@@ -164,6 +165,7 @@ import { EscrowModule } from './escrow/escrow.module';
     ChatModule,
     ReviewsModule,
     EscrowModule,
+    WithdrawalsModule,
   ],
   providers: [
     // Global Authentication Guards

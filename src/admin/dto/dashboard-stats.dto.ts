@@ -25,4 +25,16 @@ export class DashboardStats {
 
   @Field(() => Int)
   totalTransactions!: number;
+
+  @Field(() => Int)
+  pendingWithdrawalsCount!: number;
+
+  @Field(() => Float)
+  pendingWithdrawalsAmount!: number;
+
+  @Field(() => Float)
+  totalCompletedPayouts!: number;
+
+  @Field(() => Float)
+  totalCollectedFees!: number;
 }
