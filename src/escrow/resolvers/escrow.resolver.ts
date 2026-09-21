@@ -1,8 +1,25 @@
-import { Resolver, Query, Mutation, Args, ID } from '@nestjs/graphql';
-import { UseGuards } from '@nestjs/common';
+import {
+  Resolver,
+  Query,
+  Mutation,
+  Args,
+  ID,
+  ResolveField,
+  Parent,
+  Int,
+  Subscription,
+} from '@nestjs/graphql';
+import { UseGuards, Inject } from '@nestjs/common';
+import { QueryBus } from '@nestjs/cqrs';
+import { RedisPubSub } from 'graphql-redis-subscriptions';
 import { EscrowService } from '../services';
 import { Escrow } from '../entities';
-import { EscrowsPage, EscrowFilterInput } from '../dto';
+import {
+  EscrowsPage,
+  EscrowFilterInput,
+  EscrowStatusChangedPayload,
+  EscrowStatusChangedInternalPayload,
+} from '../dto';
 import { PaginationInput } from '../../common/dto/pagination.input';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -11,11 +28,41 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../users/enums/user-role.enum';
 import type { JwtPayload } from '../../auth/interfaces/jwt-payload.interface';
 import { EscrowUnauthorizedException } from '../exceptions';
+import { PUB_SUB } from '../../infrastructure/pubsub/pubsub.provider';
+import { PUB_SUB_EVENTS } from '../../infrastructure/pubsub/events.constants';
+import { Auction } from '../../auctions/entities/auction.entity';
+import { GetAuctionByIdQuery } from '../../auctions/queries/get-auction-by-id.query';
 
 @Resolver(() => Escrow)
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class EscrowResolver {
-  constructor(private readonly escrowService: EscrowService) {}
+  constructor(
+    private readonly escrowService: EscrowService,
+    private readonly queryBus: QueryBus,
+    @Inject(PUB_SUB)
+    private readonly pubSub: RedisPubSub,
+  ) {}
+
+  // ─── Field Resolvers ────────────────────────────────────────────────────────
+
+  /**
+   * Resolves nested auction details for an escrow.
+   */
+  @ResolveField(() => Auction, { nullable: true })
+  async auction(@Parent() escrow: Escrow): Promise<Auction | null> {
+    if (!escrow.auctionId) return null;
+    return this.queryBus.execute<GetAuctionByIdQuery, Auction | null>(
+      new GetAuctionByIdQuery(escrow.auctionId.toString()),
+    );
+  }
+
+  /**
+   * Resolves inspection duration in hours.
+   */
+  @ResolveField(() => Int, { name: 'inspectionDurationHours' })
+  inspectionDurationHours(): number {
+    return 168;
+  }
 
   // ─── Queries ──────────────────────────────────────────────────────────────
 
@@ -129,5 +176,43 @@ export class EscrowResolver {
       escrowId,
       reason ?? 'Admin manual refund',
     );
+  }
+
+  // ─── Subscriptions ────────────────────────────────────────────────────────
+
+  /**
+   * Real-time subscription: fires whenever an escrow's status changes.
+   * Only buyer, seller, or admin can receive updates for this escrow.
+   */
+  @Subscription(() => EscrowStatusChangedPayload, {
+    name: 'escrowStatusChanged',
+    filter: (
+      payload: {
+        escrowStatusChanged: EscrowStatusChangedInternalPayload;
+      },
+      variables: { escrowId: string },
+      context: { user?: JwtPayload },
+    ) => {
+      if (!context.user) return false;
+      const isTarget =
+        payload.escrowStatusChanged.escrowId.toString() === variables.escrowId;
+      const isAuthorized =
+        payload.escrowStatusChanged.buyerId === context.user.sub ||
+        payload.escrowStatusChanged.sellerId === context.user.sub ||
+        context.user.role === UserRole.ADMIN;
+      return isTarget && isAuthorized;
+    },
+    resolve: (payload: { escrowStatusChanged: EscrowStatusChangedPayload }) =>
+      payload.escrowStatusChanged,
+  })
+  escrowStatusChanged(
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    @Args('escrowId', { type: () => ID }) _escrowId: string,
+  ) {
+    return this.pubSub.asyncIterableIterator(
+      PUB_SUB_EVENTS.ESCROW_STATUS_CHANGED,
+    ) as AsyncIterable<{
+      escrowStatusChanged: EscrowStatusChangedPayload;
+    }>;
   }
 }

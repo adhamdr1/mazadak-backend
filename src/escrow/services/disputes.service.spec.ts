@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { DisputesService } from './disputes.service';
 import { EscrowService } from './escrow.service';
 import { OutboxService } from '../../infrastructure/outbox/outbox.service';
+import { RealtimeService } from '../../infrastructure/pubsub/realtime.service';
 import { getConnectionToken } from '@nestjs/mongoose';
 import { Types } from 'mongoose';
 import {
@@ -47,6 +48,11 @@ const mockOutboxService = {
   saveEvent: jest.fn(),
 };
 
+const mockRealtimeService = {
+  publishDisputeStatusChanged: jest.fn(),
+  publishEscrowStatusChanged: jest.fn(),
+};
+
 const mockSession = {
   startTransaction: jest.fn(),
   commitTransaction: jest.fn(),
@@ -69,6 +75,7 @@ describe('DisputesService', () => {
         { provide: 'IEscrowRepository', useValue: mockEscrowRepository },
         { provide: EscrowService, useValue: mockEscrowService },
         { provide: OutboxService, useValue: mockOutboxService },
+        { provide: RealtimeService, useValue: mockRealtimeService },
         { provide: getConnectionToken(), useValue: mockConnection },
       ],
     }).compile();
@@ -138,6 +145,22 @@ describe('DisputesService', () => {
       );
       expect(mockOutboxService.saveEvent).toHaveBeenCalledTimes(2);
       expect(mockSession.commitTransaction).toHaveBeenCalled();
+      expect(
+        mockRealtimeService.publishDisputeStatusChanged,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          disputeId,
+          status: DisputeStatus.OPEN,
+        }),
+      );
+      expect(
+        mockRealtimeService.publishEscrowStatusChanged,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          escrowId,
+          status: EscrowStatus.DISPUTED,
+        }),
+      );
     });
 
     it('should throw EscrowNotFoundException if escrow not found', async () => {
@@ -219,6 +242,22 @@ describe('DisputesService', () => {
         expect.anything(),
         mockSession,
       );
+      expect(
+        mockRealtimeService.publishDisputeStatusChanged,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          disputeId,
+          status: DisputeStatus.CANCELLED,
+        }),
+      );
+      expect(
+        mockRealtimeService.publishEscrowStatusChanged,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          escrowId,
+          status: EscrowStatus.HELD,
+        }),
+      );
     });
 
     it('should throw DisputeNotFoundException if not found', async () => {
@@ -265,6 +304,14 @@ describe('DisputesService', () => {
       expect(mockDisputeRepository.updateStatus).toHaveBeenCalledWith(
         disputeId,
         DisputeStatus.UNDER_REVIEW,
+      );
+      expect(
+        mockRealtimeService.publishDisputeStatusChanged,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          disputeId,
+          status: DisputeStatus.UNDER_REVIEW,
+        }),
       );
     });
 
@@ -317,6 +364,15 @@ describe('DisputesService', () => {
         DisputeStatus.RESOLVED_BUYER_REFUNDED,
         expect.anything(),
         mockSession,
+      );
+      expect(
+        mockRealtimeService.publishDisputeStatusChanged,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          disputeId,
+          status: DisputeStatus.RESOLVED_BUYER_REFUNDED,
+          adminDecision: DisputeResolution.REFUND_BUYER,
+        }),
       );
     });
 

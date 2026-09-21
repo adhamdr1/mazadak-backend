@@ -1,4 +1,4 @@
-import { ObjectType, Field, ID } from '@nestjs/graphql';
+import { ObjectType, Field, ID, Int } from '@nestjs/graphql';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
 import { EscrowStatus } from '../enums/escrow-status.enum';
@@ -59,6 +59,12 @@ export class Escrow {
   @Field()
   @Prop({ type: Date, required: true, index: true })
   inspectionPeriodEndsAt!: Date;
+
+  // Computed field — resolved in EscrowResolver via @ResolveField
+  @Field(() => Int, {
+    description: 'Total inspection window in hours (168 hours = 7 days)',
+  })
+  inspectionDurationHours?: number;
 
   @Field({ nullable: true })
   @Prop({ type: Date })

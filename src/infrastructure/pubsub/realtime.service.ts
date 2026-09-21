@@ -8,6 +8,8 @@ import { AuctionStatusChangedPayload } from '../../auctions/dto/auction-status-c
 import { Auction } from '../../auctions/entities/auction.entity';
 import { ChatMessage } from '../../chat/entities/chat-message.entity';
 import { Wallet } from '../../wallet/entities/wallet.entity';
+import { EscrowStatusChangedInternalPayload } from '../../escrow/dto/escrow-status-changed.payload';
+import { DisputeStatusChangedInternalPayload } from '../../escrow/dto/dispute-status-changed.payload';
 
 @Injectable()
 export class RealtimeService {
@@ -129,6 +131,28 @@ export class RealtimeService {
     await this.publishSafely(PUB_SUB_EVENTS.WITHDRAWAL_STATUS_CHANGED, {
       myWithdrawalUpdated: payload,
       adminWithdrawalFeed: payload,
+    });
+  }
+
+  /**
+   * Publish a real-time event when an escrow status changes (for Buyer, Seller, and Admin).
+   */
+  async publishEscrowStatusChanged(
+    payload: EscrowStatusChangedInternalPayload,
+  ): Promise<void> {
+    await this.publishSafely(PUB_SUB_EVENTS.ESCROW_STATUS_CHANGED, {
+      escrowStatusChanged: payload,
+    });
+  }
+
+  /**
+   * Publish a real-time event when a dispute status changes (for Claimant, Defendant, and Admin).
+   */
+  async publishDisputeStatusChanged(
+    payload: DisputeStatusChangedInternalPayload,
+  ): Promise<void> {
+    await this.publishSafely(PUB_SUB_EVENTS.DISPUTE_STATUS_CHANGED, {
+      disputeStatusChanged: payload,
     });
   }
 }

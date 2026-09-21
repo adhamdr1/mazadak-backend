@@ -125,6 +125,8 @@ enum TransactionType {
   RELEASE
   CAPTURE
   REFUND
+  ADMIN_CREDIT
+  ADMIN_DEBIT
 }
 
 enum TransactionStatus {
@@ -141,6 +143,7 @@ enum TransactionReferenceType {
   TRANSACTION
   ESCROW
   DISPUTE
+  WITHDRAWAL
 }
 
 type TransactionsPage {
@@ -175,6 +178,8 @@ enum InAppNotificationType {
   AUCTION_ENDED_SELLER
   DEPOSIT_SUCCESSFUL
   WITHDRAWAL_COMPLETED
+  WITHDRAWAL_REQUESTED
+  WITHDRAWAL_REJECTED
   AUCTION_STARTED
   WELCOME
   NEW_BID
@@ -200,6 +205,7 @@ enum NotificationReferenceType {
   REVIEW
   ESCROW
   DISPUTE
+  WITHDRAWAL
 }
 
 type InAppNotificationsPage {
@@ -341,12 +347,16 @@ type Escrow {
   currency: String!
   status: EscrowStatus!
   inspectionPeriodEndsAt: DateTime!
+
+  """Total inspection window in hours (168 hours = 7 days)"""
+  inspectionDurationHours: Int!
   releasedAt: DateTime
   refundedAt: DateTime
   disputeId: ID
   releaseReason: String
   createdAt: DateTime!
   updatedAt: DateTime!
+  auction: Auction
 }
 
 """Lifecycle status of an escrow hold"""
@@ -413,6 +423,78 @@ type EscrowsPage {
   hasNextPage: Boolean!
 }
 
+type EscrowStatusChangedPayload {
+  escrowId: ID!
+  auctionId: ID!
+  status: EscrowStatus!
+  releasedAt: DateTime
+  refundedAt: DateTime
+  disputeId: ID
+  releaseReason: String
+}
+
+type DisputeStatusChangedPayload {
+  disputeId: ID!
+  escrowId: ID!
+  auctionId: ID!
+  status: DisputeStatus!
+  adminDecision: DisputeResolution
+  adminNotes: String
+  resolvedAt: DateTime
+}
+
+type PayoutDetails {
+  phoneNumber: String
+  bankName: String
+  accountHolderName: String
+  accountNumber: String
+  iban: String
+  ipaAddress: String
+}
+
+type WithdrawalRequest {
+  _id: ID!
+  userId: ID!
+  amount: String!
+  fee: String!
+  feePercentage: Float!
+  netAmount: String!
+  currency: String!
+  payoutMethod: PayoutMethod!
+  payoutDetails: PayoutDetails!
+  status: WithdrawalStatus!
+  holdTransactionId: ID
+  completionTransactionId: ID
+  adminReference: String
+  receiptUrl: String
+  rejectionReason: String
+  processedBy: ID
+  processedAt: DateTime
+  completedAt: DateTime
+  requestDate: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+"""Payout destination methods supported by Mazadak"""
+enum PayoutMethod {
+  VODAFONE_CASH
+  ORANGE_CASH
+  ETISALAT_CASH
+  WE_PAY
+  INSTAPAY
+  BANK_ACCOUNT
+}
+
+"""Lifecycle status of a withdrawal request"""
+enum WithdrawalStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  REJECTED
+  CANCELLED
+}
+
 type AdminUserDetails {
   user: User!
   wallet: Wallet
@@ -429,6 +511,36 @@ type DashboardStats {
   totalWalletBalance: Float!
   todaysRevenue: Float!
   totalTransactions: Int!
+  pendingWithdrawalsCount: Int!
+  pendingWithdrawalsAmount: Float!
+  totalCompletedPayouts: Float!
+  totalCollectedFees: Float!
+}
+
+type TreasuryStats {
+  totalWalletBalance: Float!
+  totalHeldInWallets: Float!
+  totalPendingWithdrawals: Float!
+  pendingWithdrawalsCount: Int!
+  totalHeldInEscrow: Float!
+  totalCompletedPayouts: Float!
+  totalCollectedFees: Float!
+}
+
+type WithdrawalsPage {
+  items: [WithdrawalRequest!]!
+  total: Int!
+  totalPages: Int!
+  hasNextPage: Boolean!
+}
+
+type WithdrawalFeePreview {
+  requestedAmount: String!
+  fee: String!
+  feePercentage: Float!
+  netAmount: String!
+  maxAllowed: Float!
+  estimatedDelivery: String!
 }
 
 type ChatReaction {
@@ -569,6 +681,12 @@ type Query {
   adminGetAuctions(input: PaginationInput!, filter: AuctionsFilterInput): AuctionsPage!
   adminGetTransactions(input: PaginationInput!, filter: TransactionsFilterInput): TransactionsPage!
   adminGetDashboardStats: DashboardStats!
+  adminGetWithdrawals(pagination: PaginationInput!, filter: WithdrawalsFilterInput): WithdrawalsPage!
+  adminGetWithdrawal(id: ID!): WithdrawalRequest!
+  adminGetTreasuryStats: TreasuryStats!
+  withdrawalFeePreview(amount: Float!, payoutMethod: PayoutMethod!): WithdrawalFeePreview!
+  myWithdrawals(pagination: PaginationInput!, filter: WithdrawalsFilterInput): WithdrawalsPage!
+  myWithdrawal(id: ID!): WithdrawalRequest!
   chatMessages(auctionId: ID!, limit: Float! = 20, cursor: String): ChatMessagesConnection!
   chatReadState(auctionId: ID!): ChatReadState
   userReviews(userId: ID!, input: PaginationInput, filter: ReviewsFilterInput, sort: ReviewsSortInput): ReviewsPage!
@@ -686,6 +804,14 @@ input DisputeFilterInput {
   auctionId: String
 }
 
+input WithdrawalsFilterInput {
+  status: WithdrawalStatus
+  payoutMethod: PayoutMethod
+  sortOrder: SortOrder = DESC
+  startDate: DateTime
+  endDate: DateTime
+}
+
 input ReviewsFilterInput {
   type: ReviewType
   minRating: Int
@@ -741,6 +867,12 @@ type Mutation {
   resolveDispute(input: ResolveDisputeInput!): Dispute!
   adminToggleUserBan(userId: ID!): User!
   adminCancelAuction(auctionId: ID!, reason: String!): Boolean!
+  adminStartWithdrawalProcessing(requestId: ID!): WithdrawalRequest!
+  adminCompleteWithdrawal(input: AdminCompleteWithdrawalInput!): WithdrawalRequest!
+  adminRejectWithdrawal(input: AdminRejectWithdrawalInput!): WithdrawalRequest!
+  adminAdjustUserBalance(input: AdminAdjustBalanceInput!): Wallet!
+  requestWithdrawal(input: RequestWithdrawalInput!): WithdrawalRequest!
+  cancelWithdrawal(id: ID!): WithdrawalRequest!
   sendMessage(input: CreateChatMessageInput!): ChatMessage!
   editMessage(messageId: ID!, newContent: String!): ChatMessage!
   deleteMessage(messageId: ID!): ChatMessage!
@@ -877,6 +1009,45 @@ input ResolveDisputeInput {
   adminNotes: String
 }
 
+input AdminCompleteWithdrawalInput {
+  withdrawalId: String!
+  adminReference: String!
+  receiptUrl: String!
+}
+
+input AdminRejectWithdrawalInput {
+  withdrawalId: String!
+  rejectionReason: String!
+}
+
+input AdminAdjustBalanceInput {
+  userId: String!
+  amount: Float!
+  type: AdminAdjustBalanceType!
+  reason: String!
+}
+
+"""Type of manual admin balance adjustment (CREDIT or DEBIT)"""
+enum AdminAdjustBalanceType {
+  CREDIT
+  DEBIT
+}
+
+input RequestWithdrawalInput {
+  amount: Float!
+  payoutMethod: PayoutMethod!
+  payoutDetails: PayoutDetailsInput!
+}
+
+input PayoutDetailsInput {
+  phoneNumber: String
+  bankName: String
+  accountHolderName: String
+  accountNumber: String
+  iban: String
+  ipaAddress: String
+}
+
 input CreateChatMessageInput {
   auctionId: ID!
   content: String
@@ -910,6 +1081,10 @@ type Subscription {
   auctionCreated: Auction!
   auctionStatusChanged(auctionId: ID!): AuctionStatusChangedPayload!
   bidAdded(auctionId: ID!): BidAddedPayload!
+  escrowStatusChanged(escrowId: ID!): EscrowStatusChangedPayload!
+  disputeStatusChanged(disputeId: ID!): DisputeStatusChangedPayload!
+  adminWithdrawalFeed: WithdrawalRequest!
+  myWithdrawalUpdated: WithdrawalRequest!
   messageSent(auctionId: ID!): ChatMessage!
   messageUpdated(auctionId: ID!): ChatMessage!
   chatReadStatusUpdated(auctionId: ID!): ChatReadStateUpdatedPayload!

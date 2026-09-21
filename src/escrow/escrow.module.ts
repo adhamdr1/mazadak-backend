@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CqrsModule } from '@nestjs/cqrs';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Escrow, EscrowSchema, Dispute, DisputeSchema } from './entities';
 import {
@@ -13,6 +14,7 @@ import { OutboxModule } from '../infrastructure/outbox/outbox.module';
 
 @Module({
   imports: [
+    CqrsModule,
     MongooseModule.forFeature([
       { name: Escrow.name, schema: EscrowSchema },
       { name: Dispute.name, schema: DisputeSchema },

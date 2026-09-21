@@ -7,3 +7,4 @@ export * from './dispute-not-found.exception';
 export * from './dispute-already-resolved.exception';
 export * from './dispute-window-expired.exception';
 export * from './invalid-dispute-action.exception';
+export * from './invalid-escrow-action.exception';

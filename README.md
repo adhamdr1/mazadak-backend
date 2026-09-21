@@ -140,11 +140,11 @@ Our database schema is designed to handle financial transactions securely and ma
    - The immutable financial ledger.
    - Records every `DEPOSIT`, `WITHDRAW`, `HOLD`, `RELEASE`, `CAPTURE`, `REFUND`, `ADMIN_CREDIT`, and `ADMIN_DEBIT` operation tied to a Wallet.
 7. **Escrow (`escrows`)**:
-   - Holds captured auction winner funds safely during the 7-day inspection window.
-   - Manages states (`HELD`, `RELEASED`, `REFUNDED`, `DISPUTED`), expiration timestamps, and release reasons.
+   - Holds captured auction winner funds safely during the 7-day (168 hours) inspection window.
+   - Manages states (`HELD`, `RELEASED`, `REFUNDED`, `DISPUTED`), `inspectionDurationHours`, expiration timestamps, release reasons, and resolved `auction` CQRS relations.
 8. **Dispute (`disputes`)**:
    - Manages formal dispute cases between buyers and sellers (`OPEN`, `UNDER_REVIEW`, `RESOLVED_BUYER_REFUNDED`, `RESOLVED_SELLER_PAID`, `CANCELLED`).
-   - Stores dispute reasons, claim descriptions, evidence URLs, admin adjudications, and resolution notes.
+   - Stores dispute reasons (`ITEM_NOT_RECEIVED`, `ITEM_DAMAGED`, `ITEM_MISMATCH`, `COUNTERFEIT_ITEM`, `OTHER`), claim descriptions, evidence URLs, admin adjudications, and resolution notes.
 9. **Chat Message (`chat_messages`)**:
    - Stores post-auction messages, clientMessageId idempotency, reactions array, media URLs, edit/delete flags, and sender snapshots.
 10. **Chat Read State (`chat_read_states`)**:
@@ -561,11 +561,13 @@ An enterprise-grade, trust-preserving **Escrow & Dispute Resolution Engine** des
 
 ### Architectural & Business Highlights
 
-- **7-Day Inspection Window & Escrow Hold:** Upon auction finalization, the winning bidder's funds are captured and held in an Escrow contract (`status: HELD`) rather than being deposited directly into the seller's balance.
+- **7-Day Inspection Window & Escrow Hold:** Upon auction finalization, the winning bidder's funds are captured and held in an Escrow contract (`status: HELD`) rather than being deposited directly into the seller's balance. Exposed via `inspectionDurationHours: 168`.
+- **Real-Time GraphQL WebSocket Subscriptions:** Live push updates via `escrowStatusChanged(escrowId)` and `disputeStatusChanged(disputeId)` powered by Redis Pub/Sub, broadcasting state transitions securely and exclusively to authorized transaction parties and admins.
+- **CQRS QueryBus Relation Resolution:** Nested GraphQL `auction` field on Escrow entities resolved asynchronously via CQRS Query Bus (`GetAuctionByIdQuery`), strictly preserving zero-circular-dependency architecture without `forwardRef`.
 - **Instant Buyer Confirmation (`confirmDelivery`):** Buyers can confirm receipt of the item in satisfactory condition at any time during the inspection window, instantly triggering an atomic wallet deposit to the seller and marking the escrow as `RELEASED`.
 - **Distributed Auto-Release Expiration Cron (`EscrowExpirationService`):** A scheduled background worker (running every 10 minutes) automatically releases held funds to sellers if the 7-day inspection window elapses without dispute, safeguarded by **Redis Distributed Locks (`SET NX EX` + Lua script)** across horizontal server instances.
 - **Structured Dispute Lifecycle & Evidence Submission:**
-  - Buyers or sellers can open formal dispute cases (`openDispute`) with specific reasons (`ITEM_NOT_RECEIVED`, `ITEM_NOT_AS_DESCRIBED`, `ITEM_DAMAGED`, `COUNTERFEIT_ITEM`, `SELLER_UNRESPONSIVE`, `OTHER`), detailed descriptions, and Cloudinary evidence URLs.
+  - Buyers or sellers can open formal dispute cases (`openDispute`) with specific reasons (`ITEM_NOT_RECEIVED`, `ITEM_DAMAGED`, `ITEM_MISMATCH`, `COUNTERFEIT_ITEM`, `OTHER`), detailed descriptions, and Cloudinary evidence URLs.
   - Automatically locks the underlying escrow hold in `DISPUTED` status, freezing all direct release paths.
 - **Multi-Channel Formal Legal & Financial Notifications:**
   - Transactional In-App notifications sent across all lifecycle state transitions.
@@ -696,8 +698,25 @@ sequenceDiagram
 
 ### ⚡ Real-Time GraphQL Subscriptions
 
-- **GraphQL-WS Handshake Validation:** Secures WebSocket connections by verifying JWT and lookup user state (active, banned, deleted) during handshake, rejecting invalid sockets.
-- **Real-Time Bids & Updates:** Live bidding and notifications are pushed instantly to clients using GraphQL Subscriptions backed by **Redis Pub/Sub** for cross-instance scaling.
+Mazadak features an event-driven real-time layer built on **GraphQL Subscriptions** over `graphql-ws` and backed by **Redis Pub/Sub** for seamless horizontal scaling across distributed cluster nodes:
+
+- **GraphQL-WS Handshake & Auth Guards:** Secures WebSocket connections by authenticating JWT tokens in `connectionParams` and verifying user active/banned status during the connection lifecycle.
+- **Granular Authorization & Party Filtering:** Subscriptions enforce payload-level and channel-level authorization filters so sensitive notifications, chat messages, escrow updates, and disputes only reach authorized parties (e.g. buyer, seller, plaintiff, defendant, or admins).
+
+| Subscription | Scope & Access | Trigger Event & Description |
+| :--- | :--- | :--- |
+| `bidAdded(auctionId)` | Public / Channel | Pushes real-time bid updates, updated `currentPrice`, and `leadingBidderId`. |
+| `auctionCreated` | Public / Global | Streams newly published auctions for zero-refresh feed updates. |
+| `auctionStatusChanged(auctionId)` | Public / Channel | Broadcasts auction termination, status changes, and winner finalization. |
+| `notificationAdded` | User / Protected | Streams in-app alerts, outbid warnings, and financial activity notices. |
+| `walletUpdated` | User / Protected | Live synchronization of `balance`, `heldBalance`, and `availableBalance`. |
+| `escrowStatusChanged(escrowId)` | Parties / Protected | Real-time state transitions for Escrow (`HELD`, `RELEASED`, `REFUNDED`, `DISPUTED`). |
+| `disputeStatusChanged(disputeId)` | Parties / Protected | Instant dispute lifecycle updates (`OPEN`, `UNDER_REVIEW`, resolution decisions). |
+| `messageSent(auctionId)` | Chat / Protected | Live post-auction chat message delivery between winner and seller. |
+| `messageUpdated(auctionId)` | Chat / Protected | Real-time emoji reactions, edits, and deletions. |
+| `chatReadStatusUpdated(auctionId)` | Chat / Protected | Live read receipts and message read timestamps. |
+| `myWithdrawalUpdated` | User / Protected | Real-time status changes, receipts, and notes on user withdrawal requests. |
+| `adminWithdrawalFeed` | Admin / Protected | Live incoming payout request feed for platform financial administrators. |
 
 ### ☁️ Cloud Media Integration
 

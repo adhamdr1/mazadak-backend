@@ -12,6 +12,8 @@ import { Types } from 'mongoose';
 import { Bid } from '../../bids/entities/bid.entity';
 import { Auction } from '../../auctions/entities/auction.entity';
 import { Wallet } from '../../wallet/entities/wallet.entity';
+import { EscrowStatus } from '../../escrow/enums/escrow-status.enum';
+import { DisputeStatus } from '../../escrow/enums/dispute-status.enum';
 
 const mockPubSub = {
   publish: jest.fn().mockResolvedValue(undefined),
@@ -194,6 +196,42 @@ describe('RealtimeService', () => {
     expect(mockPubSub.publish).toHaveBeenCalledWith(
       PUB_SUB_EVENTS.AUCTION_CREATED,
       { auctionCreated: payload },
+    );
+  });
+
+  it('should publish escrow status changed event', async () => {
+    const payload = {
+      escrowId: 'escrow-123',
+      auctionId: 'auction-456',
+      buyerId: 'buyer-789',
+      sellerId: 'seller-101',
+      status: EscrowStatus.RELEASED,
+      releasedAt: new Date(),
+    };
+
+    await service.publishEscrowStatusChanged(payload);
+
+    expect(mockPubSub.publish).toHaveBeenCalledWith(
+      PUB_SUB_EVENTS.ESCROW_STATUS_CHANGED,
+      { escrowStatusChanged: payload },
+    );
+  });
+
+  it('should publish dispute status changed event', async () => {
+    const payload = {
+      disputeId: 'dispute-123',
+      escrowId: 'escrow-456',
+      auctionId: 'auction-789',
+      openedById: 'user-1',
+      againstUserId: 'user-2',
+      status: DisputeStatus.OPEN,
+    };
+
+    await service.publishDisputeStatusChanged(payload);
+
+    expect(mockPubSub.publish).toHaveBeenCalledWith(
+      PUB_SUB_EVENTS.DISPUTE_STATUS_CHANGED,
+      { disputeStatusChanged: payload },
     );
   });
 

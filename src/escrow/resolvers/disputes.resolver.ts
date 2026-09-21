@@ -1,5 +1,13 @@
-import { Resolver, Query, Mutation, Args, ID } from '@nestjs/graphql';
-import { UseGuards } from '@nestjs/common';
+import {
+  Resolver,
+  Query,
+  Mutation,
+  Args,
+  ID,
+  Subscription,
+} from '@nestjs/graphql';
+import { UseGuards, Inject } from '@nestjs/common';
+import { RedisPubSub } from 'graphql-redis-subscriptions';
 import { DisputesService } from '../services';
 import { Dispute } from '../entities';
 import {
@@ -8,6 +16,8 @@ import {
   UpdateDisputeStatusInput,
   DisputeFilterInput,
   DisputesPage,
+  DisputeStatusChangedPayload,
+  DisputeStatusChangedInternalPayload,
 } from '../dto';
 import { PaginationInput } from '../../common/dto/pagination.input';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -17,11 +27,17 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../users/enums/user-role.enum';
 import type { JwtPayload } from '../../auth/interfaces/jwt-payload.interface';
 import { EscrowUnauthorizedException } from '../exceptions';
+import { PUB_SUB } from '../../infrastructure/pubsub/pubsub.provider';
+import { PUB_SUB_EVENTS } from '../../infrastructure/pubsub/events.constants';
 
 @Resolver(() => Dispute)
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class DisputesResolver {
-  constructor(private readonly disputesService: DisputesService) {}
+  constructor(
+    private readonly disputesService: DisputesService,
+    @Inject(PUB_SUB)
+    private readonly pubSub: RedisPubSub,
+  ) {}
 
   // ─── Queries ──────────────────────────────────────────────────────────────
 
@@ -141,5 +157,44 @@ export class DisputesResolver {
     @Args('input') input: ResolveDisputeInput,
   ): Promise<Dispute> {
     return this.disputesService.resolveDispute(currentUser.sub, input);
+  }
+
+  // ─── Subscriptions ────────────────────────────────────────────────────────
+
+  /**
+   * Real-time subscription: fires whenever a dispute's status changes.
+   * Only the openedBy user, againstUser, or admin can receive updates for this dispute.
+   */
+  @Subscription(() => DisputeStatusChangedPayload, {
+    name: 'disputeStatusChanged',
+    filter: (
+      payload: {
+        disputeStatusChanged: DisputeStatusChangedInternalPayload;
+      },
+      variables: { disputeId: string },
+      context: { user?: JwtPayload },
+    ) => {
+      if (!context.user) return false;
+      const isTarget =
+        payload.disputeStatusChanged.disputeId.toString() ===
+        variables.disputeId;
+      const isAuthorized =
+        payload.disputeStatusChanged.openedById === context.user.sub ||
+        payload.disputeStatusChanged.againstUserId === context.user.sub ||
+        context.user.role === UserRole.ADMIN;
+      return isTarget && isAuthorized;
+    },
+    resolve: (payload: { disputeStatusChanged: DisputeStatusChangedPayload }) =>
+      payload.disputeStatusChanged,
+  })
+  disputeStatusChanged(
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    @Args('disputeId', { type: () => ID }) _disputeId: string,
+  ) {
+    return this.pubSub.asyncIterableIterator(
+      PUB_SUB_EVENTS.DISPUTE_STATUS_CHANGED,
+    ) as AsyncIterable<{
+      disputeStatusChanged: DisputeStatusChangedPayload;
+    }>;
   }
 }

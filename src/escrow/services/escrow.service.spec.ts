@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { EscrowService } from './escrow.service';
 import { WalletService } from '../../wallet/wallet.service';
 import { OutboxService } from '../../infrastructure/outbox/outbox.service';
+import { RealtimeService } from '../../infrastructure/pubsub/realtime.service';
 import { getConnectionToken } from '@nestjs/mongoose';
 import { Types, ClientSession } from 'mongoose';
 import { EscrowStatus } from '../enums';
@@ -33,6 +34,10 @@ const mockOutboxService = {
   saveEvent: jest.fn(),
 };
 
+const mockRealtimeService = {
+  publishEscrowStatusChanged: jest.fn(),
+};
+
 const mockSession = {
   startTransaction: jest.fn(),
   commitTransaction: jest.fn(),
@@ -54,6 +59,7 @@ describe('EscrowService', () => {
         { provide: 'IEscrowRepository', useValue: mockEscrowRepository },
         { provide: WalletService, useValue: mockWalletService },
         { provide: OutboxService, useValue: mockOutboxService },
+        { provide: RealtimeService, useValue: mockRealtimeService },
         { provide: getConnectionToken(), useValue: mockConnection },
       ],
     }).compile();
@@ -167,6 +173,14 @@ describe('EscrowService', () => {
         mockSession,
       );
       expect(mockSession.commitTransaction).toHaveBeenCalled();
+      expect(
+        mockRealtimeService.publishEscrowStatusChanged,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          escrowId,
+          status: EscrowStatus.RELEASED,
+        }),
+      );
     });
 
     it('should throw EscrowNotFoundException if escrow not found', async () => {
@@ -215,6 +229,14 @@ describe('EscrowService', () => {
         expect.objectContaining({ releaseReason: 'ADMIN_DECISION' }),
         undefined,
       );
+      expect(
+        mockRealtimeService.publishEscrowStatusChanged,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          escrowId,
+          status: EscrowStatus.RELEASED,
+        }),
+      );
     });
   });
 
@@ -240,6 +262,14 @@ describe('EscrowService', () => {
         RabbitMQEvent.EscrowRefunded,
         expect.objectContaining({ refundReason: 'DISPUTE_WON_BUYER' }),
         undefined,
+      );
+      expect(
+        mockRealtimeService.publishEscrowStatusChanged,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          escrowId,
+          status: EscrowStatus.REFUNDED,
+        }),
       );
     });
 
