@@ -9,6 +9,7 @@ import { EscrowFilterInput, EscrowsPage } from '../dto';
 import { PaginationInput } from '../../common/dto/pagination.input';
 import { WalletService } from '../../wallet/wallet.service';
 import { OutboxService } from '../../infrastructure/outbox/outbox.service';
+import { RealtimeService } from '../../infrastructure/pubsub/realtime.service';
 import { RabbitMQEvent } from '../../infrastructure/rabbitmq/rabbitmq-event.types';
 import { TransactionReferenceType } from '../../transaction/enums/transaction-reference-type.enum';
 import {
@@ -17,6 +18,7 @@ import {
   EscrowAlreadyRefundedException,
   EscrowAlreadyDisputedException,
   EscrowUnauthorizedException,
+  InvalidEscrowActionException,
 } from '../exceptions';
 
 export const INSPECTION_WINDOW_DAYS = 7;
@@ -30,6 +32,7 @@ export class EscrowService {
     private readonly escrowRepository: IEscrowRepository,
     private readonly walletService: WalletService,
     private readonly outboxService: OutboxService,
+    private readonly realtimeService: RealtimeService,
     @InjectConnection() private readonly connection: Connection,
   ) {}
 
@@ -122,9 +125,7 @@ export class EscrowService {
       }
 
       if (escrow.status !== EscrowStatus.HELD) {
-        throw new Error(
-          `Cannot confirm delivery for escrow in status ${escrow.status}`,
-        );
+        throw new InvalidEscrowActionException();
       }
 
       const amountNumber = Number(escrow.amount.toString());
@@ -171,6 +172,17 @@ export class EscrowService {
       this.logger.log(
         `Escrow ${escrowId} released via buyer confirmation. Amount: ${amountNumber} credited to seller ${sellerId}`,
       );
+
+      // 4. Publish real-time status update to buyer, seller, and admin
+      void this.realtimeService.publishEscrowStatusChanged({
+        escrowId: updatedEscrow!._id.toString(),
+        auctionId,
+        buyerId,
+        sellerId,
+        status: EscrowStatus.RELEASED,
+        releasedAt: updatedEscrow!.releasedAt,
+        releaseReason: 'BUYER_CONFIRMED',
+      });
 
       return updatedEscrow!;
     } catch (error) {
@@ -258,6 +270,17 @@ export class EscrowService {
       `Escrow ${escrowId} released. Reason: ${releaseReason}, Amount: ${amountNumber} credited to seller ${sellerId}`,
     );
 
+    // 4. Publish real-time status update to buyer, seller, and admin
+    void this.realtimeService.publishEscrowStatusChanged({
+      escrowId: updatedEscrow!._id.toString(),
+      auctionId,
+      buyerId,
+      sellerId,
+      status: EscrowStatus.RELEASED,
+      releasedAt: updatedEscrow!.releasedAt,
+      releaseReason,
+    });
+
     return updatedEscrow!;
   }
 
@@ -334,6 +357,17 @@ export class EscrowService {
     this.logger.log(
       `Escrow ${escrowId} refunded to buyer ${buyerId}. Reason: ${refundReason}, Amount: ${amountNumber}`,
     );
+
+    // 4. Publish real-time status update to buyer, seller, and admin
+    void this.realtimeService.publishEscrowStatusChanged({
+      escrowId: updatedEscrow!._id.toString(),
+      auctionId,
+      buyerId,
+      sellerId,
+      status: EscrowStatus.REFUNDED,
+      refundedAt: updatedEscrow!.refundedAt,
+      releaseReason: refundReason,
+    });
 
     return updatedEscrow!;
   }

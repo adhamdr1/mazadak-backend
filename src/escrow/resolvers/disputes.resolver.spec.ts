@@ -13,6 +13,8 @@ import {
   ResolveDisputeInput,
   UpdateDisputeStatusInput,
 } from '../dto';
+import { PUB_SUB } from '../../infrastructure/pubsub/pubsub.provider';
+import { PUB_SUB_EVENTS } from '../../infrastructure/pubsub/events.constants';
 
 const mockDisputesService = {
   getDisputeById: jest.fn(),
@@ -25,6 +27,10 @@ const mockDisputesService = {
   resolveDispute: jest.fn(),
 };
 
+const mockPubSub = {
+  asyncIterableIterator: jest.fn(),
+};
+
 describe('DisputesResolver', () => {
   let resolver: DisputesResolver;
 
@@ -33,6 +39,7 @@ describe('DisputesResolver', () => {
       providers: [
         DisputesResolver,
         { provide: DisputesService, useValue: mockDisputesService },
+        { provide: PUB_SUB, useValue: mockPubSub },
       ],
     }).compile();
 
@@ -224,6 +231,19 @@ describe('DisputesResolver', () => {
       expect(mockDisputesService.resolveDispute).toHaveBeenCalledWith(
         adminId,
         input,
+      );
+    });
+  });
+
+  describe('disputeStatusChanged subscription', () => {
+    it('should return async iterable iterator for DISPUTE_STATUS_CHANGED', () => {
+      const mockIterator = { [Symbol.asyncIterator]: jest.fn() };
+      mockPubSub.asyncIterableIterator.mockReturnValue(mockIterator);
+
+      const result = resolver.disputeStatusChanged(disputeId);
+      expect(result).toBe(mockIterator);
+      expect(mockPubSub.asyncIterableIterator).toHaveBeenCalledWith(
+        PUB_SUB_EVENTS.DISPUTE_STATUS_CHANGED,
       );
     });
   });

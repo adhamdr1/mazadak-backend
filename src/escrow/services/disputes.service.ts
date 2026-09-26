@@ -15,6 +15,7 @@ import { PaginationInput } from '../../common/dto/pagination.input';
 import { EscrowService } from './escrow.service';
 import { TransactionReferenceType } from '../../transaction/enums/transaction-reference-type.enum';
 import { OutboxService } from '../../infrastructure/outbox/outbox.service';
+import { RealtimeService } from '../../infrastructure/pubsub/realtime.service';
 import { RabbitMQEvent } from '../../infrastructure/rabbitmq/rabbitmq-event.types';
 import {
   DisputeNotFoundException,
@@ -38,6 +39,7 @@ export class DisputesService {
     private readonly escrowRepository: IEscrowRepository,
     private readonly escrowService: EscrowService,
     private readonly outboxService: OutboxService,
+    private readonly realtimeService: RealtimeService,
     @InjectConnection() private readonly connection: Connection,
   ) {}
 
@@ -142,6 +144,25 @@ export class DisputesService {
         `Dispute ${dispute._id.toString()} opened by ${userId} for escrow ${escrow._id.toString()}`,
       );
 
+      // 4. Publish real-time events to both parties
+      void this.realtimeService.publishDisputeStatusChanged({
+        disputeId: dispute._id.toString(),
+        escrowId: escrow._id.toString(),
+        auctionId: input.auctionId,
+        openedById: userId,
+        againstUserId,
+        status: DisputeStatus.OPEN,
+      });
+
+      void this.realtimeService.publishEscrowStatusChanged({
+        escrowId: escrow._id.toString(),
+        auctionId: input.auctionId,
+        buyerId: escrow.buyerId.toString(),
+        sellerId: escrow.sellerId.toString(),
+        status: EscrowStatus.DISPUTED,
+        disputeId: dispute._id.toString(),
+      });
+
       return dispute;
     } catch (error) {
       await session.abortTransaction();
@@ -215,6 +236,24 @@ export class DisputesService {
         `Dispute ${disputeId} cancelled by user ${userId}. Escrow restored to HELD`,
       );
 
+      // 4. Publish real-time events to both parties
+      void this.realtimeService.publishDisputeStatusChanged({
+        disputeId,
+        escrowId: dispute.escrowId.toString(),
+        auctionId: dispute.auctionId.toString(),
+        openedById: dispute.openedById.toString(),
+        againstUserId: dispute.againstUserId.toString(),
+        status: DisputeStatus.CANCELLED,
+      });
+
+      void this.realtimeService.publishEscrowStatusChanged({
+        escrowId: dispute.escrowId.toString(),
+        auctionId: dispute.auctionId.toString(),
+        buyerId: dispute.openedById.toString(),
+        sellerId: dispute.againstUserId.toString(),
+        status: EscrowStatus.HELD,
+      });
+
       return updatedDispute!;
     } catch (error) {
       await session.abortTransaction();
@@ -248,6 +287,16 @@ export class DisputesService {
       input.disputeId,
       input.status,
     );
+
+    // Publish real-time dispute status update
+    void this.realtimeService.publishDisputeStatusChanged({
+      disputeId: updated!._id.toString(),
+      escrowId: dispute.escrowId.toString(),
+      auctionId: dispute.auctionId.toString(),
+      openedById: dispute.openedById.toString(),
+      againstUserId: dispute.againstUserId.toString(),
+      status: input.status,
+    });
 
     return updated!;
   }
@@ -334,6 +383,19 @@ export class DisputesService {
       this.logger.log(
         `Dispute ${input.disputeId} resolved by admin ${adminId} with decision: ${input.decision}`,
       );
+
+      // 4. Publish real-time dispute status update
+      void this.realtimeService.publishDisputeStatusChanged({
+        disputeId: input.disputeId,
+        escrowId: dispute.escrowId.toString(),
+        auctionId: dispute.auctionId.toString(),
+        openedById: dispute.openedById.toString(),
+        againstUserId: dispute.againstUserId.toString(),
+        status: newDisputeStatus,
+        adminDecision: input.decision,
+        adminNotes: input.adminNotes,
+        resolvedAt: updatedDispute!.resolvedAt,
+      });
 
       return updatedDispute!;
     } catch (error) {

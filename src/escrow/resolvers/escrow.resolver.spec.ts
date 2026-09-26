@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { QueryBus } from '@nestjs/cqrs';
 import { EscrowResolver } from './escrow.resolver';
 import { EscrowService } from '../services';
 import { Types } from 'mongoose';
@@ -8,6 +9,9 @@ import { JwtPayload } from '../../auth/interfaces/jwt-payload.interface';
 import { UserRole } from '../../users/enums/user-role.enum';
 import { EscrowUnauthorizedException } from '../exceptions';
 import { EscrowsPage } from '../dto';
+import { PUB_SUB } from '../../infrastructure/pubsub/pubsub.provider';
+import { PUB_SUB_EVENTS } from '../../infrastructure/pubsub/events.constants';
+import { GetAuctionByIdQuery } from '../../auctions/queries/get-auction-by-id.query';
 
 const mockEscrowService = {
   getEscrowByAuctionId: jest.fn(),
@@ -19,6 +23,14 @@ const mockEscrowService = {
   refundEscrow: jest.fn(),
 };
 
+const mockQueryBus = {
+  execute: jest.fn(),
+};
+
+const mockPubSub = {
+  asyncIterableIterator: jest.fn(),
+};
+
 describe('EscrowResolver', () => {
   let resolver: EscrowResolver;
 
@@ -27,6 +39,8 @@ describe('EscrowResolver', () => {
       providers: [
         EscrowResolver,
         { provide: EscrowService, useValue: mockEscrowService },
+        { provide: QueryBus, useValue: mockQueryBus },
+        { provide: PUB_SUB, useValue: mockPubSub },
       ],
     }).compile();
 
@@ -220,6 +234,45 @@ describe('EscrowResolver', () => {
       expect(mockEscrowService.refundEscrow).toHaveBeenCalledWith(
         escrowId,
         'Admin manual refund',
+      );
+    });
+  });
+
+  describe('Field Resolvers', () => {
+    it('should resolve auction using QueryBus', async () => {
+      const mockAuction = {
+        _id: new Types.ObjectId(auctionId),
+        title: 'Test Auction',
+      };
+      mockQueryBus.execute.mockResolvedValue(mockAuction);
+
+      const result = await resolver.auction(mockEscrow);
+      expect(result).toEqual(mockAuction);
+      expect(mockQueryBus.execute).toHaveBeenCalledWith(
+        new GetAuctionByIdQuery(auctionId),
+      );
+    });
+
+    it('should return null if auctionId is missing', async () => {
+      const result = await resolver.auction({} as unknown as Escrow);
+      expect(result).toBeNull();
+    });
+
+    it('should return inspectionDurationHours as 168', () => {
+      const result = resolver.inspectionDurationHours();
+      expect(result).toBe(168);
+    });
+  });
+
+  describe('escrowStatusChanged subscription', () => {
+    it('should return async iterable iterator for ESCROW_STATUS_CHANGED', () => {
+      const mockIterator = { [Symbol.asyncIterator]: jest.fn() };
+      mockPubSub.asyncIterableIterator.mockReturnValue(mockIterator);
+
+      const result = resolver.escrowStatusChanged(escrowId);
+      expect(result).toBe(mockIterator);
+      expect(mockPubSub.asyncIterableIterator).toHaveBeenCalledWith(
+        PUB_SUB_EVENTS.ESCROW_STATUS_CHANGED,
       );
     });
   });

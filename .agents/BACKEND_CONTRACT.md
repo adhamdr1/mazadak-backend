@@ -899,78 +899,336 @@ Body:
 
 ---
 
-## 7. Escrow Module
+## 7. Escrow Module (الضمان المالي والوساطة والنزاعات)
 
-### 7.1 عرض ضمان مزاد (escrowByAuction) — محمي
+> يحمي هذا الموديول أموال المشترين والبائعين؛ حيث يتم حجز قيمة المزاد الفائز في حساب وسيط (Escrow) لمدة فحص قدرها **7 أيام (168 ساعة)** تبدأ من انتهاء المزاد.
+
+---
+
+### 7.1 عرض ضمان مزاد محدد (escrowByAuction / escrow) — محمي
 
 ```graphql
+# 1. جلب الضمان بواسطة معرف المزاد (Nullable):
 query {
   escrowByAuction(auctionId: ID!) {
-    _id  auctionId  buyerId  sellerId  amount  currency
-    status              # HELD | RELEASED | REFUNDED | DISPUTED
+    _id
+    auctionId
+    buyerId
+    sellerId
+    amount
+    currency
+    status                  # HELD | RELEASED | REFUNDED | DISPUTED
+    inspectionPeriodEndsAt  # تاريخ انتهاء مهلة الفحص (ISO 8601)
+    inspectionDurationHours # 168 (عدد ساعات مهلة الفحص الكلية)
+    releasedAt
+    refundedAt
+    disputeId
+    releaseReason
+    createdAt
+    # بيانات المزاد المضمنة (تمنع الحاجة لـ Round Trips إضافية):
+    auction {
+      _id
+      title
+      mediaUrls
+      currentPrice
+    }
+  }
+}
+
+# 2. جلب الضمان بواسطة معرف الضمان المباشر (Non-null):
+query {
+  escrow(id: ID!) {
+    _id
+    amount
+    status
     inspectionPeriodEndsAt
-    releasedAt  refundedAt  disputeId
+    inspectionDurationHours
+    auction { _id title }
+  }
+}
+```
+
+> **ملاحظات مهمة:**
+> - `escrowByAuction` يُرجع `null` إذا لم يكن المزاد منتهياً بفائز أو لم يتم إنشاء ضمان له بعد.
+> - الصلاحية محصورة في: المشتري (`buyerId`)، البائع (`sellerId`)، أو الأدمن (`ADMIN`). أي مستخدم آخر يحاول الاستعلام يرجع له خطأ `ESCROW_UNAUTHORIZED`.
+
+---
+
+### 7.2 تأكيد الاستلام وتحرير المبلغ للبائع (confirmDelivery) — محمي (المشتري فقط)
+
+```graphql
+mutation {
+  confirmDelivery(escrowId: ID!) {
+    _id
+    status       # RELEASED
+    releasedAt   # وقت التحرير
+    releaseReason # "BUYER_CONFIRMED"
+  }
+}
+```
+
+> **السلوك:**
+> يقوم المشتري بتأكيد استلام المنتج ومطابقته للمواصفات، مما يؤدي فوراً إلى تحويل الأموال المحجوزة لمحفظة البائع وتغيير حالة الضمان إلى `RELEASED`.
+
+**الأخطاء المحتملة:**
+| كود الخطأ | HTTP | المعنى / سبب الحدوث | ما يعرضه الفرونت |
+|:---|:---:|:---|:---|
+| `ESCROW_NOT_FOUND` | 404 | معرف الضمان غير موجود بالداتابيز | "الضمان المالي غير موجود" |
+| `ESCROW_UNAUTHORIZED` | 403 | المستخدم الحالي ليس المشتري لهذا الضمان | "غير مصرح لك بتأكيد استلام هذا الضمان" |
+| `ESCROW_ALREADY_RELEASED` | 400 | تم تحرير المبلغ للبائع مسبقاً (سواء بتأكيد سابق أو انتهاء المهلة) | "تم تحرير مبلغ الضمان للبائع مسبقاً" |
+| `ESCROW_ALREADY_DISPUTED` | 400 | يوجد نزاع مفتوح حالياً على هذا الضمان ولا يمكن التحرير | "لا يمكن تأكيد الاستلام لوجود نزاع قيد المراجعة" |
+| `ESCROW_INVALID_STATUS` | 400 | الضمان ليس في حالة حجز صالحة (`HELD`) كأن يكون مسترداً | "حالة الضمان الحالية لا تسمح بتأكيد الاستلام" |
+
+---
+
+### 7.3 فتح نزاع مالي (openDispute) — محمي (المشتري والبائع)
+
+```graphql
+mutation {
+  openDispute(input: {
+    auctionId: "66123abc456def789"
+    reason: ITEM_NOT_RECEIVED       # ITEM_NOT_RECEIVED | ITEM_DAMAGED | ITEM_MISMATCH | COUNTERFEIT_ITEM | OTHER
+    description: "المنتج المستلم به كسر في الشاشة ومخالف للوصف تماماً"
+    evidenceUrls: [
+      "https://res.cloudinary.com/mazadak/evidence1.jpg",
+      "https://res.cloudinary.com/mazadak/evidence2.jpg"
+    ]                               # اختياري — بحد أقصى 5 روابط
+  }) {
+    _id
+    escrowId
+    auctionId
+    openedById
+    againstUserId
+    reason
+    description
+    evidenceUrls
+    status                          # OPEN
     createdAt
   }
 }
 ```
 
+> **المحددات والشروط:**
+> 1. الـ Input يأخذ `auctionId` لأن كل مزاد مكتمل يرتبط بضمان واحد فريد (1:1).
+> 2. يجب فتح النزاع قبل انتهاء مهلة الـ 7 أيام (`inspectionPeriodEndsAt`).
+> 3. عند فتح النزاع بنجاح، تتحول حالة الـ Escrow تلقائياً إلى `DISPUTED` ويتوقف الـ Auto-Release.
+> 4. `evidenceUrls`: مصفوفة روابط صور/مستندات اختيارية بحد أقصى 5 صور، والوصف لا يقل عن 10 أحرف.
+
+**الأخطاء المحتملة:**
+| كود الخطأ | HTTP | المعنى / سبب الحدوث | ما يعرضه الفرونت |
+|:---|:---:|:---|:---|
+| `ESCROW_NOT_FOUND` | 404 | لم يتم العثور على ضمان مالي لهذا المزاد | "لا يوجد ضمان مالي مرتبط بهذا المزاد" |
+| `ESCROW_UNAUTHORIZED` | 403 | المستخدم ليس طرفاً في المعاملة (ليس المشتري أو البائع) | "غير مصرح لك بفتح نزاع على هذا المزاد" |
+| `ESCROW_ALREADY_RELEASED` | 400 | تم تحرير المبلغ للبائع بالفعل ولا يمكن فتح نزاع | "انتهت فترة الفحص وتم تحرير المبلغ مسبقاً" |
+| `ESCROW_ALREADY_DISPUTED` | 400 | يوجد نزاع مفتوح بالفعل على هذا الضمان | "يوجد نزاع مفتوح بالفعل لهذا المزاد" |
+| `INVALID_DISPUTE_ACTION` | 400 | حالة الضمان لا تسمح بفتح نزاع (مثلاً مسترد مسبقاً) | "لا يمكن فتح نزاع في الحالة الحالية للضمان" |
+| `DISPUTE_WINDOW_EXPIRED` | 400 | انتهت فترة الفحص المحددة (7 أيام) | "انتهت المهلة المسموح بها لفتح نزاع (7 أيام)" |
+
 ---
 
-### 7.2 تأكيد الاستلام وتحرير المبلغ (confirmDelivery) — محمي (المشتري فقط)
+### 7.4 إلغاء النزاع (cancelDispute) — محمي (صاحب النزاع فقط)
 
 ```graphql
 mutation {
-  confirmDelivery(escrowId: ID!) {
-    _id  status  releasedAt
+  cancelDispute(disputeId: ID!) {
+    _id
+    status       # CANCELLED
+    updatedAt
   }
 }
 ```
 
----
+> **السلوك والأثر على الضمان:**
+> - يملك صلاحية الإلغاء **فقط المستخدم الذي فتح النزاع** (`openedById`).
+> - يُسمح بالإلغاء فقط عندما يكون النزاع في حالة `OPEN` أو `UNDER_REVIEW`.
+> - **ماذا يحدث للـ Escrow بعد الإلغاء؟** يعود الضمان فوراً إلى حالة **`HELD`** الطبيعية، ويستطيع المشتري تأكيد الاستلام، أو يحرره الـ Cron Job تلقائياً للبائع عند انتهاء مهلة الفحص.
 
-### 7.3 فتح نزاع (openDispute) — محمي (المشتري فقط)
-
-```graphql
-mutation {
-  openDispute(input: {
-    auctionId: String!
-    reason: ITEM_NOT_RECEIVED | ITEM_DAMAGED | ITEM_MISMATCH | COUNTERFEIT_ITEM | OTHER
-    description: String!
-    evidenceUrls: [String!]   # URLs لصور الأدلة (اختياري)
-  }) {
-    _id  status  reason  description
-  }
-}
-```
+**الأخطاء المحتملة:**
+| كود الخطأ | HTTP | المعنى / سبب الحدوث | ما يعرضه الفرونت |
+|:---|:---:|:---|:---|
+| `DISPUTE_NOT_FOUND` | 404 | معرف النزاع غير موجود | "النزاع غير موجود" |
+| `ESCROW_UNAUTHORIZED` | 403 | المستخدم الحالي ليس هو من قام بفتح النزاع | "لا يمكنك إلغاء نزاع لم تقم بفتحه" |
+| `DISPUTE_ALREADY_RESOLVED` | 400 | النزاع تم حسمه من الإدارة أو تم إلغاؤه مسبقاً | "لا يمكن إلغاء نزاع تم حسمه مسبقاً" |
 
 ---
 
-### 7.4 ضماناتي (myEscrows) — محمي
+### 7.5 استعلام ضماناتي (myEscrows) — محمي
 
 ```graphql
 query {
   myEscrows(
-    input: { page: 1  limit: 10 }
-    filter: { status: EscrowStatus }
+    input: { page: 1, limit: 10 }
+    filter: { status: HELD }        # اختياري: فلترة بـ HELD | RELEASED | REFUNDED | DISPUTED
   ) {
-    items { _id  auctionId  buyerId  sellerId  amount  status  ... }
+    items {
+      _id
+      auctionId
+      buyerId
+      sellerId
+      amount
+      currency
+      status
+      inspectionPeriodEndsAt
+      inspectionDurationHours       # 168 (ثابت لجميع الضمانات)
+      releasedAt
+      refundedAt
+      disputeId
+      releaseReason
+      createdAt
+      # بيانات المزاد المضمنة:
+      auction {
+        _id
+        title
+        mediaUrls
+        currentPrice
+        startingPrice
+      }
+    }
     total
+    totalPages
+    hasNextPage
   }
 }
 ```
 
 ---
 
-### 7.5 تفاصيل نزاع (dispute) — محمي
+### 7.6 استعلامات النزاعات (myDisputes / disputeByAuction / dispute) — محمي
 
 ```graphql
+# 1. نزاعاتي (سواء كنت المدعي openedById أو المدعى عليه againstUserId):
+query {
+  myDisputes(
+    input: { page: 1, limit: 10 }
+    filter: { status: OPEN }        # اختياري: OPEN | UNDER_REVIEW | RESOLVED_BUYER_REFUNDED | RESOLVED_SELLER_PAID | CANCELLED
+  ) {
+    items {
+      _id
+      escrowId
+      auctionId
+      openedById
+      againstUserId
+      reason
+      description
+      evidenceUrls
+      status
+      adminDecision
+      adminNotes
+      resolvedAt
+      createdAt
+    }
+    total
+    totalPages
+    hasNextPage
+  }
+}
+
+# 2. الاستعلام عن نزاع لمزاد محدد (Nullable — يُرجع null إذا لم يوجد نزاع):
+query {
+  disputeByAuction(auctionId: ID!) {
+    _id
+    status
+    reason
+    description
+    adminDecision
+    adminNotes
+    resolvedAt
+  }
+}
+
+# 3. جلب نزاع بواسطة المعرف المباشر:
 query {
   dispute(id: ID!) {
-    _id  escrowId  auctionId  openedById  againstUserId
-    reason  description  evidenceUrls
-    status    # OPEN | UNDER_REVIEW | RESOLVED_BUYER_REFUNDED | RESOLVED_SELLER_PAID | CANCELLED
-    adminDecision  adminNotes  resolvedAt
+    _id
+    status
+    openedById
+    againstUserId
+    reason
+    description
+    evidenceUrls
+    adminDecision
+    adminNotes
+    resolvedAt
+  }
+}
+```
+
+---
+
+### 7.7 العمليات والتحكم الإداري للأدمن (Admin Escrow Operations)
+
+> تتطلب صلاحية `role: ADMIN` حصراً.
+
+```graphql
+# 1. استعراض كافة الضمانات في المنصة مع الفلترة:
+query { allEscrows(input: { page: 1, limit: 20 }, filter: { status: DISPUTED }) { items { ... } total } }
+
+# 2. استعراض كافة النزاعات في المنصة:
+query { allDisputes(input: { page: 1, limit: 20 }, filter: { status: OPEN }) { items { ... } total } }
+
+# 3. تحويل حالة النزاع إلى قيد المراجعة:
+mutation { updateDisputeStatus(input: { disputeId: "66123...", status: UNDER_REVIEW }) { _id status } }
+
+# 4. الفصل في النزاع (إما رد الأموال للمشتري أو تحريرها للبائع):
+mutation {
+  resolveDispute(input: {
+    disputeId: "66123..."
+    decision: REFUND_BUYER         # REFUND_BUYER (إرجاع للمشتري) | PAY_SELLER (تحويل للبائع)
+    adminNotes: "تم فحص الأدلة وثبوت عدم مطابقة السلعة للمواصفات"
+  }) {
+    _id
+    status                         # RESOLVED_BUYER_REFUNDED أو RESOLVED_SELLER_PAID
+    adminDecision
+    adminNotes
+    resolvedAt
+  }
+}
+
+# 5. التحرير اليدوي الاستثنائي من الأدمن للبائع:
+mutation { releaseEscrow(escrowId: "66123...", reason: "تسوية يدوية بناء على موافقة الطرفين") { _id status releasedAt } }
+
+# 6. الاسترداد اليدوي الاستثنائي من الأدمن للمشتري:
+mutation { refundEscrow(escrowId: "66123...", reason: "إلغاء المعاملة لعدم تمكن البائع من الشحن") { _id status refundedAt } }
+```
+
+---
+
+### 7.8 التحرير التلقائي (Auto-Release Cron Job) وفترة الفحص
+
+- **فترة الفحص (Inspection Period):** مدتها المعتمدة رسمياً في النظام هي **7 أيام (168 ساعة)** تبدأ من لحظة إنشاء الضمان المالي فور انتهاء المزاد.
+- **آلية العمل التلقائي (Cron Job):**
+  - يعمل السيرفر بمهمة مجدولة كل **10 دقائق** (`@Cron('*/10 * * * *')`) مدعومة بقفل موزع عبر Redis.
+  - تفحص المهمة كافة الضمانات التي في حالة `HELD` وتجاوز وقتها الحالي تاريخ `inspectionPeriodEndsAt` دون وجود نزاع مفتوح.
+  - تُحرر الأموال تلقائياً للبائع، وتتحول الحالة إلى `RELEASED` بسبب `EXPIRED_INSPECTION_WINDOW`، ويتم إرسال إشعار للمستخدمين بالإضافة إلى بث الحدث عبر الـ WebSocket Subscriptions.
+
+---
+
+### 7.9 الاشتراكات اللحظية لموديول الضمان والنزاعات (WebSocket Subscriptions)
+
+```graphql
+# 1. متابعة التغير اللحظي لحالة الضمان (للمشتري والبائع والأدمن):
+subscription {
+  escrowStatusChanged(escrowId: "66123abc456def789") {
+    escrowId
+    auctionId
+    status             # HELD | RELEASED | REFUNDED | DISPUTED
+    releasedAt
+    refundedAt
+    disputeId
+    releaseReason
+  }
+}
+
+# 2. متابعة التغير اللحظي لحالة النزاع (للمدعي والمدعى عليه والأدمن):
+subscription {
+  disputeStatusChanged(disputeId: "66123abc456def789") {
+    disputeId
+    escrowId
+    auctionId
+    status             # OPEN | UNDER_REVIEW | RESOLVED_BUYER_REFUNDED | RESOLVED_SELLER_PAID | CANCELLED
+    adminDecision      # REFUND_BUYER | PAY_SELLER
+    adminNotes
+    resolvedAt
   }
 }
 ```
@@ -1258,6 +1516,46 @@ subscription {
   }
 }
 ```
+
+---
+
+### 11.8 تغيير حالة الضمان المالي (escrowStatusChanged) — محمي
+
+```graphql
+subscription {
+  escrowStatusChanged(escrowId: ID!) {
+    escrowId
+    auctionId
+    status             # HELD | RELEASED | REFUNDED | DISPUTED
+    releasedAt
+    refundedAt
+    disputeId
+    releaseReason
+  }
+}
+```
+
+> **ملاحظة أمنية:** البث يصل حصراً لأطراف الضمان (المشتري والبائع) أو الأدمن.
+
+---
+
+### 11.9 تغيير حالة النزاع المالي (disputeStatusChanged) — محمي
+
+```graphql
+subscription {
+  disputeStatusChanged(disputeId: ID!) {
+    disputeId
+    escrowId
+    auctionId
+    status             # OPEN | UNDER_REVIEW | RESOLVED_BUYER_REFUNDED | RESOLVED_SELLER_PAID | CANCELLED
+    adminDecision      # REFUND_BUYER | PAY_SELLER
+    adminNotes
+    resolvedAt
+  }
+}
+```
+
+> **ملاحظة أمنية:** البث يصل حصراً لأطراف النزاع (المدعي والمدعى عليه) أو الأدمن.
 
 ---
 

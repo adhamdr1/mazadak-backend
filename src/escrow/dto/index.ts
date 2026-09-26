@@ -5,3 +5,5 @@ export * from './escrow-filter.input';
 export * from './escrows-page.type';
 export * from './resolve-dispute.input';
 export * from './update-dispute-status.input';
+export * from './escrow-status-changed.payload';
+export * from './dispute-status-changed.payload';
