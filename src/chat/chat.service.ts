@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Types } from 'mongoose';
 import type { IChatRepository } from './interfaces/chat-repository.interface';
 import type { IAuctionRepository } from '../auctions/interfaces/auction-repository.interface';
 import { RabbitMQService } from '../infrastructure/rabbitmq/rabbitmq.service';
@@ -16,6 +17,8 @@ import { UserRole } from '../users/enums/user-role.enum';
 import { RabbitMQEvent } from '../infrastructure/rabbitmq/rabbitmq-event.types';
 import { CreateChatMessageInput } from './dto/create-chat-message.input';
 import { Auction } from '../auctions/entities/auction.entity';
+import { ChatRoomsPage } from './dto/chat-rooms-page.type';
+import { ChatRoom } from './dto/chat-room.type';
 
 @Injectable()
 export class ChatService {
@@ -331,5 +334,95 @@ export class ChatService {
   ): Promise<ChatReadState | null> {
     await this.validateChatAccess(userId, userRole, auctionId);
     return await this.chatRepository.findReadState(auctionId, userId);
+  }
+
+  async getMyChatRooms(
+    userId: string,
+    page = 1,
+    limit = 10,
+  ): Promise<ChatRoomsPage> {
+    const safeLimit = Math.min(Math.max(limit, 1), 100);
+    const safePage = Math.max(page, 1);
+
+    // Step 1: جلب كل المزادات المؤهلة (IDs فقط — خفيف جداً)
+    const auctionIds =
+      await this.auctionRepository.findEndedParticipantAuctionIds(userId);
+
+    if (auctionIds.length === 0) {
+      return { items: [], total: 0, totalPages: 0, hasNextPage: false };
+    }
+
+    // Step 2: جلب آخر رسالة لكل مزاد (للفرز)
+    const latestMessagesMap =
+      await this.chatRepository.getLatestMessagesForAuctions(auctionIds);
+
+    // Step 3: فرز حتمي وثابت (Deterministic Stable Sort)
+    const withMessages: Array<{
+      auctionId: Types.ObjectId;
+      lastMessage: ChatMessage;
+      lastMessageAt: Date;
+    }> = [];
+    const withoutMessages: Types.ObjectId[] = [];
+
+    for (const id of auctionIds) {
+      const data = latestMessagesMap.get(id.toString());
+      if (data) {
+        withMessages.push({ auctionId: id, ...data });
+      } else {
+        withoutMessages.push(id);
+      }
+    }
+
+    // الغرف النشطة: آخر رسالة DESC — فاصل تعادل: auctionId DESC
+    withMessages.sort(
+      (a, b) =>
+        b.lastMessageAt.getTime() - a.lastMessageAt.getTime() ||
+        b.auctionId.toString().localeCompare(a.auctionId.toString()),
+    );
+    // الغرف الفارغة: auctionId DESC (ثابت دائماً)
+    withoutMessages.sort((a, b) => b.toString().localeCompare(a.toString()));
+
+    const total = withMessages.length + withoutMessages.length;
+    const totalPages = Math.ceil(total / safeLimit);
+    const skip = (safePage - 1) * safeLimit;
+
+    const allOrderedIds = [
+      ...withMessages.map((m) => m.auctionId),
+      ...withoutMessages,
+    ];
+    const currentPageIds = allOrderedIds.slice(skip, skip + safeLimit);
+
+    if (currentPageIds.length === 0) {
+      return { items: [], total, totalPages, hasNextPage: false };
+    }
+
+    // Step 4: Batch Fetch للصفحة الحالية فقط — موازٍ (Zero N+1)
+    const [auctions, unreadCountsMap] = await Promise.all([
+      this.auctionRepository.findByIds(currentPageIds),
+      this.chatRepository.getUnreadCountsForAuctions(currentPageIds, userId),
+    ]);
+
+    const auctionMap = new Map(auctions.map((a) => [a._id.toString(), a]));
+
+    const items: ChatRoom[] = [];
+    for (const auctionId of currentPageIds) {
+      const auction = auctionMap.get(auctionId.toString());
+      if (!auction) continue;
+      const messageData = latestMessagesMap.get(auctionId.toString());
+      items.push({
+        auctionId,
+        auction,
+        lastMessage: messageData?.lastMessage ?? null,
+        lastMessageAt: messageData?.lastMessageAt ?? null,
+        unreadCount: unreadCountsMap.get(auctionId.toString()) ?? 0,
+      });
+    }
+
+    return {
+      items,
+      total,
+      totalPages,
+      hasNextPage: safePage < totalPages,
+    };
   }
 }

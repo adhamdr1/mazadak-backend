@@ -1286,63 +1286,256 @@ mutation { markAllNotificationsAsRead }
 
 ---
 
-## 9. Chat Module
+## 9. Chat Module (محادثات ما بعد انتهاء المزاد)
 
-### 9.1 رسائل شات مزاد (chatMessages) — محمي
+> 🔒 **قواعد الصلاحيات والوصول:**
+> * يُفتح الشات **فقط** بعد انتهاء المزاد بنجاح (`status = ENDED` ووجود فائز `winnerId`).
+> * المحادثة مقتصرة حصرياً على **البائع** و **المشتري الفائز** (أو الأدمن للدعم والرقابة).
+> * لا يُسمح بإرسال `userId` في الـ Inputs؛ يتم التحقق من الهوية تلقائياً من الـ JWT Token.
 
+---
+
+### 9.1 صندوق المحادثات وقائمة الغرف (myChatRooms) — محمي
+
+استعلام موحد عالي الكفاءة لجلب قائمة غرف المحادثات الخاصة بالمستخدم (كـ بائع أو مشتري فائز) بطلب شبكة واحد، مع بيانات المزاد، آخر رسالة، وعدد الرسائل غير المقروءة.
+
+**المدخلات:**
 ```graphql
-query {
-  chatMessages(
-    auctionId: ID!
-    limit: Float! = 20   # عدد الرسائل
-    cursor: String        # للـ Pagination (آخر _id للرسالة)
-  ) {
+query MyChatRooms($pagination: PaginationInput) {
+  myChatRooms(pagination: $pagination) {
+    total          # إجمالي عدد الغرف المؤهلة
+    totalPages     # إجمالي الصفحات
+    hasNextPage    # هل توجد صفحة تالية؟ (Boolean)
     items {
-      _id  clientMessageId  auctionId  senderId  senderName
-      type        # TEXT | IMAGE
-      content     # النص
-      mediaUrls   # الصور
-      reactions { emoji  userId }
-      isEdited  isDeleted
+      auctionId    # معرف المزاد المرتبط بالغرفة (ID)
+      lastMessageAt # تاريخ آخر رسالة (للفرز وعرض التوقيت - DateTime)
+      unreadCount  # عدد الرسائل غير المقروءة للمستخدم الحالي (Int)
+      auction {
+        _id
+        title
+        currentPrice
+        images
+        status
+        sellerId
+        winnerId
+      }
+      lastMessage {
+        _id
+        clientMessageId
+        senderId
+        senderName
+        content     # نص الرسالة (يُرجع null تلقائياً لو تم حذفها من غير الأدمن)
+        type        # TEXT | IMAGE
+        mediaUrls
+        createdAt
+        isEdited
+        isDeleted
+      }
+    }
+  }
+}
+```
+
+**Variables Example:**
+```json
+{
+  "pagination": {
+    "page": 1,
+    "limit": 10
+  }
+}
+```
+
+**Response الناجح:**
+```json
+{
+  "data": {
+    "myChatRooms": {
+      "total": 5,
+      "totalPages": 1,
+      "hasNextPage": false,
+      "items": [
+        {
+          "auctionId": "660c1e84f1a23b001c9a1234",
+          "lastMessageAt": "2026-09-26T14:30:00.000Z",
+          "unreadCount": 2,
+          "auction": {
+            "_id": "660c1e84f1a23b001c9a1234",
+            "title": "MacBook Pro M3 Max",
+            "currentPrice": "95000.00",
+            "images": ["https://cloudinary.com/.../macbook.jpg"],
+            "status": "ENDED",
+            "sellerId": "660a1234f1a23b001c9a1111",
+            "winnerId": "660b5678f1a23b001c9a2222"
+          },
+          "lastMessage": {
+            "_id": "660d9999f1a23b001c9a9999",
+            "clientMessageId": "d3b07384-d113-4660-9b43-85f543160a22",
+            "senderId": "660a1234f1a23b001c9a1111",
+            "senderName": "أحمد محمود",
+            "content": "تم شحن المنتج برقم بوليصة 123456",
+            "type": "TEXT",
+            "mediaUrls": null,
+            "createdAt": "2026-09-26T14:30:00.000Z",
+            "isEdited": false,
+            "isDeleted": false
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+> **ملاحظات مهمة للفرونت إند:**
+> 1. **الترتيب تلقائي ومثالي:** ترتب الغرف تنازلياً حسب توقيت آخر رسالة (`lastMessageAt DESC`). الغرف الجديدة التي لم تبدأ محادثاتها بعد تظهر في نهاية القائمة بترتيب زمني ثابت.
+> 2. **حساب unreadCount تلقائي ومفلتر:** يستبعد الاستعلام رسائل المستخدم نفسه (`senderId !== currentUserId`) ويحسب الرسائل الأحدث من `lastReadMessageId` المحفوظ لكل غرفة.
+> 3. **تحديث الصندوق اللحظي (Real-time Inbox):**
+>    * عند استقبال اشتراك `messageSent` أو `chatReadStatusUpdated`، قم بتحديث الغرفة في الـ Cache أو عمل `refetch()` للاستعلام لتحديث عداد الـ Badge وآخر رسالة بدون N+1 requests.
+
+---
+
+### 9.2 رسائل شات مزاد معين مع الترقيم الزمني (chatMessages) — محمي
+
+استعلام رسائل غرفة مزاد محددة بنظام الـ Keyset/Cursor Pagination للأعلى والأسفل بدون تكرار.
+
+**المدخلات:**
+```graphql
+query GetChatMessages($auctionId: ID!, $limit: Float, $cursor: String) {
+  chatMessages(auctionId: $auctionId, limit: $limit, cursor: $cursor) {
+    items {
+      _id
+      clientMessageId
+      auctionId
+      senderId
+      senderName
+      type              # TEXT | IMAGE
+      content           # النص (أو null لو تم الحذف)
+      mediaUrls         # قائمة روابط الصور
+      reactions {
+        emoji
+        userId
+      }
+      isEdited
+      isDeleted
       createdAt
     }
-    hasNextPage  endCursor
+    hasNextPage
+    endCursor           # يُمرر كـ cursor في الطلب القادم لجلب الرسائل الأقدم
   }
 }
 ```
 
 ---
 
-### 9.2 إرسال رسالة (sendMessage) — محمي
+### 9.3 حالة قراءة محادثة مزاد (chatReadState) — محمي
+
+**المدخلات:**
+```graphql
+query GetChatReadState($auctionId: ID!) {
+  chatReadState(auctionId: $auctionId) {
+    _id
+    auctionId
+    userId
+    lastReadMessageId
+    lastReadAt
+  }
+}
+```
+
+---
+
+### 9.4 إرسال رسالة (sendMessage) — محمي (محدد بـ 10 رسائل / 10 ثوانٍ)
+
+**المدخلات:**
+```graphql
+mutation SendMessage($input: CreateChatMessageInput!) {
+  sendMessage(input: $input) {
+    _id
+    clientMessageId
+    auctionId
+    senderId
+    senderName
+    content
+    type                # TEXT | IMAGE
+    mediaUrls
+    createdAt
+  }
+}
+```
+
+**Variables Example:**
+```json
+{
+  "input": {
+    "auctionId": "660c1e84f1a23b001c9a1234",
+    "clientMessageId": "c4d5e6f7-1234-5678-9abc-def012345678",
+    "content": "مرحباً، متى موعد الاستلام؟",
+    "type": "TEXT",
+    "mediaUrls": []
+  }
+}
+```
+
+---
+
+### 9.5 تحديد رسائل المزاد كمقروءة (markChatAsRead) — محمي
+
+يُرسل عند فتح غرفة الشات أو وصول رسائل جديدة أثناء فتحها.
+
+**المدخلات:**
+```graphql
+mutation MarkChatAsRead($auctionId: ID!, $lastReadMessageId: ID!) {
+  markChatAsRead(auctionId: $auctionId, lastReadMessageId: $lastReadMessageId)
+}
+```
+
+---
+
+### 9.6 تعديل / حذف رسالة وتفاعل الإيموجي — محمي
 
 ```graphql
+# تعديل رسالة (مسموح خلال 15 دقيقة فقط من الإرسال)
 mutation {
-  sendMessage(input: {
-    auctionId: ID!
-    content: String         # النص
-    type: TEXT | IMAGE
-    mediaUrls: [String!]    # لو صورة
-    clientMessageId: String!  # UUID فريد من الفرونت لمنع التكرار
-  }) {
-    _id  content  senderId  senderName  createdAt
+  editMessage(messageId: "660d9999f1a23b001c9a9999", newContent: "نص معدل") {
+    _id
+    content
+    isEdited
   }
 }
-```
 
-**الأخطاء:**
-| كود الخطأ | المعنى |
-|:---|:---|
-| `CHAT_NOT_ALLOWED` | الشات مغلق (المزاد لم يبدأ أو انتهى) |
+# حذف رسالة (مسموح لصاحبها خلال 15 دقيقة، أو للأدمن في أي وقت)
+mutation {
+  deleteMessage(messageId: "660d9999f1a23b001c9a9999") {
+    _id
+    isDeleted
+  }
+}
+
+# إضافة / تغيير / إزالة Reaction
+mutation {
+  reactToMessage(messageId: "660d9999f1a23b001c9a9999", emoji: "👍") {
+    _id
+    reactions {
+      emoji
+      userId
+    }
+  }
+}
+# ملاحظة: لتفريغ/إزالة الـ Reaction، اترك emoji فارغاً أو null.
+```
 
 ---
 
-### 9.3 تعديل / حذف رسالة — محمي
+**جدول أخطاء الشات المحتملة (Chat Error Codes):**
 
-```graphql
-mutation { editMessage(messageId: ID!  newContent: String!) { ... } }
-mutation { deleteMessage(messageId: ID!) { ... } }
-mutation { reactToMessage(messageId: ID!  emoji: String) { ... } }   # null لإزالة الـ reaction
-```
+| كود الخطأ | HTTP | المعنى | سبب الحدوث وما يعرضه الفرونت |
+|:---|:---:|:---|:---|
+| `CHAT_NOT_ALLOWED` | 400 | الشات غير متاح | المزاد ليس منتهياً (`status !== ENDED`) أو لم يفز به أحد |
+| `CHAT_FORBIDDEN` | 403 | غير مصرح بالدخول | المستخدم ليس البائع ولا المشتري الفائز ولا أدمن |
+| `CHAT_MESSAGE_NOT_FOUND` | 404 | الرسالة غير موجودة | محاولة تعديل/حذف/تفاعل مع رسالة غير موجودة |
+| `CHAT_EDIT_TIMEOUT` | 400 | انتهاء مهلة التعديل/الحذف | مرت أكثر من 15 دقيقة على إرسال الرسالة |
+| `THROTTLER_TOO_MANY_REQUESTS` | 429 | تجاوز معدل الإرسال | إرسال أكثر من 10 رسائل خلال 10 ثوانٍ (Rate Limit) |
 
 ---
 

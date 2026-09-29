@@ -26,10 +26,14 @@ const mockChatRepository = {
   findByAuctionIdWithCursor: jest.fn(),
   upsertReadState: jest.fn(),
   findReadState: jest.fn(),
+  getLatestMessagesForAuctions: jest.fn(),
+  getUnreadCountsForAuctions: jest.fn(),
 };
 
 const mockAuctionRepository = {
   findById: jest.fn(),
+  findEndedParticipantAuctionIds: jest.fn(),
+  findByIds: jest.fn(),
 };
 
 const mockRabbitMQService = {
@@ -459,6 +463,90 @@ describe('ChatService', () => {
       );
 
       expect(result).toEqual(readState);
+    });
+  });
+
+  describe('getMyChatRooms', () => {
+    it('should return empty page if user has no ended participant auctions', async () => {
+      mockAuctionRepository.findEndedParticipantAuctionIds.mockResolvedValue(
+        [],
+      );
+
+      const result = await service.getMyChatRooms(buyerId, 1, 10);
+
+      expect(result).toEqual({
+        items: [],
+        total: 0,
+        totalPages: 0,
+        hasNextPage: false,
+      });
+      expect(
+        mockAuctionRepository.findEndedParticipantAuctionIds,
+      ).toHaveBeenCalledWith(buyerId);
+    });
+
+    it('should return chat rooms correctly sorted with unread counts', async () => {
+      const auctionId1 = new Types.ObjectId();
+      const auctionId2 = new Types.ObjectId();
+      const date1 = new Date('2026-09-26T10:00:00Z');
+      const date2 = new Date('2026-09-26T12:00:00Z');
+
+      mockAuctionRepository.findEndedParticipantAuctionIds.mockResolvedValue([
+        auctionId1,
+        auctionId2,
+      ]);
+
+      const latestMessagesMap = new Map([
+        [
+          auctionId1.toString(),
+          {
+            lastMessage: { ...mockChatMessage, content: 'Earlier' },
+            lastMessageAt: date1,
+          },
+        ],
+        [
+          auctionId2.toString(),
+          {
+            lastMessage: { ...mockChatMessage, content: 'Later' },
+            lastMessageAt: date2,
+          },
+        ],
+      ]);
+      mockChatRepository.getLatestMessagesForAuctions.mockResolvedValue(
+        latestMessagesMap,
+      );
+
+      const auction1 = {
+        ...mockAuction,
+        _id: auctionId1,
+        title: 'Auction 1',
+      };
+      const auction2 = {
+        ...mockAuction,
+        _id: auctionId2,
+        title: 'Auction 2',
+      };
+      mockAuctionRepository.findByIds.mockResolvedValue([auction2, auction1]);
+
+      const unreadMap = new Map([
+        [auctionId1.toString(), 0],
+        [auctionId2.toString(), 3],
+      ]);
+      mockChatRepository.getUnreadCountsForAuctions.mockResolvedValue(
+        unreadMap,
+      );
+
+      const result = await service.getMyChatRooms(buyerId, 1, 10);
+
+      expect(result.total).toBe(2);
+      expect(result.totalPages).toBe(1);
+      expect(result.hasNextPage).toBe(false);
+      expect(result.items.length).toBe(2);
+      // auctionId2 should come first because date2 > date1
+      expect(result.items[0].auctionId).toEqual(auctionId2);
+      expect(result.items[0].unreadCount).toBe(3);
+      expect(result.items[1].auctionId).toEqual(auctionId1);
+      expect(result.items[1].unreadCount).toBe(0);
     });
   });
 });

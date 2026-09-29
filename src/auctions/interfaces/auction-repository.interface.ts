@@ -111,4 +111,8 @@ export interface IAuctionRepository {
   countUserAuctions(
     sellerId: string,
   ): Promise<{ active: number; completed: number }>;
+
+  findEndedParticipantAuctionIds(userId: string): Promise<Types.ObjectId[]>;
+
+  findByIds(ids: Types.ObjectId[]): Promise<Auction[]>;
 }

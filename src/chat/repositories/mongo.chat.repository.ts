@@ -228,4 +228,79 @@ export class MongoChatRepository implements IChatRepository {
       .session(session || null)
       .exec();
   }
+
+  async getLatestMessagesForAuctions(
+    auctionIds: Types.ObjectId[],
+  ): Promise<Map<string, { lastMessage: ChatMessage; lastMessageAt: Date }>> {
+    const map = new Map<
+      string,
+      { lastMessage: ChatMessage; lastMessageAt: Date }
+    >();
+    if (auctionIds.length === 0) return map;
+
+    const results = await this.messageModel.aggregate<{
+      _id: Types.ObjectId;
+      lastMessage: ChatMessage;
+      lastMessageAt: Date;
+    }>([
+      { $match: { auctionId: { $in: auctionIds } } },
+      { $sort: { auctionId: 1, createdAt: -1, _id: -1 } },
+      {
+        $group: {
+          _id: '$auctionId',
+          lastMessage: { $first: '$$ROOT' },
+          lastMessageAt: { $first: '$createdAt' },
+        },
+      },
+    ]);
+
+    for (const item of results) {
+      map.set(item._id.toString(), {
+        lastMessage: item.lastMessage,
+        lastMessageAt: item.lastMessageAt,
+      });
+    }
+
+    return map;
+  }
+
+  async getUnreadCountsForAuctions(
+    auctionIds: Types.ObjectId[],
+    userId: string,
+  ): Promise<Map<string, number>> {
+    const unreadMap = new Map<string, number>();
+    if (auctionIds.length === 0) return unreadMap;
+
+    const userObjectId = new Types.ObjectId(userId);
+
+    const readStates = await this.readStateModel
+      .find({ auctionId: { $in: auctionIds }, userId: userObjectId })
+      .lean()
+      .exec();
+
+    const readStateMap = new Map(
+      readStates.map((rs) => [rs.auctionId.toString(), rs.lastReadMessageId]),
+    );
+
+    const counts = await Promise.all(
+      auctionIds.map(async (auctionId) => {
+        const lastReadMessageId = readStateMap.get(auctionId.toString());
+        const query: Record<string, unknown> = {
+          auctionId,
+          senderId: { $ne: userObjectId },
+        };
+        if (lastReadMessageId) {
+          query._id = { $gt: lastReadMessageId };
+        }
+        const count = await this.messageModel.countDocuments(query);
+        return { key: auctionId.toString(), count };
+      }),
+    );
+
+    for (const c of counts) {
+      unreadMap.set(c.key, c.count);
+    }
+
+    return unreadMap;
+  }
 }

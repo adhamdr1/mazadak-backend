@@ -14,6 +14,7 @@ import { UnauthorizedException } from '@nestjs/common';
 const mockChatService = {
   getChatMessages: jest.fn(),
   findReadState: jest.fn(),
+  getMyChatRooms: jest.fn(),
   sendMessage: jest.fn(),
   editMessage: jest.fn(),
   deleteMessage: jest.fn(),
@@ -87,6 +88,28 @@ describe('ChatResolver', () => {
   });
 
   describe('Queries', () => {
+    it('should call getMyChatRooms', async () => {
+      const mockRoomsPage = {
+        items: [],
+        total: 0,
+        totalPages: 0,
+        hasNextPage: false,
+      };
+      mockChatService.getMyChatRooms.mockResolvedValue(mockRoomsPage);
+
+      const result = await resolver.getMyChatRooms(currentUser, {
+        page: 1,
+        limit: 10,
+      });
+
+      expect(result).toEqual(mockRoomsPage);
+      expect(mockChatService.getMyChatRooms).toHaveBeenCalledWith(
+        currentUser.sub,
+        1,
+        10,
+      );
+    });
+
     it('should call getChatMessages', async () => {
       const pageResult = {
         items: [mockChatMessage],

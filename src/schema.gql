@@ -589,6 +589,21 @@ type ChatReadStateUpdatedPayload {
   lastReadAt: DateTime
 }
 
+type ChatRoom {
+  auctionId: ID!
+  auction: Auction!
+  lastMessage: ChatMessage
+  lastMessageAt: DateTime
+  unreadCount: Int!
+}
+
+type ChatRoomsPage {
+  items: [ChatRoom!]!
+  total: Int!
+  totalPages: Int!
+  hasNextPage: Boolean!
+}
+
 type ReviewCriteria {
   itemAccuracy: Int
   communication: Int
@@ -687,6 +702,7 @@ type Query {
   withdrawalFeePreview(amount: Float!, payoutMethod: PayoutMethod!): WithdrawalFeePreview!
   myWithdrawals(pagination: PaginationInput!, filter: WithdrawalsFilterInput): WithdrawalsPage!
   myWithdrawal(id: ID!): WithdrawalRequest!
+  myChatRooms(pagination: PaginationInput): ChatRoomsPage!
   chatMessages(auctionId: ID!, limit: Float! = 20, cursor: String): ChatMessagesConnection!
   chatReadState(auctionId: ID!): ChatReadState
   userReviews(userId: ID!, input: PaginationInput, filter: ReviewsFilterInput, sort: ReviewsSortInput): ReviewsPage!

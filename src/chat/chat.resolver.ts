@@ -22,6 +22,8 @@ import { ChatService } from './chat.service';
 import { CreateChatMessageInput } from './dto/create-chat-message.input';
 import { ChatMessagesConnection } from './dto/chat-messages-connection.type';
 import { ChatReadStateUpdatedPayload } from './dto/chat-read-state-updated.payload';
+import { ChatRoomsPage } from './dto/chat-rooms-page.type';
+import { PaginationInput } from '../common/dto/pagination.input';
 
 @Resolver(() => ChatMessage)
 export class ChatResolver {
@@ -29,6 +31,19 @@ export class ChatResolver {
     private readonly chatService: ChatService,
     @Inject(PUB_SUB) private readonly pubSub: RedisPubSub,
   ) {}
+
+  @Query(() => ChatRoomsPage, { name: 'myChatRooms' })
+  async getMyChatRooms(
+    @CurrentUser() user: JwtPayload,
+    @Args('pagination', { type: () => PaginationInput, nullable: true })
+    pagination?: PaginationInput,
+  ): Promise<ChatRoomsPage> {
+    return await this.chatService.getMyChatRooms(
+      user.sub,
+      pagination?.page ?? 1,
+      pagination?.limit ?? 10,
+    );
+  }
 
   @Query(() => ChatMessagesConnection, { name: 'chatMessages' })
   async getChatMessages(
