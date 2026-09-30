@@ -228,4 +228,132 @@ export class MongoChatRepository implements IChatRepository {
       .session(session || null)
       .exec();
   }
+
+  async findReadStatesByAuction(
+    auctionId: string,
+    session?: ClientSession,
+  ): Promise<ChatReadState[]> {
+    return await this.readStateModel
+      .find({
+        auctionId: new Types.ObjectId(auctionId),
+      })
+      .session(session || null)
+      .exec();
+  }
+
+  async getUnreadCountForRoom(
+    auctionId: string,
+    userId: string,
+    session?: ClientSession,
+  ): Promise<number> {
+    const userObjectId = new Types.ObjectId(userId);
+    const auctionObjectId = new Types.ObjectId(auctionId);
+
+    const readState = await this.readStateModel
+      .findOne({ auctionId: auctionObjectId, userId: userObjectId })
+      .session(session || null)
+      .lean()
+      .exec();
+
+    const query: Record<string, unknown> = {
+      auctionId: auctionObjectId,
+      senderId: { $ne: userObjectId },
+    };
+    if (readState?.lastReadMessageId) {
+      query._id = { $gt: readState.lastReadMessageId };
+    }
+
+    return await this.messageModel
+      .countDocuments(query)
+      .session(session || null)
+      .exec();
+  }
+
+  async getTotalUnreadRoomsCount(
+    userId: string,
+    auctionIds: Types.ObjectId[],
+  ): Promise<number> {
+    if (auctionIds.length === 0) return 0;
+    const unreadMap = await this.getUnreadCountsForAuctions(auctionIds, userId);
+    let total = 0;
+    for (const count of unreadMap.values()) {
+      if (count > 0) total++;
+    }
+    return total;
+  }
+
+  async getLatestMessagesForAuctions(
+    auctionIds: Types.ObjectId[],
+  ): Promise<Map<string, { lastMessage: ChatMessage; lastMessageAt: Date }>> {
+    const map = new Map<
+      string,
+      { lastMessage: ChatMessage; lastMessageAt: Date }
+    >();
+    if (auctionIds.length === 0) return map;
+
+    const results = await this.messageModel.aggregate<{
+      _id: Types.ObjectId;
+      lastMessage: ChatMessage;
+      lastMessageAt: Date;
+    }>([
+      { $match: { auctionId: { $in: auctionIds } } },
+      { $sort: { auctionId: 1, createdAt: -1, _id: -1 } },
+      {
+        $group: {
+          _id: '$auctionId',
+          lastMessage: { $first: '$$ROOT' },
+          lastMessageAt: { $first: '$createdAt' },
+        },
+      },
+    ]);
+
+    for (const item of results) {
+      map.set(item._id.toString(), {
+        lastMessage: item.lastMessage,
+        lastMessageAt: item.lastMessageAt,
+      });
+    }
+
+    return map;
+  }
+
+  async getUnreadCountsForAuctions(
+    auctionIds: Types.ObjectId[],
+    userId: string,
+  ): Promise<Map<string, number>> {
+    const unreadMap = new Map<string, number>();
+    if (auctionIds.length === 0) return unreadMap;
+
+    const userObjectId = new Types.ObjectId(userId);
+
+    const readStates = await this.readStateModel
+      .find({ auctionId: { $in: auctionIds }, userId: userObjectId })
+      .lean()
+      .exec();
+
+    const readStateMap = new Map(
+      readStates.map((rs) => [rs.auctionId.toString(), rs.lastReadMessageId]),
+    );
+
+    const counts = await Promise.all(
+      auctionIds.map(async (auctionId) => {
+        const lastReadMessageId = readStateMap.get(auctionId.toString());
+        const query: Record<string, unknown> = {
+          auctionId,
+          senderId: { $ne: userObjectId },
+        };
+        if (lastReadMessageId) {
+          query._id = { $gt: lastReadMessageId };
+        }
+        const count = await this.messageModel.countDocuments(query);
+        return { key: auctionId.toString(), count };
+      }),
+    );
+
+    for (const c of counts) {
+      unreadMap.set(c.key, c.count);
+    }
+
+    return unreadMap;
+  }
 }

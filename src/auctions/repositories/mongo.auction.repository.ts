@@ -298,4 +298,28 @@ export class MongoAuctionRepository implements IAuctionRepository {
 
     return { active, completed };
   }
+
+  async findEndedParticipantAuctionIds(
+    userId: string,
+  ): Promise<Types.ObjectId[]> {
+    const userObjectId = new Types.ObjectId(userId);
+    const auctions = await this.auctionModel
+      .find(
+        {
+          status: AuctionStatus.ENDED,
+          winnerId: { $exists: true, $ne: null },
+          $or: [{ sellerId: userObjectId }, { winnerId: userObjectId }],
+        },
+        { _id: 1 },
+      )
+      .lean()
+      .exec();
+
+    return auctions.map((a) => a._id);
+  }
+
+  async findByIds(ids: Types.ObjectId[]): Promise<Auction[]> {
+    if (ids.length === 0) return [];
+    return await this.auctionModel.find({ _id: { $in: ids } }).exec();
+  }
 }

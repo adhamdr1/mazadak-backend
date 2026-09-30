@@ -167,6 +167,27 @@ describe('RealtimeService', () => {
     );
   });
 
+  it('should publish chat room updated event', async () => {
+    const payload = {
+      recipientId: 'u1',
+      auctionId: 'auc-1',
+      unreadCount: 3,
+      totalUnreadRooms: 2,
+      lastMessageAt: new Date(),
+      lastMessage: {
+        _id: new Types.ObjectId(),
+        content: 'Latest message',
+      } as unknown as ChatMessage,
+    };
+
+    await service.publishChatRoomUpdated(payload);
+
+    expect(mockPubSub.publish).toHaveBeenCalledWith(
+      PUB_SUB_EVENTS.CHAT_ROOM_UPDATED,
+      { chatRoomUpdated: payload },
+    );
+  });
+
   it('should publish wallet updated event', async () => {
     const payload = {
       _id: new Types.ObjectId(),

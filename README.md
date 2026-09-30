@@ -451,6 +451,7 @@ A private, secure communication channel established between the **Seller** and t
 ### Architectural Highlights
 
 - **Role-Based Access Control:** Restricted exclusively to the auction's seller, winning bidder, and platform admins.
+- **Unified Chat Rooms Query (`myChatRooms`):** High-performance, single-request inbox listing that returns all active chat rooms with their associated auction, latest message, deterministic sorting, and page-scoped unread counts (`unreadCount`) without N+1 query overhead.
 - **WebSocket Subscriptions (Native `graphql-transport-ws`):** Live streaming of new messages (`messageSent`), message edits/deletions/reactions (`messageUpdated`), and read receipts (`chatReadStatusUpdated`) powered by **Redis Pub/Sub**.
 - **15-Minute Edit & Delete Window:** Users can edit or delete messages within 15 minutes of sending. Deletions retain an audit trail marking `isDeleted = true`.
 - **Client Message ID Idempotency:** Guaranteed once-only delivery using composite unique indices `{ auctionId, senderId, clientMessageId }`.

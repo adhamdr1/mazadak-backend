@@ -1,4 +1,4 @@
-import { ClientSession } from 'mongoose';
+import { Types, ClientSession } from 'mongoose';
 import { ChatMessage } from '../entities/chat-message.entity';
 import { ChatReadState } from '../entities/chat-read-state.entity';
 import { ChatMessageType } from '../enums/chat-message-type.enum';
@@ -75,4 +75,29 @@ export interface IChatRepository {
     userId: string,
     session?: ClientSession,
   ): Promise<ChatReadState | null>;
+
+  findReadStatesByAuction(
+    auctionId: string,
+    session?: ClientSession,
+  ): Promise<ChatReadState[]>;
+
+  getUnreadCountForRoom(
+    auctionId: string,
+    userId: string,
+    session?: ClientSession,
+  ): Promise<number>;
+
+  getTotalUnreadRoomsCount(
+    userId: string,
+    auctionIds: Types.ObjectId[],
+  ): Promise<number>;
+
+  getLatestMessagesForAuctions(
+    auctionIds: Types.ObjectId[],
+  ): Promise<Map<string, { lastMessage: ChatMessage; lastMessageAt: Date }>>;
+
+  getUnreadCountsForAuctions(
+    auctionIds: Types.ObjectId[],
+    userId: string,
+  ): Promise<Map<string, number>>;
 }
