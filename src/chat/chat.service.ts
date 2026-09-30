@@ -110,10 +110,82 @@ export class ChatService {
     // Publish to Redis PubSub for real-time (fire-and-forget)
     void this.realtimeService.publishMessageSent(message);
 
+    // Notify chat rooms update for both recipient and sender (fire-and-forget)
+    void this.notifyChatRoomUpdatedOnMessage(auction, senderId, message);
+
     // Publish to RabbitMQ for offline notifications (fire-and-forget, try/catch)
     void this.publishChatNotification(auction, senderId, message);
 
     return message;
+  }
+
+  private async notifyChatRoomUpdatedOnMessage(
+    auction: Auction,
+    senderId: string,
+    message: ChatMessage,
+  ): Promise<void> {
+    const recipientId =
+      senderId === auction.sellerId.toString()
+        ? auction.winnerId?.toString()
+        : auction.sellerId.toString();
+
+    const auctionId = auction._id.toString();
+
+    // 1. Update for Recipient (unreadCount calculated + totalUnreadRooms)
+    if (recipientId) {
+      try {
+        const [unreadCount, endedAuctionIds] = await Promise.all([
+          this.chatRepository.getUnreadCountForRoom(auctionId, recipientId),
+          this.auctionRepository.findEndedParticipantAuctionIds(recipientId),
+        ]);
+        const totalUnreadRooms =
+          await this.chatRepository.getTotalUnreadRoomsCount(
+            recipientId,
+            endedAuctionIds,
+          );
+
+        void this.realtimeService.publishChatRoomUpdated({
+          recipientId,
+          auctionId,
+          unreadCount,
+          totalUnreadRooms,
+          lastMessageAt: message.createdAt,
+          lastMessage: message,
+        });
+      } catch (err) {
+        this.logger.error(
+          `Failed to notify recipient of chat room update: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+    }
+
+    // 2. Update for Sender (unreadCount is 0, moves room to top in sender's inbox)
+    try {
+      const senderEndedAuctionIds =
+        await this.auctionRepository.findEndedParticipantAuctionIds(senderId);
+      const senderTotalUnreadRooms =
+        await this.chatRepository.getTotalUnreadRoomsCount(
+          senderId,
+          senderEndedAuctionIds,
+        );
+
+      void this.realtimeService.publishChatRoomUpdated({
+        recipientId: senderId,
+        auctionId,
+        unreadCount: 0,
+        totalUnreadRooms: senderTotalUnreadRooms,
+        lastMessageAt: message.createdAt,
+        lastMessage: message,
+      });
+    } catch (err) {
+      this.logger.error(
+        `Failed to notify sender of chat room update: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   }
 
   private async publishChatNotification(
@@ -324,7 +396,48 @@ export class ChatService {
       lastReadAt: readState.lastReadAt,
     });
 
+    // Notify reader that unreadCount is now 0 and totalUnreadRooms decremented
+    void this.notifyChatRoomUpdatedOnRead(userId, auctionId);
+
     return true;
+  }
+
+  private async notifyChatRoomUpdatedOnRead(
+    userId: string,
+    auctionId: string,
+  ): Promise<void> {
+    try {
+      const [endedAuctionIds, latestMap] = await Promise.all([
+        this.auctionRepository.findEndedParticipantAuctionIds(userId),
+        this.chatRepository.getLatestMessagesForAuctions([
+          new Types.ObjectId(auctionId),
+        ]),
+      ]);
+
+      const totalUnreadRooms =
+        await this.chatRepository.getTotalUnreadRoomsCount(
+          userId,
+          endedAuctionIds,
+        );
+
+      const latestData = latestMap?.get(auctionId);
+      if (latestData) {
+        void this.realtimeService.publishChatRoomUpdated({
+          recipientId: userId,
+          auctionId,
+          unreadCount: 0,
+          totalUnreadRooms,
+          lastMessageAt: latestData.lastMessageAt,
+          lastMessage: latestData.lastMessage,
+        });
+      }
+    } catch (err) {
+      this.logger.error(
+        `Failed to notify chat room read update: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   }
 
   async findReadState(
@@ -334,6 +447,15 @@ export class ChatService {
   ): Promise<ChatReadState | null> {
     await this.validateChatAccess(userId, userRole, auctionId);
     return await this.chatRepository.findReadState(auctionId, userId);
+  }
+
+  async findReadStates(
+    userId: string,
+    userRole: UserRole,
+    auctionId: string,
+  ): Promise<ChatReadState[]> {
+    await this.validateChatAccess(userId, userRole, auctionId);
+    return await this.chatRepository.findReadStatesByAuction(auctionId);
   }
 
   async getMyChatRooms(

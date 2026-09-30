@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ChatResolver } from './chat.resolver';
 import { ChatService } from './chat.service';
 import { PUB_SUB } from '../infrastructure/pubsub/pubsub.provider';
+import { PUB_SUB_EVENTS } from '../infrastructure/pubsub/events.constants';
 import { Types } from 'mongoose';
 import { UserRole } from '../users/enums/user-role.enum';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
@@ -14,6 +15,7 @@ import { UnauthorizedException } from '@nestjs/common';
 const mockChatService = {
   getChatMessages: jest.fn(),
   findReadState: jest.fn(),
+  findReadStates: jest.fn(),
   getMyChatRooms: jest.fn(),
   sendMessage: jest.fn(),
   editMessage: jest.fn(),
@@ -149,6 +151,28 @@ describe('ChatResolver', () => {
 
       expect(result).toEqual(readState);
       expect(mockChatService.findReadState).toHaveBeenCalledWith(
+        currentUser.sub,
+        currentUser.role,
+        auctionId,
+      );
+    });
+
+    it('should call getChatReadStates', async () => {
+      const readStates: ChatReadState[] = [
+        {
+          _id: new Types.ObjectId(),
+          auctionId: new Types.ObjectId(auctionId),
+          userId: new Types.ObjectId(currentUser.sub),
+          lastReadMessageId: new Types.ObjectId(messageId),
+          lastReadAt: new Date(),
+        },
+      ];
+      mockChatService.findReadStates.mockResolvedValue(readStates);
+
+      const result = await resolver.getChatReadStates(currentUser, auctionId);
+
+      expect(result).toEqual(readStates);
+      expect(mockChatService.findReadStates).toHaveBeenCalledWith(
         currentUser.sub,
         currentUser.role,
         auctionId,
@@ -318,6 +342,24 @@ describe('ChatResolver', () => {
         currentUser.role,
         auctionId,
       );
+    });
+
+    it('should subscribe to myChatRoomUpdated', () => {
+      const mockIterator = {} as AsyncIterable<unknown>;
+      mockPubSub.asyncIterableIterator.mockReturnValue(mockIterator);
+
+      const result = resolver.myChatRoomUpdated(currentUser);
+
+      expect(result).toBe(mockIterator);
+      expect(mockPubSub.asyncIterableIterator).toHaveBeenCalledWith(
+        PUB_SUB_EVENTS.CHAT_ROOM_UPDATED,
+      );
+    });
+
+    it('should throw UnauthorizedException if user is missing in myChatRoomUpdated', () => {
+      expect(() =>
+        resolver.myChatRoomUpdated(undefined as unknown as JwtPayload),
+      ).toThrow(UnauthorizedException);
     });
   });
 });

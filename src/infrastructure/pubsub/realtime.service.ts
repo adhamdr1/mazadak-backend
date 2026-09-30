@@ -10,6 +10,7 @@ import { ChatMessage } from '../../chat/entities/chat-message.entity';
 import { Wallet } from '../../wallet/entities/wallet.entity';
 import { EscrowStatusChangedInternalPayload } from '../../escrow/dto/escrow-status-changed.payload';
 import { DisputeStatusChangedInternalPayload } from '../../escrow/dto/dispute-status-changed.payload';
+import type { ChatRoomUpdatedInternalPayload } from '../../chat/interfaces/chat-room-updated-internal.payload';
 
 @Injectable()
 export class RealtimeService {
@@ -103,6 +104,17 @@ export class RealtimeService {
   }): Promise<void> {
     await this.publishSafely(PUB_SUB_EVENTS.CHAT_READ_STATUS_UPDATED, {
       chatReadStatusUpdated: payload,
+    });
+  }
+
+  /**
+   * Publish a real-time event when a chat room is updated for a specific user (navbar badge & inbox).
+   */
+  async publishChatRoomUpdated(
+    payload: ChatRoomUpdatedInternalPayload,
+  ): Promise<void> {
+    await this.publishSafely(PUB_SUB_EVENTS.CHAT_ROOM_UPDATED, {
+      chatRoomUpdated: payload,
     });
   }
 

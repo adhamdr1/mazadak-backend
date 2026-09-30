@@ -589,6 +589,14 @@ type ChatReadStateUpdatedPayload {
   lastReadAt: DateTime
 }
 
+type ChatRoomUpdatedPayload {
+  auctionId: ID!
+  unreadCount: Int!
+  totalUnreadRooms: Int!
+  lastMessageAt: DateTime!
+  lastMessage: ChatMessage!
+}
+
 type ChatRoom {
   auctionId: ID!
   auction: Auction!
@@ -705,6 +713,7 @@ type Query {
   myChatRooms(pagination: PaginationInput): ChatRoomsPage!
   chatMessages(auctionId: ID!, limit: Float! = 20, cursor: String): ChatMessagesConnection!
   chatReadState(auctionId: ID!): ChatReadState
+  chatReadStates(auctionId: ID!): [ChatReadState!]!
   userReviews(userId: ID!, input: PaginationInput, filter: ReviewsFilterInput, sort: ReviewsSortInput): ReviewsPage!
   myWrittenReviews(input: PaginationInput): ReviewsPage!
   userRatingStats(userId: ID!): UserRatingStats!
@@ -1104,4 +1113,5 @@ type Subscription {
   messageSent(auctionId: ID!): ChatMessage!
   messageUpdated(auctionId: ID!): ChatMessage!
   chatReadStatusUpdated(auctionId: ID!): ChatReadStateUpdatedPayload!
+  myChatRoomUpdated: ChatRoomUpdatedPayload!
 }

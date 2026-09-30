@@ -26,6 +26,9 @@ const mockChatRepository = {
   findByAuctionIdWithCursor: jest.fn(),
   upsertReadState: jest.fn(),
   findReadState: jest.fn(),
+  findReadStatesByAuction: jest.fn(),
+  getUnreadCountForRoom: jest.fn(),
+  getTotalUnreadRoomsCount: jest.fn(),
   getLatestMessagesForAuctions: jest.fn(),
   getUnreadCountsForAuctions: jest.fn(),
 };
@@ -44,6 +47,7 @@ const mockRealtimeService = {
   publishMessageSent: jest.fn(),
   publishMessageUpdated: jest.fn(),
   publishChatReadStatusUpdated: jest.fn(),
+  publishChatRoomUpdated: jest.fn(),
 };
 
 describe('ChatService', () => {
@@ -117,6 +121,13 @@ describe('ChatService', () => {
     }).compile();
 
     service = module.get<ChatService>(ChatService);
+
+    mockChatRepository.getUnreadCountForRoom.mockResolvedValue(0);
+    mockChatRepository.getTotalUnreadRoomsCount.mockResolvedValue(0);
+    mockChatRepository.getLatestMessagesForAuctions.mockResolvedValue(
+      new Map(),
+    );
+    mockAuctionRepository.findEndedParticipantAuctionIds.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -463,6 +474,39 @@ describe('ChatService', () => {
       );
 
       expect(result).toEqual(readState);
+    });
+
+    it('should find read states for all participants in auction', async () => {
+      const readStates: ChatReadState[] = [
+        {
+          _id: new Types.ObjectId(),
+          auctionId: new Types.ObjectId(auctionId),
+          userId: new Types.ObjectId(buyerId),
+          lastReadMessageId: new Types.ObjectId(messageId),
+          lastReadAt: new Date(),
+        },
+        {
+          _id: new Types.ObjectId(),
+          auctionId: new Types.ObjectId(auctionId),
+          userId: new Types.ObjectId(sellerId),
+          lastReadMessageId: new Types.ObjectId(messageId),
+          lastReadAt: new Date(),
+        },
+      ];
+
+      mockAuctionRepository.findById.mockResolvedValue(mockAuction);
+      mockChatRepository.findReadStatesByAuction.mockResolvedValue(readStates);
+
+      const result = await service.findReadStates(
+        buyerId,
+        UserRole.USER,
+        auctionId,
+      );
+
+      expect(result).toEqual(readStates);
+      expect(mockChatRepository.findReadStatesByAuction).toHaveBeenCalledWith(
+        auctionId,
+      );
     });
   });
 

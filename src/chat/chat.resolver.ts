@@ -22,6 +22,8 @@ import { ChatService } from './chat.service';
 import { CreateChatMessageInput } from './dto/create-chat-message.input';
 import { ChatMessagesConnection } from './dto/chat-messages-connection.type';
 import { ChatReadStateUpdatedPayload } from './dto/chat-read-state-updated.payload';
+import { ChatRoomUpdatedPayload } from './dto/chat-room-updated.payload';
+import type { ChatRoomUpdatedInternalPayload } from './interfaces/chat-room-updated-internal.payload';
 import { ChatRoomsPage } from './dto/chat-rooms-page.type';
 import { PaginationInput } from '../common/dto/pagination.input';
 
@@ -67,6 +69,18 @@ export class ChatResolver {
     @Args('auctionId', { type: () => ID }) auctionId: string,
   ): Promise<ChatReadState | null> {
     return await this.chatService.findReadState(user.sub, user.role, auctionId);
+  }
+
+  @Query(() => [ChatReadState], { name: 'chatReadStates' })
+  async getChatReadStates(
+    @CurrentUser() user: JwtPayload,
+    @Args('auctionId', { type: () => ID }) auctionId: string,
+  ): Promise<ChatReadState[]> {
+    return await this.chatService.findReadStates(
+      user.sub,
+      user.role,
+      auctionId,
+    );
   }
 
   @Throttle({ strict: { ttl: 10_000, limit: 10 } })
@@ -234,6 +248,38 @@ export class ChatResolver {
       PUB_SUB_EVENTS.CHAT_READ_STATUS_UPDATED,
     ) as AsyncIterable<{
       chatReadStatusUpdated: ChatReadStateUpdatedPayload;
+    }>;
+  }
+
+  @Subscription(() => ChatRoomUpdatedPayload, {
+    name: 'myChatRoomUpdated',
+    filter: (
+      payload: { chatRoomUpdated: ChatRoomUpdatedInternalPayload },
+      _variables: Record<string, never>,
+      context: { user?: JwtPayload; req?: { user?: JwtPayload } },
+    ) => {
+      const user = context.user || context.req?.user;
+      if (!user) return false;
+      return payload.chatRoomUpdated.recipientId === user.sub;
+    },
+    resolve: (payload: { chatRoomUpdated: ChatRoomUpdatedInternalPayload }) => {
+      return {
+        auctionId: payload.chatRoomUpdated.auctionId,
+        unreadCount: payload.chatRoomUpdated.unreadCount,
+        totalUnreadRooms: payload.chatRoomUpdated.totalUnreadRooms,
+        lastMessageAt: payload.chatRoomUpdated.lastMessageAt,
+        lastMessage: payload.chatRoomUpdated.lastMessage,
+      };
+    },
+  })
+  myChatRoomUpdated(@CurrentUser() user: JwtPayload) {
+    if (!user) {
+      throw new UnauthorizedException('Authentication required');
+    }
+    return this.pubSub.asyncIterableIterator(
+      PUB_SUB_EVENTS.CHAT_ROOM_UPDATED,
+    ) as AsyncIterable<{
+      chatRoomUpdated: ChatRoomUpdatedInternalPayload;
     }>;
   }
 }

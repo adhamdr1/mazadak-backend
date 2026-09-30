@@ -76,6 +76,22 @@ export interface IChatRepository {
     session?: ClientSession,
   ): Promise<ChatReadState | null>;
 
+  findReadStatesByAuction(
+    auctionId: string,
+    session?: ClientSession,
+  ): Promise<ChatReadState[]>;
+
+  getUnreadCountForRoom(
+    auctionId: string,
+    userId: string,
+    session?: ClientSession,
+  ): Promise<number>;
+
+  getTotalUnreadRoomsCount(
+    userId: string,
+    auctionIds: Types.ObjectId[],
+  ): Promise<number>;
+
   getLatestMessagesForAuctions(
     auctionIds: Types.ObjectId[],
   ): Promise<Map<string, { lastMessage: ChatMessage; lastMessageAt: Date }>>;

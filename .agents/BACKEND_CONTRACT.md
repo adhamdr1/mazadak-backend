@@ -1428,9 +1428,32 @@ query GetChatMessages($auctionId: ID!, $limit: Float, $cursor: String) {
 
 ---
 
-### 9.3 حالة قراءة محادثة مزاد (chatReadState) — محمي
+### 9.3 حالات قراءة محادثة مزاد (chatReadStates / chatReadState) — محمي
 
-**المدخلات:**
+> 💡 **Best Practice للفرونت إند (حل العلامات الزرقاء ✓✓ بعد عمل Refresh / F5):**
+> استخدم دائماً استعلام `chatReadStates(auctionId)` الجديد بدلاً من القديم؛ لأنه يعيد سجلات قراءة الغرفة لكلا الطرفين (البائع والمشتري) من الداتابيز مباشرة، مما يضمن ظهور الخطوط الزرقاء (✓✓) فور فتح الشات وتظل ثابتة دائماً حتى بعد إعادة التحميل.
+
+**الاستعلام الموصى به (chatReadStates — للطرفين):**
+```graphql
+query GetChatReadStates($auctionId: ID!) {
+  chatReadStates(auctionId: $auctionId) {
+    _id
+    auctionId
+    userId
+    lastReadMessageId
+    lastReadAt
+  }
+}
+```
+
+* **كيفية معرفة حالة قراءة الطرف الآخر وتلوين الرسائل:**
+```ts
+const otherUserReadState = readStates.find(s => s.userId !== currentUserId);
+// أي رسالة رقمها أقل من أو يساوي lastReadMessageId تظهر زرقاء (✓✓):
+const isMessageRead = otherUserReadState?.lastReadMessageId && message._id <= otherUserReadState.lastReadMessageId;
+```
+
+**الاستعلام الفردي القديم (chatReadState — للمستخدم الحالي فقط):**
 ```graphql
 query GetChatReadState($auctionId: ID!) {
   chatReadState(auctionId: $auctionId) {
@@ -1712,7 +1735,36 @@ subscription {
 
 ---
 
-### 11.8 تغيير حالة الضمان المالي (escrowStatusChanged) — محمي
+### 11.8 تحديث غرف الشات والشارة المركزية للمستخدم (myChatRoomUpdated) — محمي
+
+> 🌟 **Best Practice مركزي (0ms Real-Time للـ Navbar والـ Inbox):**
+> اشتراك WebSocket واحد فقط لكل مستخدم طوال تواجده في الموقع. لا يتطلب تمرير `auctionId`، ويطلق الأحداث لحظياً للمستخدم عند وصول رسالة جديدة له، أو عند إرساله رسالة (لرفع الغرفة لقمة الصندوق)، أو عند فتح الشات وقراءة الرسائل (لتخفيض عداد الـ Navbar فورياً).
+
+```graphql
+subscription OnMyChatRoomUpdated {
+  myChatRoomUpdated {
+    auctionId
+    unreadCount          # عدد الرسائل غير المقروءة في هذه الغرفة للمستخدم
+    totalUnreadRooms     # إجمالي الغرف غير المقروءة لتحديث شارة الـ Navbar مباشرة (3 -> 2 -> 1)
+    lastMessageAt        # تاريخ آخر رسالة لترتيب صندوق المحادثات بالأحدث
+    lastMessage {
+      _id
+      content
+      senderId
+      senderName
+      type
+      createdAt
+    }
+  }
+}
+```
+
+* **تحديث شارة الـ Navbar:** استخدم قيمة `totalUnreadRooms` لتحديث رقم الشارة في الـ Navbar فورياً وبـ 0ms دون الحاجة لأي Polling.
+* **ترتيب صندوق المحادثات (Inbox):** عند استلام الحدث، انقل الغرفة صاحبة `auctionId` إلى قمة القائمة (Index 0).
+
+---
+
+### 11.9 تغيير حالة الضمان المالي (escrowStatusChanged) — محمي
 
 ```graphql
 subscription {
@@ -1732,7 +1784,7 @@ subscription {
 
 ---
 
-### 11.9 تغيير حالة النزاع المالي (disputeStatusChanged) — محمي
+### 11.10 تغيير حالة النزاع المالي (disputeStatusChanged) — محمي
 
 ```graphql
 subscription {
