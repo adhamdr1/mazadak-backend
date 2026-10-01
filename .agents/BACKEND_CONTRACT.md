@@ -1235,54 +1235,157 @@ subscription {
 
 ---
 
-## 8. Notifications Module
+## 8. Notifications Module (الإشعارات الداخلية والتصنيفات والتحديث اللحظي)
 
-### 8.1 إشعاراتي (myNotifications) — محمي
+### 8.1 إشعاراتي مع الفلترة والترتيب (myNotifications) — محمي
+
+استعلام لجلب إشعارات المستخدم الداعمة لنظام الـ Server-side Pagination الحقيقي والفلترة حسب التصنيف وحالة القراءة والترتيب.
 
 ```graphql
-query {
-  myNotifications(input: { page: 1  limit: 20 }) {
+query MyNotifications(
+  $input: PaginationInput!
+  $filter: NotificationsFilterInput
+) {
+  myNotifications(input: $input, filter: $filter) {
+    total
+    totalPages
+    hasNextPage
     items {
-      _id  type  title  body  isRead
-      referenceId    # ID الكيان المرتبط بالإشعار
+      _id
+      type           # OUTBID | AUCTION_WON | DEPOSIT_SUCCESSFUL | ...
+      category       # AUCTIONS | FINANCIAL | ESCROW | SYSTEM
+      title
+      body
+      isRead
+      referenceId    # ID الكيان المرتبط بالإشعار (مزاد، معاملة، نزاع...)
       referenceType  # AUCTION | TRANSACTION | WALLET | REVIEW | ESCROW | DISPUTE
       createdAt
     }
-    total  hasNextPage
   }
 }
 ```
 
-**أنواع الإشعارات (type):**
+**Variables Example (فلترة تبويب المزادات غير المقروءة):**
+```json
+{
+  "input": { "page": 1, "limit": 20 },
+  "filter": {
+    "category": "AUCTIONS",
+    "isRead": false,
+    "sortOrder": "DESC"
+  }
+}
 ```
-OUTBID                  → خرجت من المزايدة — وجّه لـ /auctions/:referenceId
-AUCTION_WON             → فزت بمزاد — وجّه لـ /my-won-auctions
-AUCTION_ENDED_SELLER    → مزادك انتهى — وجّه لـ /my-auctions
-DEPOSIT_SUCCESSFUL      → تم الإيداع — وجّه لـ /wallet
-WITHDRAWAL_COMPLETED    → تم السحب — وجّه لـ /wallet
-AUCTION_STARTED         → مزاد بدأ — وجّه لـ /auctions/:referenceId
-WELCOME                 → رسالة ترحيب
-NEW_BID                 → مزايدة جديدة على مزادك
-AUCTION_CANCELLED       → إلغاء مزاد
-REVIEW_RECEIVED         → تقييم جديد
-REVIEW_REPLIED          → رد على تقييمك
-AUTO_BID_PLACED         → مزايدة تلقائية تمت
-AUTO_BID_EXHAUSTED      → نفذ رصيد المزايدة التلقائية
-ESCROW_CREATED          → تم إنشاء الضمان
-ESCROW_RELEASED         → تم تحرير مبلغ الضمان للبائع
-ESCROW_REFUNDED         → تم إرجاع المبلغ للمشتري
-DISPUTE_OPENED          → تم فتح نزاع
-DISPUTE_RESOLVED        → تم حل النزاع
+
+> **ملاحظات مهمة للفرونت إند:**
+> 1. **الـ Server-side Pagination للـ Tabs:** عند عمل تبويبات في الواجهة (`الكل` | `المزادات` | `المالية` | `الضمان` | `النظام`)، مرر `category` في الـ `filter`. سيعود لك `total` و `totalPages` و `hasNextPage` دقيقة تماماً لهذا التبويب.
+> 2. **الترتيب (sortOrder):** الترتيب الافتراضي هو دائماً تنازلي `DESC` (الأحدث للأقدم). لو رغبت في عرض الأقدم أولاً مرر `"sortOrder": "ASC"`.
+> 3. **فلتر `types` المتقدم:** يمكنك تمرير مصفوفة أنواع محددة عبر `types: [OUTBID, AUCTION_WON]` لمزيد من التخصيص إن لزم.
+
+---
+
+### 8.2 عداد غير المقروء (unreadNotificationsCount) — محمي
+
+استعلام لجلب عدد الإشعارات غير المقروءة، إما إجمالياً لأيقونة الجرس في الهيدر، أو مخصصاً لكل تبويب (Badge).
+
+```graphql
+# 1. إجمالي الإشعارات غير المقروءة لأيقونة الجرس (Bell Badge):
+query {
+  unreadNotificationsCount
+}
+
+# 2. عدد الإشعارات غير المقروءة لتبويب معين (مثلاً تبويب المزادات):
+query {
+  unreadNotificationsCount(category: AUCTIONS)
+}
 ```
 
 ---
 
-### 8.2 تحديد كمقروء (markNotificationAsRead / markAllNotificationsAsRead) — محمي
+### 8.3 تحديد كمقروء (markNotificationAsRead / markAllNotificationsAsRead) — محمي
 
 ```graphql
-mutation { markNotificationAsRead(notificationId: ID!) { _id  isRead } }
-mutation { markAllNotificationsAsRead }
+# 1. تحديد إشعار واحد كمقروء:
+mutation MarkRead($id: ID!) {
+  markNotificationAsRead(notificationId: $id) {
+    _id
+    isRead
+    category
+  }
+}
+
+# 2. تحديد كل الإشعارات كمقروءة دفعة واحدة:
+mutation {
+  markAllNotificationsAsRead
+}
 ```
+
+---
+
+### 8.4 الاشتراكات اللحظية للإشعارات (WebSocket Subscriptions)
+
+#### أ. اشتراك وصول إشعار جديد (`notificationAdded` — زيادة العداد +1):
+يعمل في كل الصفحات (بما فيها الهوم)؛ عند وصول أي إشعار جديد يبث السيرفر فوراً بيانات الإشعار، ليقوم الفرونت بزيادة العداد وإظهار Toast تنبيهي:
+
+```graphql
+subscription {
+  notificationAdded {
+    _id
+    type
+    category       # AUCTIONS | FINANCIAL | ESCROW | SYSTEM
+    title
+    body
+    isRead
+    referenceId
+    referenceType
+    createdAt
+  }
+}
+```
+
+#### ب. اشتراك قراءة الإشعار وتزامن الأجهزة (`notificationReadStatusUpdated` — نقصان العداد -1):
+يبث السيرفر هذا الحدث فور قراءة أي إشعار (سواء فردي أو جماعي) لتزامن حالة القراءة ونقصان العداد لحظياً عبر كافة التابات المفتوحة وأجهزة المستخدم الأخرى:
+
+```graphql
+subscription {
+  notificationReadStatusUpdated {
+    notificationId # ID الإشعار المقروء (أو null إذا كان تم قراءة الكل markAllAsRead)
+    unreadCount    # العداد المحدث الدقيق المتبقي من الداتابيز
+    category       # تصنيف الإشعار المقروء (أو null إذا كان markAllAsRead)
+  }
+}
+```
+
+---
+
+### 8.5 جدول تصنيف أنواع الإشعارات (Category & Type Mapping)
+
+| التصنيف (`NotificationCategory`) | الأنواع التابعة (`InAppNotificationType`) | مسار التوجيه المقترح في الفرونت |
+| :--- | :--- | :--- |
+| **`AUCTIONS`** | `OUTBID` | توجيه لـ `/auctions/:referenceId` |
+| | `AUCTION_WON` | توجيه لـ `/my-won-auctions` |
+| | `AUCTION_ENDED_SELLER` | توجيه لـ `/my-auctions` |
+| | `AUCTION_STARTED` | توجيه لـ `/auctions/:referenceId` |
+| | `NEW_BID` | توجيه لـ `/auctions/:referenceId` |
+| | `AUCTION_CANCELLED` | توجيه لـ `/auctions/:referenceId` |
+| | `AUCTION_CANCELLED_BY_ADMIN` | توجيه لـ `/auctions/:referenceId` |
+| | `AUTO_BID_PLACED` | توجيه لـ `/auctions/:referenceId` |
+| | `AUTO_BID_EXHAUSTED` | توجيه لـ `/auctions/:referenceId` |
+| **`FINANCIAL`** | `DEPOSIT_SUCCESSFUL` | توجيه لـ `/wallet` |
+| | `WITHDRAWAL_COMPLETED` | توجيه لـ `/wallet` |
+| | `WITHDRAWAL_REQUESTED` | توجيه لـ `/wallet` |
+| | `WITHDRAWAL_REJECTED` | توجيه لـ `/wallet` |
+| **`ESCROW`** | `ESCROW_CREATED` | توجيه لـ `/escrow/:referenceId` |
+| | `ESCROW_RELEASED` | توجيه لـ `/escrow/:referenceId` |
+| | `ESCROW_REFUNDED` | توجيه لـ `/escrow/:referenceId` |
+| | `DISPUTE_OPENED` | توجيه لـ `/disputes/:referenceId` |
+| | `DISPUTE_RESOLVED` | توجيه لـ `/disputes/:referenceId` |
+| | `DISPUTE_CANCELLED` | توجيه لـ `/disputes/:referenceId` |
+| **`SYSTEM`** | `WELCOME` | رسالة ترحيبية بالنظام |
+| | `NEW_CHAT_MESSAGE` | توجيه لغرفة المحادثة `/chat/:referenceId` |
+| | `REVIEW_RECEIVED` | توجيه للملف الشخصي `/profile` |
+| | `REVIEW_REPLIED` | توجيه للملف الشخصي `/profile` |
+
 
 ---
 

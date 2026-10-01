@@ -164,6 +164,7 @@ type InAppNotification {
   _id: ID!
   userId: ID!
   type: InAppNotificationType!
+  category: NotificationCategory!
   title: String!
   body: String!
   isRead: Boolean!
@@ -198,6 +199,14 @@ enum InAppNotificationType {
   DISPUTE_CANCELLED
 }
 
+"""Main notification category grouping for in-app notifications"""
+enum NotificationCategory {
+  AUCTIONS
+  FINANCIAL
+  ESCROW
+  SYSTEM
+}
+
 enum NotificationReferenceType {
   AUCTION
   TRANSACTION
@@ -213,6 +222,17 @@ type InAppNotificationsPage {
   total: Int!
   totalPages: Int!
   hasNextPage: Boolean!
+}
+
+type NotificationReadPayload {
+  """ID of the read notification, or null if markAllAsRead was called"""
+  notificationId: ID
+
+  """Updated total unread notifications count for the authenticated user"""
+  unreadCount: Int!
+
+  """Category of the read notification, or null if markAllAsRead"""
+  category: NotificationCategory
 }
 
 type Auction {
@@ -677,8 +697,13 @@ type Query {
   myWallet: Wallet!
   myTransactions(input: PaginationInput, filter: TransactionsFilterInput): TransactionsPage!
   transactions(input: PaginationInput, filter: TransactionsFilterInput): TransactionsPage!
-  myNotifications(input: PaginationInput!): InAppNotificationsPage!
-  unreadNotificationsCount: Int!
+  myNotifications(input: PaginationInput!, filter: NotificationsFilterInput): InAppNotificationsPage!
+  unreadNotificationsCount(
+    """
+    Optional category to get unread count specifically for that category tab
+    """
+    category: NotificationCategory
+  ): Int!
   auctions(input: PaginationInput!, filter: AuctionsFilterInput): AuctionsPage!
   adminAuctions(input: PaginationInput!, filter: AuctionsFilterInput): AuctionsPage!
   auction(id: ID!): Auction!
@@ -774,6 +799,20 @@ input TransactionsSortInput {
 enum TransactionsSortField {
   CREATED_AT
   AMOUNT
+}
+
+input NotificationsFilterInput {
+  """Filter by read status (true for read, false for unread)"""
+  isRead: Boolean
+
+  """Filter by category tab (AUCTIONS, FINANCIAL, ESCROW, SYSTEM)"""
+  category: NotificationCategory
+
+  """Optional filter by specific notification types"""
+  types: [InAppNotificationType!]
+
+  """Sort order by creation time (DESC: newest first, ASC: oldest first)"""
+  sortOrder: SortOrder = DESC
 }
 
 input AuctionsFilterInput {
@@ -1103,6 +1142,7 @@ input ReplyReviewInput {
 type Subscription {
   walletUpdated: Wallet!
   notificationAdded: InAppNotification!
+  notificationReadStatusUpdated: NotificationReadPayload!
   auctionCreated: Auction!
   auctionStatusChanged(auctionId: ID!): AuctionStatusChangedPayload!
   bidAdded(auctionId: ID!): BidAddedPayload!

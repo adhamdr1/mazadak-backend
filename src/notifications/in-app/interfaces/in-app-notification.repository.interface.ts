@@ -1,6 +1,8 @@
 import { ClientSession } from 'mongoose';
 import { InAppNotification } from '../entities/in-app-notification.entity';
 import { CreateInAppNotificationDto } from '../dto/create-in-app-notification.dto';
+import { NotificationsFilterInput } from '../dto/notifications-filter.input';
+import { NotificationCategory } from '../enums/notification-category.enum';
 
 export interface IInAppNotificationRepository {
   startSession(): Promise<ClientSession>;
@@ -14,11 +16,15 @@ export interface IInAppNotificationRepository {
     userId: string,
     page: number,
     limit: number,
+    filter?: NotificationsFilterInput,
   ): Promise<InAppNotification[]>;
 
-  countByUserId(userId: string): Promise<number>;
+  countByUserId(
+    userId: string,
+    filter?: NotificationsFilterInput,
+  ): Promise<number>;
 
-  countUnread(userId: string): Promise<number>;
+  countUnread(userId: string, category?: NotificationCategory): Promise<number>;
 
   markAsRead(
     notificationId: string,

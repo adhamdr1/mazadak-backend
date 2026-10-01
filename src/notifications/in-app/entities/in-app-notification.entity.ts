@@ -2,6 +2,7 @@ import { ObjectType, Field, ID } from '@nestjs/graphql';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
 import { InAppNotificationType } from '../enums/in-app-notification-type.enum';
+import { NotificationCategory } from '../enums/notification-category.enum';
 import { NotificationReferenceType } from '../enums/notification-reference-type.enum';
 
 export type InAppNotificationDocument = HydratedDocument<InAppNotification>;
@@ -31,6 +32,15 @@ export class InAppNotification {
     required: true,
   })
   type!: InAppNotificationType;
+
+  @Field(() => NotificationCategory)
+  @Prop({
+    type: String,
+    enum: NotificationCategory,
+    required: true,
+    index: true,
+  })
+  category!: NotificationCategory;
 
   @Field()
   @Prop({ required: true, trim: true })
@@ -64,4 +74,12 @@ export const InAppNotificationSchema =
   SchemaFactory.createForClass(InAppNotification);
 
 InAppNotificationSchema.index({ userId: 1, createdAt: -1 });
-InAppNotificationSchema.index({ userId: 1, isRead: 1 });
+InAppNotificationSchema.index({ userId: 1, category: 1, createdAt: -1 });
+InAppNotificationSchema.index({ userId: 1, isRead: 1, createdAt: -1 });
+InAppNotificationSchema.index({
+  userId: 1,
+  category: 1,
+  isRead: 1,
+  createdAt: -1,
+});
+InAppNotificationSchema.index({ userId: 1, isRead: 1, category: 1 });

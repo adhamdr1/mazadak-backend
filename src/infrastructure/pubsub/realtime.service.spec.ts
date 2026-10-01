@@ -7,6 +7,7 @@ import { InAppNotification } from '../../notifications/in-app/entities/in-app-no
 import { AuctionStatusChangedPayload } from '../../auctions/dto/auction-status-changed.payload';
 import { ChatMessage } from '../../chat/entities/chat-message.entity';
 import { InAppNotificationType } from '../../notifications/in-app/enums/in-app-notification-type.enum';
+import { NotificationCategory } from '../../notifications/in-app/enums/notification-category.enum';
 import { ChatMessageType } from '../../chat/enums/chat-message-type.enum';
 import { Types } from 'mongoose';
 import { Bid } from '../../bids/entities/bid.entity';
@@ -69,6 +70,7 @@ describe('RealtimeService', () => {
       _id: new Types.ObjectId(),
       userId: new Types.ObjectId(),
       type: InAppNotificationType.AUCTION_WON,
+      category: NotificationCategory.AUCTIONS,
       title: 'You won!',
       body: 'Congratulations',
       isRead: false,
