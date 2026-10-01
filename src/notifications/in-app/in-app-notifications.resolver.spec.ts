@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { InAppNotificationsResolver } from './in-app-notifications.resolver';
 import { InAppNotificationsService } from './in-app-notifications.service';
 import { InAppNotificationType } from './enums/in-app-notification-type.enum';
+import { NotificationCategory } from './enums/notification-category.enum';
 import { NotificationReferenceType } from './enums/notification-reference-type.enum';
 import { Types } from 'mongoose';
 import { JwtPayload } from '../../auth/interfaces/jwt-payload.interface';
@@ -12,6 +13,11 @@ const mockInAppNotificationsService = {
   getUnreadCount: jest.fn(),
   markAsRead: jest.fn(),
   markAllAsRead: jest.fn(),
+};
+
+const mockPubSub = {
+  publish: jest.fn(),
+  asyncIterableIterator: jest.fn(),
 };
 
 describe('InAppNotificationsResolver', () => {
@@ -27,7 +33,7 @@ describe('InAppNotificationsResolver', () => {
         },
         {
           provide: 'PUB_SUB',
-          useValue: { publish: jest.fn(), asyncIterableIterator: jest.fn() },
+          useValue: mockPubSub,
         },
       ],
     }).compile();
@@ -57,6 +63,7 @@ describe('InAppNotificationsResolver', () => {
     _id: notificationId,
     userId,
     type: InAppNotificationType.OUTBID,
+    category: NotificationCategory.AUCTIONS,
     title: 'Outbid',
     body: 'You have been outbid',
     isRead: false,
@@ -66,7 +73,7 @@ describe('InAppNotificationsResolver', () => {
   };
 
   describe('myNotifications', () => {
-    it('should return service getMyNotifications result', async () => {
+    it('should return service getMyNotifications result without filter', async () => {
       const pagination = { page: 1, limit: 10 };
       const pageResult = {
         items: [mockNotification],
@@ -85,18 +92,56 @@ describe('InAppNotificationsResolver', () => {
       expect(result).toEqual(pageResult);
       expect(
         mockInAppNotificationsService.getMyNotifications,
-      ).toHaveBeenCalledWith(userId, pagination);
+      ).toHaveBeenCalledWith(userId, pagination, undefined);
+    });
+
+    it('should pass filter to service getMyNotifications', async () => {
+      const pagination = { page: 1, limit: 10 };
+      const filter = { category: NotificationCategory.AUCTIONS, isRead: false };
+      const pageResult = {
+        items: [mockNotification],
+        total: 1,
+        totalPages: 1,
+        hasNextPage: false,
+      };
+      mockInAppNotificationsService.getMyNotifications.mockResolvedValue(
+        pageResult,
+      );
+
+      const result = await resolver.getMyNotifications(
+        mockCurrentUser,
+        pagination,
+        filter,
+      );
+      expect(result).toEqual(pageResult);
+      expect(
+        mockInAppNotificationsService.getMyNotifications,
+      ).toHaveBeenCalledWith(userId, pagination, filter);
     });
   });
 
   describe('unreadNotificationsCount', () => {
-    it('should return unread count', async () => {
+    it('should return unread count without category', async () => {
       mockInAppNotificationsService.getUnreadCount.mockResolvedValue(3);
       const result =
         await resolver.getUnreadNotificationsCount(mockCurrentUser);
       expect(result).toBe(3);
       expect(mockInAppNotificationsService.getUnreadCount).toHaveBeenCalledWith(
         userId,
+        undefined,
+      );
+    });
+
+    it('should return unread count with category', async () => {
+      mockInAppNotificationsService.getUnreadCount.mockResolvedValue(1);
+      const result = await resolver.getUnreadNotificationsCount(
+        mockCurrentUser,
+        NotificationCategory.AUCTIONS,
+      );
+      expect(result).toBe(1);
+      expect(mockInAppNotificationsService.getUnreadCount).toHaveBeenCalledWith(
+        userId,
+        NotificationCategory.AUCTIONS,
       );
     });
   });
@@ -125,6 +170,28 @@ describe('InAppNotificationsResolver', () => {
       expect(result).toBe(true);
       expect(mockInAppNotificationsService.markAllAsRead).toHaveBeenCalledWith(
         userId,
+      );
+    });
+  });
+
+  describe('subscriptions', () => {
+    it('should subscribe to notificationAdded', () => {
+      mockPubSub.asyncIterableIterator.mockReturnValue({
+        [Symbol.asyncIterator]: jest.fn(),
+      });
+      resolver.notificationAdded(mockCurrentUser);
+      expect(mockPubSub.asyncIterableIterator).toHaveBeenCalledWith(
+        'NOTIFICATION_ADDED',
+      );
+    });
+
+    it('should subscribe to notificationReadStatusUpdated', () => {
+      mockPubSub.asyncIterableIterator.mockReturnValue({
+        [Symbol.asyncIterator]: jest.fn(),
+      });
+      resolver.notificationReadStatusUpdated(mockCurrentUser);
+      expect(mockPubSub.asyncIterableIterator).toHaveBeenCalledWith(
+        'NOTIFICATION_READ_STATUS_UPDATED',
       );
     });
   });

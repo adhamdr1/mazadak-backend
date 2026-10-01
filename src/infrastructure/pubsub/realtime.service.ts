@@ -4,6 +4,7 @@ import { PUB_SUB } from './pubsub.provider';
 import { PUB_SUB_EVENTS } from './events.constants';
 import { BidAddedPayload } from '../../bids/dto/bid-added.payload';
 import { InAppNotification } from '../../notifications/in-app/entities/in-app-notification.entity';
+import { NotificationReadPayload } from '../../notifications/in-app/dto/notification-read.payload';
 import { AuctionStatusChangedPayload } from '../../auctions/dto/auction-status-changed.payload';
 import { Auction } from '../../auctions/entities/auction.entity';
 import { ChatMessage } from '../../chat/entities/chat-message.entity';
@@ -61,6 +62,19 @@ export class RealtimeService {
   async publishNotificationAdded(payload: InAppNotification): Promise<void> {
     await this.publishSafely(PUB_SUB_EVENTS.NOTIFICATION_ADDED, {
       notificationAdded: payload,
+    });
+  }
+
+  /**
+   * Publish a real-time event when a notification or all notifications are marked as read.
+   */
+  async publishNotificationReadStatusUpdated(
+    userId: string,
+    payload: NotificationReadPayload,
+  ): Promise<void> {
+    await this.publishSafely(PUB_SUB_EVENTS.NOTIFICATION_READ_STATUS_UPDATED, {
+      userId,
+      notificationReadStatusUpdated: payload,
     });
   }
 
