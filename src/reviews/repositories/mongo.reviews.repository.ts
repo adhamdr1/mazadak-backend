@@ -133,6 +133,8 @@ export class MongoReviewsRepository implements IReviewsRepository {
 
   async findReviewsByReviewer(
     reviewerId: string,
+    filter?: ReviewsFilterInput,
+    sort?: ReviewsSortInput,
     page = 1,
     limit = 10,
     session?: ClientSession,
@@ -141,12 +143,30 @@ export class MongoReviewsRepository implements IReviewsRepository {
       reviewerId: new Types.ObjectId(reviewerId),
     };
 
+    if (filter?.type) {
+      query.type = filter.type;
+    }
+
+    if (filter?.minRating) {
+      query.overallRating = { $gte: filter.minRating };
+    }
+
+    const sortOptions: Record<string, 1 | -1> = {};
+    const direction: 1 | -1 = sort?.order === SortOrder.ASC ? 1 : -1;
+
+    if (sort?.field === ReviewsSortField.RATING) {
+      sortOptions.overallRating = direction;
+      sortOptions.createdAt = -1;
+    } else {
+      sortOptions.createdAt = direction;
+    }
+
     const skip = (page - 1) * limit;
 
     const [items, total] = await Promise.all([
       this.reviewModel
         .find(query)
-        .sort({ createdAt: -1 })
+        .sort(sortOptions)
         .skip(skip)
         .limit(limit)
         .session(session || null)

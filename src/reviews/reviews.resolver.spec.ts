@@ -3,6 +3,8 @@ import { ReviewsResolver } from './reviews.resolver';
 import { ReviewsService } from './reviews.service';
 import { QueryBus } from '@nestjs/cqrs';
 import { Types } from 'mongoose';
+import { PUB_SUB } from '../infrastructure/pubsub/pubsub.provider';
+import { PUB_SUB_EVENTS } from '../infrastructure/pubsub/events.constants';
 import { Review } from './entities/review.entity';
 import { ReviewStatus } from './enums/review-status.enum';
 import { ReviewType } from './enums/review-type.enum';
@@ -11,6 +13,8 @@ import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { UserRatingStats } from './entities/user-rating-stats.entity';
 import { GetUserPublicProfileQuery } from '../users/queries/get-user-public-profile.query';
 import { GetAuctionByIdQuery } from '../auctions/queries/get-auction-by-id.query';
+import { ReviewsSortField } from './enums/reviews-sort-field.enum';
+import { SortOrder } from '../common/enums/sort-order.enum';
 
 const mockReviewsService = {
   getReviewsForUser: jest.fn(),
@@ -27,6 +31,10 @@ const mockReviewsService = {
 
 const mockQueryBus = {
   execute: jest.fn(),
+};
+
+const mockPubSub = {
+  asyncIterableIterator: jest.fn(),
 };
 
 describe('ReviewsResolver', () => {
@@ -66,6 +74,10 @@ describe('ReviewsResolver', () => {
         {
           provide: QueryBus,
           useValue: mockQueryBus,
+        },
+        {
+          provide: PUB_SUB,
+          useValue: mockPubSub,
         },
       ],
     }).compile();
@@ -159,7 +171,7 @@ describe('ReviewsResolver', () => {
       );
     });
 
-    it('should call getMyWrittenReviews', async () => {
+    it('should call getMyWrittenReviews with filter and sort', async () => {
       const mockPage = {
         items: [mockReview],
         total: 1,
@@ -168,14 +180,24 @@ describe('ReviewsResolver', () => {
       };
       mockReviewsService.getReviewsByReviewer.mockResolvedValue(mockPage);
 
-      const result = await resolver.getMyWrittenReviews(currentUser, {
-        page: 1,
-        limit: 10,
-      });
+      const filter = { minRating: 4 };
+      const sort = { field: ReviewsSortField.RATING, order: SortOrder.DESC };
+
+      const result = await resolver.getMyWrittenReviews(
+        currentUser,
+        {
+          page: 1,
+          limit: 10,
+        },
+        filter,
+        sort,
+      );
 
       expect(result).toEqual(mockPage);
       expect(mockReviewsService.getReviewsByReviewer).toHaveBeenCalledWith(
         currentUser.sub,
+        filter,
+        sort,
         1,
         10,
       );
@@ -287,6 +309,20 @@ describe('ReviewsResolver', () => {
 
       expect(result).toEqual(mockReview);
       expect(mockReviewsService.unhideReview).toHaveBeenCalledWith(reviewId);
+    });
+  });
+
+  describe('Subscriptions', () => {
+    it('should return async iterator for reviewAddedToUser', () => {
+      const mockIterator = Symbol('asyncIterator');
+      mockPubSub.asyncIterableIterator.mockReturnValue(mockIterator);
+
+      const result = resolver.reviewAddedToUser(reviewedUserId);
+
+      expect(result).toBe(mockIterator);
+      expect(mockPubSub.asyncIterableIterator).toHaveBeenCalledWith(
+        PUB_SUB_EVENTS.REVIEW_ADDED_TO_USER,
+      );
     });
   });
 });

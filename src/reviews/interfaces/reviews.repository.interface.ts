@@ -50,6 +50,8 @@ export interface IReviewsRepository {
 
   findReviewsByReviewer(
     reviewerId: string,
+    filter?: ReviewsFilterInput,
+    sort?: ReviewsSortInput,
     page?: number,
     limit?: number,
     session?: ClientSession,

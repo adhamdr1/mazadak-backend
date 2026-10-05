@@ -17,15 +17,15 @@ export class Review {
   readonly _id!: Types.ObjectId;
 
   @Field(() => ID)
-  @Prop({ type: Types.ObjectId, ref: 'Auction', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: 'Auction', required: true })
   auctionId!: Types.ObjectId;
 
   @Field(() => ID)
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   reviewerId!: Types.ObjectId;
 
   @Field(() => ID)
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   reviewedUserId!: Types.ObjectId;
 
   @Field(() => ReviewType)
@@ -37,7 +37,6 @@ export class Review {
     type: String,
     enum: ReviewStatus,
     default: ReviewStatus.PENDING,
-    index: true,
   })
   status!: ReviewStatus;
 
@@ -62,7 +61,7 @@ export class Review {
   repliedAt?: Date;
 
   @Field({ nullable: true })
-  @Prop({ type: Date, required: false, index: true })
+  @Prop({ type: Date, required: false })
   publishedAt?: Date;
 
   @Field(() => Date)
@@ -74,6 +73,17 @@ export class Review {
 
 export const ReviewSchema = SchemaFactory.createForClass(Review);
 
-ReviewSchema.index({ auctionId: 1, reviewerId: 1 }, { unique: true });
+// 1. Primary user reviews query index (Equality on reviewedUserId + status, Sort on createdAt desc)
 ReviewSchema.index({ reviewedUserId: 1, status: 1, createdAt: -1 });
+
+// 2. User reviews sorted by rating (Equality on reviewedUserId + status, Sort on overallRating desc)
+ReviewSchema.index({ reviewedUserId: 1, status: 1, overallRating: -1 });
+
+// 3. User's written reviews query index (Equality on reviewerId, Sort on createdAt desc)
+ReviewSchema.index({ reviewerId: 1, createdAt: -1 });
+
+// 4. Strict integrity: Unique review per auction per reviewer
+ReviewSchema.index({ auctionId: 1, reviewerId: 1 }, { unique: true });
+
+// 5. Expiration cron queries for pending reviews
 ReviewSchema.index({ status: 1, createdAt: 1 });
