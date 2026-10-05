@@ -15,10 +15,13 @@ import { AuctionStatus } from '../auctions/enums/auction-status.enum';
 import { OutboxService } from '../infrastructure/outbox/outbox.service';
 import { RabbitMQEvent } from '../infrastructure/rabbitmq/rabbitmq-event.types';
 import { RedisService } from '../infrastructure/redis/redis.service';
+import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
 import {
+  AuctionNotEligibleForReviewException,
+  NotAuctionParticipantException,
   ReviewAlreadyExistsException,
-  ReviewNotEligibleException,
   ReviewNotFoundException,
+  ReviewReplyAlreadyExistsException,
   ReviewReplyForbiddenException,
   ReviewSelfRatingException,
   ReviewWindowExpiredException,
@@ -43,6 +46,7 @@ export class ReviewsService {
     private readonly auctionsService: AuctionsService,
     private readonly outboxService: OutboxService,
     private readonly redisService: RedisService,
+    private readonly realtimeService: RealtimeService,
   ) {}
 
   /**
@@ -63,11 +67,16 @@ export class ReviewsService {
     const session = await this.reviewsRepository.startSession();
     session.startTransaction();
 
+    let createdReview!: Review;
+    let counterpartReview: Review | undefined;
+    let bothPublished = false;
+    let reviewedUserId!: Types.ObjectId;
+
     try {
       const auction = await this.auctionsService.findAuction(input.auctionId);
 
       if (auction.status !== AuctionStatus.ENDED || !auction.winnerId) {
-        throw new ReviewNotEligibleException();
+        throw new AuctionNotEligibleForReviewException();
       }
 
       const sellerIdStr = auction.sellerId.toString();
@@ -78,7 +87,6 @@ export class ReviewsService {
       }
 
       let type: ReviewType;
-      let reviewedUserId: Types.ObjectId;
 
       if (reviewerId === winnerIdStr) {
         type = ReviewType.BUYER_TO_SELLER;
@@ -87,7 +95,7 @@ export class ReviewsService {
         type = ReviewType.SELLER_TO_BUYER;
         reviewedUserId = auction.winnerId;
       } else {
-        throw new ReviewNotEligibleException();
+        throw new NotAuctionParticipantException();
       }
 
       // Check review eligibility window (14 days from auction endTime)
@@ -114,11 +122,9 @@ export class ReviewsService {
         session,
       );
 
-      const counterpartReview = allAuctionReviews.find(
+      counterpartReview = allAuctionReviews.find(
         (r) => r.reviewerId.toString() === reviewedUserId.toString(),
       );
-
-      let createdReview: Review;
 
       if (
         counterpartReview &&
@@ -126,6 +132,7 @@ export class ReviewsService {
       ) {
         // Both parties have submitted their review -> Reveal both!
         const now = new Date();
+        bothPublished = true;
 
         createdReview = await this.reviewsRepository.create(
           {
@@ -175,10 +182,6 @@ export class ReviewsService {
           },
           session,
         );
-
-        // Invalidate cache for both reviewed users
-        this.invalidateUserReviewsCache(reviewedUserId.toString());
-        this.invalidateUserReviewsCache(reviewerId);
       } else {
         // First party submitted -> Keep review pending (blind review)
         createdReview = await this.reviewsRepository.create(
@@ -210,7 +213,6 @@ export class ReviewsService {
       }
 
       await session.commitTransaction();
-      return createdReview;
     } catch (error: unknown) {
       await session.abortTransaction();
       // Handle MongoDB duplicate compound index error (E11000) under concurrency
@@ -226,6 +228,32 @@ export class ReviewsService {
     } finally {
       await session.endSession();
     }
+
+    // Post-Commit Real-time event broadcasting and cache invalidation
+    if (bothPublished && counterpartReview) {
+      this.invalidateUserReviewsCache(reviewedUserId.toString());
+      this.invalidateUserReviewsCache(reviewerId);
+
+      const [statsForReviewedUser, statsForReviewer] = await Promise.all([
+        this.getUserRatingStats(reviewedUserId.toString()),
+        this.getUserRatingStats(reviewerId),
+      ]);
+
+      await Promise.all([
+        this.realtimeService.publishReviewAddedToUser({
+          reviewedUserId: reviewedUserId.toString(),
+          review: createdReview,
+          updatedRatingStats: statsForReviewedUser,
+        }),
+        this.realtimeService.publishReviewAddedToUser({
+          reviewedUserId: reviewerId,
+          review: counterpartReview,
+          updatedRatingStats: statsForReviewer,
+        }),
+      ]);
+    }
+
+    return createdReview;
   }
 
   /**
@@ -260,9 +288,7 @@ export class ReviewsService {
       }
 
       if (review.reply) {
-        throw new ReviewReplyForbiddenException(
-          'A reply has already been submitted for this review',
-        );
+        throw new ReviewReplyAlreadyExistsException();
       }
 
       const updatedReview = await this.reviewsRepository.addReply(
@@ -339,15 +365,19 @@ export class ReviewsService {
   }
 
   /**
-   * Retrieves paginated reviews written by a specific reviewer.
+   * Retrieves paginated reviews written by a specific reviewer with optional filtering and sorting.
    */
   async getReviewsByReviewer(
     reviewerId: string,
+    filter?: ReviewsFilterInput,
+    sort?: ReviewsSortInput,
     page = 1,
     limit = 10,
   ): Promise<ReviewsPage> {
     const { items, total } = await this.reviewsRepository.findReviewsByReviewer(
       reviewerId,
+      filter,
+      sort,
       page,
       limit,
     );
@@ -402,6 +432,7 @@ export class ReviewsService {
     for (const review of expiredPendingReviews) {
       const session = await this.reviewsRepository.startSession();
       session.startTransaction();
+      let successfullyCommitted = false;
 
       try {
         const now = new Date();
@@ -425,10 +456,8 @@ export class ReviewsService {
           session,
         );
 
-        // Invalidate cache for the reviewed user
-        this.invalidateUserReviewsCache(review.reviewedUserId.toString());
-
         await session.commitTransaction();
+        successfullyCommitted = true;
         publishedCount++;
       } catch (err) {
         await session.abortTransaction();
@@ -438,6 +467,19 @@ export class ReviewsService {
         );
       } finally {
         await session.endSession();
+      }
+
+      if (successfullyCommitted) {
+        // Invalidate cache and broadcast real-time event after successful commit
+        this.invalidateUserReviewsCache(review.reviewedUserId.toString());
+        const updatedStats = await this.getUserRatingStats(
+          review.reviewedUserId.toString(),
+        );
+        await this.realtimeService.publishReviewAddedToUser({
+          reviewedUserId: review.reviewedUserId.toString(),
+          review,
+          updatedRatingStats: updatedStats,
+        });
       }
     }
 
@@ -464,6 +506,13 @@ export class ReviewsService {
 
       const sellerIdStr = auction.sellerId.toString();
       const winnerIdStr = auction.winnerId.toString();
+
+      if (sellerIdStr === winnerIdStr) {
+        return {
+          canReview: false,
+          reason: 'You cannot review yourself',
+        };
+      }
 
       if (userId !== sellerIdStr && userId !== winnerIdStr) {
         return {

@@ -2,13 +2,17 @@ import {
   Resolver,
   Query,
   Mutation,
+  Subscription,
   Args,
   ID,
   ResolveField,
   Parent,
 } from '@nestjs/graphql';
-import { UseGuards } from '@nestjs/common';
+import { Inject, UseGuards } from '@nestjs/common';
 import { QueryBus } from '@nestjs/cqrs';
+import { RedisPubSub } from 'graphql-redis-subscriptions';
+import { PUB_SUB } from '../infrastructure/pubsub/pubsub.provider';
+import { PUB_SUB_EVENTS } from '../infrastructure/pubsub/events.constants';
 import { ReviewsService } from './reviews.service';
 import { Review } from './entities/review.entity';
 import { UserRatingStats } from './entities/user-rating-stats.entity';
@@ -17,6 +21,7 @@ import { CreateReviewInput } from './dto/create-review.input';
 import { ReplyReviewInput } from './dto/reply-review.input';
 import { ReviewsFilterInput } from './dto/reviews-filter.input';
 import { ReviewsSortInput } from './dto/reviews-sort.input';
+import { ReviewAddedPayload } from './dto/review-added.payload';
 import { PaginationInput } from '../common/dto/pagination.input';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -37,6 +42,8 @@ export class ReviewsResolver {
   constructor(
     private readonly reviewsService: ReviewsService,
     private readonly queryBus: QueryBus,
+    @Inject(PUB_SUB)
+    private readonly pubSub: RedisPubSub,
   ) {}
 
   // ─── Field Resolvers ───────────────────────────────────────────────────────
@@ -93,17 +100,21 @@ export class ReviewsResolver {
   }
 
   /**
-   * Retrieves paginated reviews written by the currently authenticated user.
+   * Retrieves paginated reviews written by the currently authenticated user with optional filtering and sorting.
    */
   @Query(() => ReviewsPage, { name: 'myWrittenReviews' })
   async getMyWrittenReviews(
     @CurrentUser() currentUser: JwtPayload,
     @Args('input', { nullable: true }) input?: PaginationInput,
+    @Args('filter', { nullable: true }) filter?: ReviewsFilterInput,
+    @Args('sort', { nullable: true }) sort?: ReviewsSortInput,
   ): Promise<ReviewsPage> {
     const page = input?.page ?? 1;
     const limit = input?.limit ?? 10;
     return this.reviewsService.getReviewsByReviewer(
       currentUser.sub,
+      filter,
+      sort,
       page,
       limit,
     );
@@ -195,5 +206,27 @@ export class ReviewsResolver {
     @Args('reviewId', { type: () => ID }) reviewId: string,
   ): Promise<Review> {
     return this.reviewsService.unhideReview(reviewId);
+  }
+
+  // ─── Subscriptions ────────────────────────────────────────────────────────
+
+  /**
+   * Real-time subscription: fires whenever a review is published for a specific user.
+   * Public — allows visitors on public profiles (/users/:id) to observe live rating updates.
+   * Filter: only delivers events matching the subscribed userId.
+   */
+  @Public()
+  @Subscription(() => ReviewAddedPayload, {
+    name: 'reviewAddedToUser',
+    filter: (
+      payload: { reviewAddedToUser: ReviewAddedPayload },
+      variables: { userId: string },
+    ) => payload.reviewAddedToUser.reviewedUserId === variables.userId,
+  })
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  reviewAddedToUser(@Args('userId', { type: () => ID }) _userId: string) {
+    return this.pubSub.asyncIterableIterator(
+      PUB_SUB_EVENTS.REVIEW_ADDED_TO_USER,
+    ) as AsyncIterable<{ reviewAddedToUser: ReviewAddedPayload }>;
   }
 }

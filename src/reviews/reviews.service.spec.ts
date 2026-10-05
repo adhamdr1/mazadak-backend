@@ -3,15 +3,18 @@ import { ReviewsService } from './reviews.service';
 import { AuctionsService } from '../auctions/auctions.service';
 import { OutboxService } from '../infrastructure/outbox/outbox.service';
 import { RedisService } from '../infrastructure/redis/redis.service';
+import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
 import { Types } from 'mongoose';
 import { ReviewStatus } from './enums/review-status.enum';
 import { ReviewType } from './enums/review-type.enum';
 import { AuctionStatus } from '../auctions/enums/auction-status.enum';
 import { RabbitMQEvent } from '../infrastructure/rabbitmq/rabbitmq-event.types';
 import {
+  AuctionNotEligibleForReviewException,
+  NotAuctionParticipantException,
   ReviewAlreadyExistsException,
-  ReviewNotEligibleException,
   ReviewNotFoundException,
+  ReviewReplyAlreadyExistsException,
   ReviewReplyForbiddenException,
   ReviewSelfRatingException,
   ReviewWindowExpiredException,
@@ -58,6 +61,10 @@ const mockRedisService = {
   invalidatePattern: jest.fn().mockResolvedValue(undefined),
 };
 
+const mockRealtimeService = {
+  publishReviewAddedToUser: jest.fn().mockResolvedValue(undefined),
+};
+
 describe('ReviewsService', () => {
   let service: ReviewsService;
 
@@ -80,6 +87,10 @@ describe('ReviewsService', () => {
         {
           provide: RedisService,
           useValue: mockRedisService,
+        },
+        {
+          provide: RealtimeService,
+          useValue: mockRealtimeService,
         },
       ],
     }).compile();
@@ -136,6 +147,22 @@ describe('ReviewsService', () => {
     updatedAt: new Date(),
   };
 
+  const mockStats: UserRatingStats = {
+    averageRating: 5,
+    totalReviews: 1,
+    asSellerAverageRating: 5,
+    asSellerTotalReviews: 1,
+    asBuyerAverageRating: 0,
+    asBuyerTotalReviews: 0,
+    breakdown: {
+      oneStar: 0,
+      twoStar: 0,
+      threeStar: 0,
+      fourStar: 0,
+      fiveStar: 1,
+    },
+  };
+
   describe('createReview', () => {
     const input: CreateReviewInput = {
       auctionId,
@@ -143,14 +170,14 @@ describe('ReviewsService', () => {
       comment: 'Great seller!',
     };
 
-    it('should throw ReviewNotEligibleException if auction is not ENDED', async () => {
+    it('should throw AuctionNotEligibleForReviewException if auction is not ENDED', async () => {
       mockAuctionsService.findAuction.mockResolvedValue({
         ...mockAuction,
         status: AuctionStatus.ACTIVE,
       });
 
       await expect(service.createReview(buyerId, input)).rejects.toThrow(
-        ReviewNotEligibleException,
+        AuctionNotEligibleForReviewException,
       );
       expect(mockSession.abortTransaction).toHaveBeenCalled();
     });
@@ -167,12 +194,12 @@ describe('ReviewsService', () => {
       );
     });
 
-    it('should throw ReviewNotEligibleException if reviewer is neither buyer nor seller', async () => {
+    it('should throw NotAuctionParticipantException if reviewer is neither buyer nor seller', async () => {
       mockAuctionsService.findAuction.mockResolvedValue(mockAuction);
       const strangerId = new Types.ObjectId().toString();
 
       await expect(service.createReview(strangerId, input)).rejects.toThrow(
-        ReviewNotEligibleException,
+        NotAuctionParticipantException,
       );
     });
 
@@ -223,9 +250,12 @@ describe('ReviewsService', () => {
         mockSession,
       );
       expect(mockSession.commitTransaction).toHaveBeenCalled();
+      expect(
+        mockRealtimeService.publishReviewAddedToUser,
+      ).not.toHaveBeenCalled();
     });
 
-    it('should publish BOTH reviews if counterpart has already submitted pending review', async () => {
+    it('should publish BOTH reviews and emit socket events if counterpart has already submitted pending review', async () => {
       const counterpartReview: Review = {
         _id: new Types.ObjectId(),
         auctionId: new Types.ObjectId(auctionId),
@@ -251,6 +281,7 @@ describe('ReviewsService', () => {
       ]);
       mockReviewsRepository.create.mockResolvedValue(publishedReview);
       mockReviewsRepository.updateStatus.mockResolvedValue(undefined);
+      mockReviewsRepository.getUserRatingStats.mockResolvedValue(mockStats);
       mockOutboxService.saveEvent.mockResolvedValue(undefined);
 
       const result = await service.createReview(buyerId, input);
@@ -271,6 +302,9 @@ describe('ReviewsService', () => {
       expect(mockOutboxService.saveEvent).toHaveBeenCalledTimes(2);
       expect(mockRedisService.invalidatePattern).toHaveBeenCalled();
       expect(mockSession.commitTransaction).toHaveBeenCalled();
+      expect(
+        mockRealtimeService.publishReviewAddedToUser,
+      ).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -304,7 +338,7 @@ describe('ReviewsService', () => {
       );
     });
 
-    it('should throw ReviewReplyForbiddenException if review already has a reply', async () => {
+    it('should throw ReviewReplyAlreadyExistsException if review already has a reply', async () => {
       const alreadyRepliedReview: Review = {
         ...mockReview,
         status: ReviewStatus.PUBLISHED,
@@ -313,7 +347,7 @@ describe('ReviewsService', () => {
       mockReviewsRepository.findById.mockResolvedValue(alreadyRepliedReview);
 
       await expect(service.replyToReview(sellerId, input)).rejects.toThrow(
-        ReviewReplyForbiddenException,
+        ReviewReplyAlreadyExistsException,
       );
     });
 
@@ -368,11 +402,17 @@ describe('ReviewsService', () => {
       });
     });
 
-    it('should return paginated reviews by a reviewer', async () => {
+    it('should return paginated reviews by a reviewer with filter and sort', async () => {
       const pageResult = { items: [mockReview], total: 1 };
       mockReviewsRepository.findReviewsByReviewer.mockResolvedValue(pageResult);
 
-      const result = await service.getReviewsByReviewer(buyerId);
+      const result = await service.getReviewsByReviewer(
+        buyerId,
+        undefined,
+        undefined,
+        1,
+        10,
+      );
 
       expect(result).toEqual({
         items: [mockReview],
@@ -380,6 +420,13 @@ describe('ReviewsService', () => {
         totalPages: 1,
         hasNextPage: false,
       });
+      expect(mockReviewsRepository.findReviewsByReviewer).toHaveBeenCalledWith(
+        buyerId,
+        undefined,
+        undefined,
+        1,
+        10,
+      );
     });
   });
 
@@ -426,11 +473,12 @@ describe('ReviewsService', () => {
   });
 
   describe('publishExpiredPendingReviews', () => {
-    it('should auto-publish expired pending reviews', async () => {
+    it('should auto-publish expired pending reviews and emit real-time event', async () => {
       mockReviewsRepository.findPendingReviewsOlderThan.mockResolvedValue([
         mockReview,
       ]);
       mockReviewsRepository.updateStatus.mockResolvedValue(undefined);
+      mockReviewsRepository.getUserRatingStats.mockResolvedValue(mockStats);
       mockOutboxService.saveEvent.mockResolvedValue(undefined);
 
       const count = await service.publishExpiredPendingReviews();
@@ -443,6 +491,11 @@ describe('ReviewsService', () => {
         mockSession,
       );
       expect(mockSession.commitTransaction).toHaveBeenCalled();
+      expect(mockRealtimeService.publishReviewAddedToUser).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reviewedUserId: sellerId,
+        }),
+      );
     });
   });
 
@@ -466,6 +519,29 @@ describe('ReviewsService', () => {
 
       expect(result.canReview).toBe(false);
       expect(result.reason).toContain('already submitted');
+    });
+
+    it('should return canReview: false if user is not participant', async () => {
+      mockAuctionsService.findAuction.mockResolvedValue(mockAuction);
+      const strangerId = new Types.ObjectId().toString();
+
+      const result = await service.canUserReviewAuction(strangerId, auctionId);
+
+      expect(result.canReview).toBe(false);
+      expect(result.reason).toContain('Only the buyer or seller');
+    });
+
+    it('should return canReview: false if user tries to review themselves', async () => {
+      mockAuctionsService.findAuction.mockResolvedValue({
+        ...mockAuction,
+        sellerId: new Types.ObjectId(buyerId),
+        winnerId: new Types.ObjectId(buyerId),
+      });
+
+      const result = await service.canUserReviewAuction(buyerId, auctionId);
+
+      expect(result.canReview).toBe(false);
+      expect(result.reason).toContain('cannot review yourself');
     });
   });
 

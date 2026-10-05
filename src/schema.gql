@@ -681,6 +681,12 @@ type ReviewsPage {
   hasNextPage: Boolean!
 }
 
+type ReviewAddedPayload {
+  reviewedUserId: ID!
+  review: Review!
+  updatedRatingStats: UserRatingStats!
+}
+
 """Indicates whether the current user is eligible to review an auction"""
 type CanReviewAuctionResponse {
   canReview: Boolean!
@@ -740,7 +746,7 @@ type Query {
   chatReadState(auctionId: ID!): ChatReadState
   chatReadStates(auctionId: ID!): [ChatReadState!]!
   userReviews(userId: ID!, input: PaginationInput, filter: ReviewsFilterInput, sort: ReviewsSortInput): ReviewsPage!
-  myWrittenReviews(input: PaginationInput): ReviewsPage!
+  myWrittenReviews(input: PaginationInput, filter: ReviewsFilterInput, sort: ReviewsSortInput): ReviewsPage!
   userRatingStats(userId: ID!): UserRatingStats!
   canReviewAuction(auctionId: ID!): CanReviewAuctionResponse!
   review(id: ID!): Review!
@@ -1154,4 +1160,5 @@ type Subscription {
   messageUpdated(auctionId: ID!): ChatMessage!
   chatReadStatusUpdated(auctionId: ID!): ChatReadStateUpdatedPayload!
   myChatRoomUpdated: ChatRoomUpdatedPayload!
+  reviewAddedToUser(userId: ID!): ReviewAddedPayload!
 }

@@ -12,6 +12,7 @@ import { Wallet } from '../../wallet/entities/wallet.entity';
 import { EscrowStatusChangedInternalPayload } from '../../escrow/dto/escrow-status-changed.payload';
 import { DisputeStatusChangedInternalPayload } from '../../escrow/dto/dispute-status-changed.payload';
 import type { ChatRoomUpdatedInternalPayload } from '../../chat/interfaces/chat-room-updated-internal.payload';
+import { ReviewAddedPayload } from '../../reviews/dto/review-added.payload';
 
 @Injectable()
 export class RealtimeService {
@@ -179,6 +180,15 @@ export class RealtimeService {
   ): Promise<void> {
     await this.publishSafely(PUB_SUB_EVENTS.DISPUTE_STATUS_CHANGED, {
       disputeStatusChanged: payload,
+    });
+  }
+
+  /**
+   * Publish a real-time event when a review is published for a user (live updates on public profile).
+   */
+  async publishReviewAddedToUser(payload: ReviewAddedPayload): Promise<void> {
+    await this.publishSafely(PUB_SUB_EVENTS.REVIEW_ADDED_TO_USER, {
+      reviewAddedToUser: payload,
     });
   }
 }
