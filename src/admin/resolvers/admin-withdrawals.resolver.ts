@@ -85,7 +85,11 @@ export class AdminWithdrawalsResolver {
     resolve: (payload: {
       withdrawalRequested?: WithdrawalRequest;
       withdrawalStatusChanged?: WithdrawalRequest;
-    }) => payload.withdrawalRequested || payload.withdrawalStatusChanged,
+      adminWithdrawalFeed?: WithdrawalRequest;
+    }) =>
+      payload.adminWithdrawalFeed ||
+      payload.withdrawalRequested ||
+      payload.withdrawalStatusChanged,
   })
   adminWithdrawalFeed(@CurrentUser() user?: JwtPayload) {
     if (!user || user.role !== UserRole.ADMIN) {

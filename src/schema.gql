@@ -1150,7 +1150,7 @@ type Subscription {
   notificationAdded: InAppNotification!
   notificationReadStatusUpdated: NotificationReadPayload!
   auctionCreated: Auction!
-  auctionStatusChanged(auctionId: ID!): AuctionStatusChangedPayload!
+  auctionStatusChanged(auctionId: ID): AuctionStatusChangedPayload!
   bidAdded(auctionId: ID!): BidAddedPayload!
   escrowStatusChanged(escrowId: ID!): EscrowStatusChangedPayload!
   disputeStatusChanged(disputeId: ID!): DisputeStatusChangedPayload!

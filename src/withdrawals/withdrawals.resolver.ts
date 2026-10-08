@@ -20,6 +20,7 @@ import { PaginationInput } from '../common/dto/pagination.input';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
+import { UserRole } from '../users/enums/user-role.enum';
 import { PUB_SUB } from '../infrastructure/pubsub/pubsub.provider';
 import { PUB_SUB_EVENTS } from '../infrastructure/pubsub/events.constants';
 import type { RedisPubSub } from 'graphql-redis-subscriptions';
@@ -91,17 +92,25 @@ export class WithdrawalsResolver {
   @Subscription(() => WithdrawalRequest, {
     name: 'myWithdrawalUpdated',
     filter: (
-      payload: { withdrawalStatusChanged: WithdrawalRequest },
+      payload: {
+        withdrawalStatusChanged?: WithdrawalRequest;
+        myWithdrawalUpdated?: WithdrawalRequest;
+      },
       _variables: Record<string, never>,
       context: { user?: JwtPayload },
     ) => {
-      if (!context.user) return false;
+      const item =
+        payload.myWithdrawalUpdated || payload.withdrawalStatusChanged;
+      if (!context.user || !item) return false;
       return (
-        payload.withdrawalStatusChanged.userId.toString() === context.user.sub
+        context.user.role === UserRole.ADMIN ||
+        item.userId.toString() === context.user.sub
       );
     },
-    resolve: (payload: { withdrawalStatusChanged: WithdrawalRequest }) =>
-      payload.withdrawalStatusChanged,
+    resolve: (payload: {
+      withdrawalStatusChanged?: WithdrawalRequest;
+      myWithdrawalUpdated?: WithdrawalRequest;
+    }) => payload.myWithdrawalUpdated || payload.withdrawalStatusChanged,
   })
   myWithdrawalUpdated(@CurrentUser() user: JwtPayload) {
     if (!user) {

@@ -10,10 +10,6 @@ import { TreasuryStats } from '../dto/treasury-stats.type';
 import { RedisService } from '../../infrastructure/redis/redis.service';
 import { AuctionStatus } from '../../auctions/enums/auction-status.enum';
 
-const DASHBOARD_STATS_CACHE_KEY = 'admin:dashboard:stats';
-const DASHBOARD_STATS_TTL_MS = 5 * 60 * 1000; // 5 minutes soft TTL
-const DASHBOARD_STATS_HARD_TTL_S = 60 * 60; // 1 hour hard TTL
-
 @Injectable()
 export class AdminAnalyticsService {
   constructor(
@@ -27,57 +23,50 @@ export class AdminAnalyticsService {
   ) {}
 
   async getDashboardStats(): Promise<DashboardStats> {
-    return this.redisService.getOrSetSWR(
-      DASHBOARD_STATS_CACHE_KEY,
-      DASHBOARD_STATS_TTL_MS,
-      DASHBOARD_STATS_HARD_TTL_S,
-      async () => {
-        const [
-          totalUsers,
-          verifiedUsersCount,
-          activeAuctions,
-          completedAuctions,
-          cancelledAuctions,
-          totalTransactions,
-          totalWalletBalance,
-          todaysRevenue,
-          pendingWithdrawalsCount,
-          pendingWithdrawalsAmount,
-          totalCompletedPayouts,
-          totalCollectedFees,
-        ] = await Promise.all([
-          this.usersService.countAll({}),
-          this.usersService.countVerifiedUsers(),
-          this.auctionsService.countAuctions({ status: AuctionStatus.ACTIVE }),
-          this.auctionsService.countAuctions({ status: AuctionStatus.ENDED }),
-          this.auctionsService.countAuctions({
-            status: AuctionStatus.CANCELLED,
-          }),
-          this.transactionService.countTransactions({}),
-          this.walletService.sumAllBalances(),
-          this.transactionService.sumTodayRevenue(),
-          this.withdrawalsService.countPendingWithdrawals(),
-          this.withdrawalsService.sumPendingWithdrawals(),
-          this.withdrawalsService.sumCompletedWithdrawals(),
-          this.withdrawalsService.sumCollectedFees(),
-        ]);
+    const [
+      totalUsers,
+      verifiedUsersCount,
+      activeAuctions,
+      completedAuctions,
+      cancelledAuctions,
+      totalTransactions,
+      totalWalletBalance,
+      todaysRevenue,
+      pendingWithdrawalsCount,
+      pendingWithdrawalsAmount,
+      totalCompletedPayouts,
+      totalCollectedFees,
+    ] = await Promise.all([
+      this.usersService.countAll({}),
+      this.usersService.countVerifiedUsers(),
+      this.auctionsService.countAuctions({ status: AuctionStatus.ACTIVE }),
+      this.auctionsService.countAuctions({ status: AuctionStatus.ENDED }),
+      this.auctionsService.countAuctions({
+        status: AuctionStatus.CANCELLED,
+      }),
+      this.transactionService.countTransactions({}),
+      this.walletService.sumAllBalances(),
+      this.transactionService.sumTodayRevenue(),
+      this.withdrawalsService.countPendingWithdrawals(),
+      this.withdrawalsService.sumPendingWithdrawals(),
+      this.withdrawalsService.sumCompletedWithdrawals(),
+      this.withdrawalsService.sumCollectedFees(),
+    ]);
 
-        return {
-          totalUsers,
-          verifiedUsers: verifiedUsersCount,
-          activeAuctions,
-          completedAuctions,
-          cancelledAuctions,
-          totalWalletBalance,
-          todaysRevenue,
-          totalTransactions,
-          pendingWithdrawalsCount,
-          pendingWithdrawalsAmount,
-          totalCompletedPayouts,
-          totalCollectedFees,
-        };
-      },
-    );
+    return {
+      totalUsers,
+      verifiedUsers: verifiedUsersCount,
+      activeAuctions,
+      completedAuctions,
+      cancelledAuctions,
+      totalWalletBalance,
+      todaysRevenue,
+      totalTransactions,
+      pendingWithdrawalsCount,
+      pendingWithdrawalsAmount,
+      totalCompletedPayouts,
+      totalCollectedFees,
+    };
   }
 
   async getTreasuryStats(): Promise<TreasuryStats> {

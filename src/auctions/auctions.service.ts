@@ -79,6 +79,20 @@ export class AuctionsService {
     }
   }
 
+  private toPlainAuction(auction: Auction): Auction {
+    const raw = auction as unknown as {
+      toObject?: () => Record<string, unknown>;
+      _doc?: Record<string, unknown>;
+    };
+    if (typeof raw.toObject === 'function') {
+      return raw.toObject() as unknown as Auction;
+    }
+    if (raw._doc) {
+      return { ...raw._doc } as unknown as Auction;
+    }
+    return auction;
+  }
+
   private assertPending(auction: Auction): void {
     if (auction.status !== AuctionStatus.PENDING) {
       throw new AuctionNotPendingException();
@@ -361,7 +375,10 @@ export class AuctionsService {
 
       // Publish real-time status change (post-commit, fire-and-forget)
       void this.realtimeService.publishAuctionStatusChanged({
-        auction: { ...auction, status: AuctionStatus.CANCELLED },
+        auction: {
+          ...this.toPlainAuction(auction),
+          status: AuctionStatus.CANCELLED,
+        },
       });
 
       // Invalidate active auctions cache (cancelled auction must leave the list)
@@ -447,7 +464,7 @@ export class AuctionsService {
 
       void this.realtimeService.publishAuctionStatusChanged({
         auction: {
-          ...auction,
+          ...this.toPlainAuction(auction),
           status: AuctionStatus.CANCELLED,
           adminActionReason: reason,
         },
@@ -518,7 +535,10 @@ export class AuctionsService {
 
           // Publish real-time status change (non-blocking)
           void this.realtimeService.publishAuctionStatusChanged({
-            auction: { ...auction, status: AuctionStatus.ACTIVE },
+            auction: {
+              ...this.toPlainAuction(auction),
+              status: AuctionStatus.ACTIVE,
+            },
           });
         } catch (err) {
           await session.abortTransaction();
@@ -581,7 +601,10 @@ export class AuctionsService {
       // Publish real-time status change for each ended auction (non-blocking)
       for (const auction of auctions) {
         void this.realtimeService.publishAuctionStatusChanged({
-          auction: { ...auction, status: AuctionStatus.ENDED },
+          auction: {
+            ...this.toPlainAuction(auction),
+            status: AuctionStatus.ENDED,
+          },
         });
       }
     } catch (err) {

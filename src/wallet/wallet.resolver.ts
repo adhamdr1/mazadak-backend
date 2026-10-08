@@ -115,7 +115,10 @@ export class WalletResolver {
       context: { user?: JwtPayload },
     ) => {
       if (!context.user) return false;
-      return payload.walletUpdated.userId.toString() === context.user.sub;
+      return (
+        context.user.role === UserRole.ADMIN ||
+        payload.walletUpdated.userId.toString() === context.user.sub
+      );
     },
   })
   walletUpdated(@CurrentUser() user: JwtPayload) {

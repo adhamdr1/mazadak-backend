@@ -9,6 +9,7 @@ import {
 } from '../interfaces/user.repository.interface';
 import { User, UserDocument } from '../entities/user.entity';
 import { AuthProvider } from '../enums/auth-provider.enum';
+import { UserRole } from '../enums/user-role.enum';
 
 @Injectable()
 export class MongoUserRepository implements IUserRepository {
@@ -140,6 +141,7 @@ export class MongoUserRepository implements IUserRepository {
       .countDocuments({
         isEmailVerified: true,
         deletedAt: null,
+        role: { $ne: UserRole.ADMIN },
       })
       .exec();
   }
@@ -147,6 +149,7 @@ export class MongoUserRepository implements IUserRepository {
   async countAll(filter?: UsersFilter): Promise<number> {
     const query: Record<string, unknown> = {
       deletedAt: null,
+      role: { $ne: UserRole.ADMIN },
     };
 
     if (filter?.search) {

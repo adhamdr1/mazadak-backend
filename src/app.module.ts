@@ -103,14 +103,30 @@ import { WithdrawalsModule } from './withdrawals/withdrawals.module';
         subscriptions: {
           'graphql-ws': {
             onConnect: async (ctx) => {
-              const params = ctx.connectionParams as Record<string, string>;
-              const authHeader = params?.authorization ?? params?.Authorization;
+              const params = (ctx.connectionParams || {}) as Record<
+                string,
+                unknown
+              >;
+              const headers = (params.headers || {}) as Record<string, unknown>;
 
-              if (!authHeader) {
+              const rawToken =
+                (params.authorization as string | undefined) ||
+                (params.Authorization as string | undefined) ||
+                (params.token as string | undefined) ||
+                (params.accessToken as string | undefined) ||
+                (params.authToken as string | undefined) ||
+                (headers.authorization as string | undefined) ||
+                (headers.Authorization as string | undefined) ||
+                (headers.token as string | undefined);
+
+              if (!rawToken || typeof rawToken !== 'string') {
                 return;
               }
 
-              const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+              const token = rawToken.replace(/^Bearer\s+/i, '').trim();
+              if (!token) {
+                return;
+              }
 
               try {
                 const payload = jwtService.verify<JwtPayload>(token);
@@ -126,22 +142,32 @@ import { WithdrawalsModule } from './withdrawals/withdrawals.module';
                   role: user.role,
                 } satisfies JwtPayload;
               } catch {
-                // Invalid token - proceed
+                // Invalid token - proceed as unauthenticated WS
               }
             },
           },
         },
-        context: ({
-          req,
-          res,
-          extra,
-        }: {
-          req?: Request;
+        context: (ctx: {
+          req?: Request & { user?: JwtPayload };
           res?: Response;
-          extra?: Record<string, unknown>;
+          extra?: { user?: JwtPayload; [key: string]: unknown };
+          user?: JwtPayload;
+          connectionParams?: Record<string, unknown>;
         }) => {
-          if (req) return { req, res };
-          return { req: extra, user: extra?.user };
+          const user =
+            ctx.extra?.user ||
+            ctx.user ||
+            (ctx.req as { user?: JwtPayload } | undefined)?.user;
+
+          if (ctx.extra || !ctx.res) {
+            // WebSocket Subscription execution
+            if (ctx.req && user) {
+              ctx.req.user = user;
+            }
+            return { req: ctx.req, user, extra: ctx.extra || ctx };
+          }
+          // HTTP Query / Mutation execution
+          return { req: ctx.req, res: ctx.res, user };
         },
       }),
     }),

@@ -144,24 +144,46 @@ export class AuctionsResolver {
   /**
    * Real-time subscription: fires when an auction status changes.
    * Covers: PENDING→ACTIVE (Cron), ACTIVE→ENDED (Cron), any→CANCELLED (manual).
-   * Public — anyone watching an auction page should receive status updates.
-   * Filter: only delivers events for the requested auctionId.
+   * Public — anyone watching an auction page or admin dashboard should receive status updates.
+   * Filter: if auctionId is provided, filters for that auction; otherwise delivers all status changes globally.
    */
   @Public()
   @Subscription(() => AuctionStatusChangedPayload, {
     name: 'auctionStatusChanged',
     filter: (
-      payload: { auctionStatusChanged: AuctionStatusChangedPayload },
-      variables: { auctionId: string },
-    ) =>
-      payload.auctionStatusChanged.auction._id.toString() ===
-      variables.auctionId,
+      payload: {
+        auctionStatusChanged?: AuctionStatusChangedPayload;
+        auction?: Auction;
+      },
+      variables?: { auctionId?: string },
+    ) => {
+      const auction =
+        payload.auctionStatusChanged?.auction ||
+        (payload as { auction?: Auction }).auction;
+      if (!auction) return false;
+      if (!variables?.auctionId) return true;
+      const targetId =
+        auction._id?.toString() || (auction as { id?: string }).id?.toString();
+      return targetId === variables.auctionId;
+    },
+    resolve: (payload: {
+      auctionStatusChanged?: AuctionStatusChangedPayload;
+      auction?: Auction;
+    }) => {
+      if (payload.auctionStatusChanged?.auction) {
+        return payload.auctionStatusChanged;
+      }
+      if ((payload as { auction?: Auction }).auction) {
+        return { auction: (payload as { auction?: Auction }).auction! };
+      }
+      return payload;
+    },
   })
   auctionStatusChanged(
     // auctionId is declared in the schema via @Args for the filter function;
     // it is intentionally unused in the method body (filter reads from variables).
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    @Args('auctionId', { type: () => ID }) _id: string,
+    @Args('auctionId', { type: () => ID, nullable: true }) _id?: string,
   ) {
     return this.pubSub.asyncIterableIterator(
       PUB_SUB_EVENTS.AUCTION_STATUS_CHANGED,

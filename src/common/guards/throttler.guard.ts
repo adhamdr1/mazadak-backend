@@ -41,8 +41,12 @@ export class CustomThrottlerGuard extends ThrottlerGuard {
     // WebSocket Subscriptions have no HTTP req/res — skip throttling entirely.
     if (context.getType<string>() === 'graphql') {
       const ctx = GqlExecutionContext.create(context);
-      const gqlCtx = ctx.getContext<{ req?: { headers?: unknown } }>();
-      if (!gqlCtx.req?.headers) {
+      const gqlCtx = ctx.getContext<{
+        req?: { headers?: unknown };
+        res?: unknown;
+        extra?: unknown;
+      }>();
+      if (gqlCtx.extra || !gqlCtx.res) {
         return true;
       }
     }

@@ -148,6 +148,7 @@ export class RealtimeService {
   async publishWithdrawalRequested(payload: unknown): Promise<void> {
     await this.publishSafely(PUB_SUB_EVENTS.WITHDRAWAL_REQUESTED, {
       adminWithdrawalFeed: payload,
+      withdrawalRequested: payload,
     });
   }
 
@@ -158,6 +159,7 @@ export class RealtimeService {
     await this.publishSafely(PUB_SUB_EVENTS.WITHDRAWAL_STATUS_CHANGED, {
       myWithdrawalUpdated: payload,
       adminWithdrawalFeed: payload,
+      withdrawalStatusChanged: payload,
     });
   }
 
