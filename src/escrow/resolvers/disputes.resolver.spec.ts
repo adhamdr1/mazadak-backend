@@ -236,11 +236,22 @@ describe('DisputesResolver', () => {
   });
 
   describe('disputeStatusChanged subscription', () => {
-    it('should return async iterable iterator for DISPUTE_STATUS_CHANGED', () => {
+    it('should return async iterable iterator for DISPUTE_STATUS_CHANGED with disputeId', () => {
       const mockIterator = { [Symbol.asyncIterator]: jest.fn() };
       mockPubSub.asyncIterableIterator.mockReturnValue(mockIterator);
 
       const result = resolver.disputeStatusChanged(disputeId);
+      expect(result).toBe(mockIterator);
+      expect(mockPubSub.asyncIterableIterator).toHaveBeenCalledWith(
+        PUB_SUB_EVENTS.DISPUTE_STATUS_CHANGED,
+      );
+    });
+
+    it('should return async iterable iterator for DISPUTE_STATUS_CHANGED without disputeId (global feed)', () => {
+      const mockIterator = { [Symbol.asyncIterator]: jest.fn() };
+      mockPubSub.asyncIterableIterator.mockReturnValue(mockIterator);
+
+      const result = resolver.disputeStatusChanged();
       expect(result).toBe(mockIterator);
       expect(mockPubSub.asyncIterableIterator).toHaveBeenCalledWith(
         PUB_SUB_EVENTS.DISPUTE_STATUS_CHANGED,

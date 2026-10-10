@@ -85,6 +85,19 @@ describe('AdminUsersResolver', () => {
     );
   });
 
+  it('should pass filters to usersService.findAll in adminGetUsers', async () => {
+    const filter = {
+      isBanned: true,
+      role: UserRole.USER,
+      isEmailVerified: true,
+    };
+    await resolver.adminGetUsers({ page: 1, limit: 10 }, filter);
+    expect(mockUsersService.findAll).toHaveBeenCalledWith(
+      { page: 1, limit: 10 },
+      filter,
+    );
+  });
+
   it('should call adminGetUserDetails', async () => {
     const result = await resolver.adminGetUserDetails(userId);
 

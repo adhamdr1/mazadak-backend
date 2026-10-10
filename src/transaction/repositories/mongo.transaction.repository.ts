@@ -116,8 +116,17 @@ export class MongoTransactionRepository implements ITransactionRepository {
 
     if (filter.type) query['type'] = filter.type;
     if (filter.status) query['status'] = filter.status;
+    if (filter.walletId && !baseFilter['walletId']) {
+      if (Types.ObjectId.isValid(filter.walletId)) {
+        query['walletId'] = new Types.ObjectId(filter.walletId);
+      }
+    }
     if (filter.search) {
-      query['referenceId'] = { $regex: filter.search, $options: 'i' };
+      const trimmed = filter.search.trim();
+      if (trimmed.length > 0) {
+        const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        query['referenceId'] = { $regex: escaped, $options: 'i' };
+      }
     }
 
     if (filter.startDate || filter.endDate) {

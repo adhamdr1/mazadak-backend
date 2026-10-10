@@ -108,3 +108,6 @@ export const UserSchema = SchemaFactory.createForClass(User);
 
 // Add text index for full-text search
 UserSchema.index({ firstName: 'text', lastName: 'text', email: 'text' });
+
+// ESR Compound index for admin filtering and sorted listing
+UserSchema.index({ role: 1, isBanned: 1, isEmailVerified: 1, createdAt: -1 });

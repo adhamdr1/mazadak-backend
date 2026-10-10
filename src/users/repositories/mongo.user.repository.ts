@@ -116,6 +116,18 @@ export class MongoUserRepository implements IUserRepository {
       query.$text = { $search: filter.search };
     }
 
+    if (typeof filter?.isBanned === 'boolean') {
+      query.isBanned = filter.isBanned;
+    }
+
+    if (filter?.role) {
+      query.role = filter.role;
+    }
+
+    if (typeof filter?.isEmailVerified === 'boolean') {
+      query.isEmailVerified = filter.isEmailVerified;
+    }
+
     const sortParams: Record<string, 1 | -1> = {};
     if (filter?.sort) {
       sortParams[filter.sort.field] = filter.sort.order === 'ASC' ? 1 : -1;
@@ -149,11 +161,19 @@ export class MongoUserRepository implements IUserRepository {
   async countAll(filter?: UsersFilter): Promise<number> {
     const query: Record<string, unknown> = {
       deletedAt: null,
-      role: { $ne: UserRole.ADMIN },
+      role: filter?.role ? filter.role : { $ne: UserRole.ADMIN },
     };
 
     if (filter?.search) {
       query.$text = { $search: filter.search };
+    }
+
+    if (typeof filter?.isBanned === 'boolean') {
+      query.isBanned = filter.isBanned;
+    }
+
+    if (typeof filter?.isEmailVerified === 'boolean') {
+      query.isEmailVerified = filter.isEmailVerified;
     }
 
     return await this.userModel.countDocuments(query).exec();

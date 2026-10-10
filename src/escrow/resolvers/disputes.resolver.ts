@@ -163,33 +163,39 @@ export class DisputesResolver {
 
   /**
    * Real-time subscription: fires whenever a dispute's status changes.
-   * Only the openedBy user, againstUser, or admin can receive updates for this dispute.
+   * If disputeId is provided: only the openedBy user, againstUser, or admin can receive updates for that dispute.
+   * If disputeId is omitted (Global): admin receives all updates across the platform; regular user receives updates for their own disputes.
    */
   @Subscription(() => DisputeStatusChangedPayload, {
     name: 'disputeStatusChanged',
     filter: (
       payload: {
-        disputeStatusChanged: DisputeStatusChangedInternalPayload;
+        disputeStatusChanged?: DisputeStatusChangedInternalPayload;
       },
-      variables: { disputeId: string },
-      context: { user?: JwtPayload },
+      variables?: { disputeId?: string },
+      context?: { user?: JwtPayload },
     ) => {
-      if (!context.user) return false;
-      const isTarget =
-        payload.disputeStatusChanged.disputeId.toString() ===
-        variables.disputeId;
-      const isAuthorized =
-        payload.disputeStatusChanged.openedById === context.user.sub ||
-        payload.disputeStatusChanged.againstUserId === context.user.sub ||
-        context.user.role === UserRole.ADMIN;
-      return isTarget && isAuthorized;
+      const user = context?.user;
+      if (!user) return false;
+      const data = payload.disputeStatusChanged;
+      if (!data) return false;
+
+      const isParty =
+        data.openedById === user.sub || data.againstUserId === user.sub;
+      const isAdmin = user.role === UserRole.ADMIN;
+      if (!isParty && !isAdmin) return false;
+
+      if (!variables?.disputeId) return true;
+      const targetId = data.disputeId?.toString();
+      return targetId === variables.disputeId;
     },
-    resolve: (payload: { disputeStatusChanged: DisputeStatusChangedPayload }) =>
-      payload.disputeStatusChanged,
+    resolve: (payload: {
+      disputeStatusChanged?: DisputeStatusChangedPayload;
+    }) => payload.disputeStatusChanged,
   })
   disputeStatusChanged(
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    @Args('disputeId', { type: () => ID }) _disputeId: string,
+    @Args('disputeId', { type: () => ID, nullable: true }) _disputeId?: string,
   ) {
     return this.pubSub.asyncIterableIterator(
       PUB_SUB_EVENTS.DISPUTE_STATUS_CHANGED,
