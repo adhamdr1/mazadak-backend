@@ -216,6 +216,17 @@ export class MongoAuctionRepository implements IAuctionRepository {
       ];
     }
 
+    if (filter.startDate || filter.endDate) {
+      const createdAtQuery: Record<string, Date> = {};
+      if (filter.startDate) createdAtQuery['$gte'] = filter.startDate;
+      if (filter.endDate) {
+        const end = new Date(filter.endDate);
+        end.setHours(23, 59, 59, 999);
+        createdAtQuery['$lte'] = end;
+      }
+      query['createdAt'] = createdAtQuery;
+    }
+
     return query;
   }
 

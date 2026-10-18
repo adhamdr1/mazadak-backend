@@ -14,6 +14,8 @@ export interface UsersFilter {
   isBanned?: boolean;
   role?: UserRole;
   isEmailVerified?: boolean;
+  startDate?: Date;
+  endDate?: Date;
 }
 
 export interface CreateUserData {

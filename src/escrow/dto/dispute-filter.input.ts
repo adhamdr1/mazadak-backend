@@ -5,8 +5,11 @@ import {
   IsOptional,
   IsString,
   MaxLength,
+  IsDate,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { DisputeStatus } from '../enums/dispute-status.enum';
+import { IsAfter } from '../../common/decorators/is-after.decorator';
 
 @InputType()
 export class DisputeFilterInput {
@@ -40,4 +43,17 @@ export class DisputeFilterInput {
   @IsOptional()
   @IsMongoId()
   auctionId?: string;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsDate()
+  @Type(() => Date)
+  startDate?: Date;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsDate()
+  @Type(() => Date)
+  @IsAfter('startDate')
+  endDate?: Date;
 }

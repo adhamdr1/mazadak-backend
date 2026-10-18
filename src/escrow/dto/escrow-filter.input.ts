@@ -6,8 +6,11 @@ import {
   IsOptional,
   IsString,
   MaxLength,
+  IsDate,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { EscrowStatus } from '../enums/escrow-status.enum';
+import { IsAfter } from '../../common/decorators/is-after.decorator';
 
 @InputType()
 export class EscrowFilterInput {
@@ -46,4 +49,17 @@ export class EscrowFilterInput {
   @IsOptional()
   @IsMongoId()
   auctionId?: string;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsDate()
+  @Type(() => Date)
+  startDate?: Date;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsDate()
+  @Type(() => Date)
+  @IsAfter('startDate')
+  endDate?: Date;
 }

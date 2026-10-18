@@ -80,7 +80,9 @@ export class MongoWithdrawalRepository implements IWithdrawalRepository {
         createdAtQuery.$gte = filter.startDate;
       }
       if (filter.endDate) {
-        createdAtQuery.$lte = filter.endDate;
+        const end = new Date(filter.endDate);
+        end.setHours(23, 59, 59, 999);
+        createdAtQuery.$lte = end;
       }
       query.createdAt = createdAtQuery;
     }

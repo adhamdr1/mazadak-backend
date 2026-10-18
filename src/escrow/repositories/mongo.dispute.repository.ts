@@ -124,6 +124,17 @@ export class MongoDisputeRepository implements IDisputeRepository {
       await this.applySearchFilter(query, filter.search, session);
     }
 
+    if (filter?.startDate || filter?.endDate) {
+      const createdAtQuery: Record<string, Date> = {};
+      if (filter.startDate) createdAtQuery['$gte'] = filter.startDate;
+      if (filter.endDate) {
+        const end = new Date(filter.endDate);
+        end.setHours(23, 59, 59, 999);
+        createdAtQuery['$lte'] = end;
+      }
+      query['createdAt'] = createdAtQuery;
+    }
+
     const safePage = page > 0 ? page : 1;
     const safeLimit = limit > 0 ? limit : 10;
     const skip = (safePage - 1) * safeLimit;

@@ -5,10 +5,12 @@ import {
   IsBoolean,
   IsEnum,
   ValidateNested,
+  IsDate,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { UsersSortInput } from './users-sort.input';
 import { UserRole } from '../enums/user-role.enum';
+import { IsAfter } from '../../common/decorators/is-after.decorator';
 
 @InputType()
 export class UsersFilterInput {
@@ -37,4 +39,17 @@ export class UsersFilterInput {
   @IsOptional()
   @IsBoolean()
   isEmailVerified?: boolean;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsDate()
+  @Type(() => Date)
+  startDate?: Date;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsDate()
+  @Type(() => Date)
+  @IsAfter('startDate')
+  endDate?: Date;
 }

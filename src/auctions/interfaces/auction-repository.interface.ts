@@ -13,6 +13,8 @@ export interface AuctionsFilter {
   status?: AuctionStatus;
   search?: string;
   sort?: AuctionsSort;
+  startDate?: Date;
+  endDate?: Date;
 }
 
 export interface CreateAuctionData {

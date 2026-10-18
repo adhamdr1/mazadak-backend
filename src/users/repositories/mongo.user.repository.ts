@@ -128,6 +128,17 @@ export class MongoUserRepository implements IUserRepository {
       query.isEmailVerified = filter.isEmailVerified;
     }
 
+    if (filter?.startDate || filter?.endDate) {
+      const createdAtQuery: Record<string, Date> = {};
+      if (filter.startDate) createdAtQuery['$gte'] = filter.startDate;
+      if (filter.endDate) {
+        const end = new Date(filter.endDate);
+        end.setHours(23, 59, 59, 999);
+        createdAtQuery['$lte'] = end;
+      }
+      query['createdAt'] = createdAtQuery;
+    }
+
     const sortParams: Record<string, 1 | -1> = {};
     if (filter?.sort) {
       sortParams[filter.sort.field] = filter.sort.order === 'ASC' ? 1 : -1;
@@ -174,6 +185,17 @@ export class MongoUserRepository implements IUserRepository {
 
     if (typeof filter?.isEmailVerified === 'boolean') {
       query.isEmailVerified = filter.isEmailVerified;
+    }
+
+    if (filter?.startDate || filter?.endDate) {
+      const createdAtQuery: Record<string, Date> = {};
+      if (filter.startDate) createdAtQuery['$gte'] = filter.startDate;
+      if (filter.endDate) {
+        const end = new Date(filter.endDate);
+        end.setHours(23, 59, 59, 999);
+        createdAtQuery['$lte'] = end;
+      }
+      query['createdAt'] = createdAtQuery;
     }
 
     return await this.userModel.countDocuments(query).exec();
