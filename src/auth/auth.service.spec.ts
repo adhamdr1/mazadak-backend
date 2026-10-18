@@ -17,6 +17,7 @@ import { InvalidCredentialsException } from './exceptions/invalid-credentials.ex
 import { EmailNotVerifiedException } from './exceptions/email-not-verified.exception';
 import { InvalidTokenException } from './exceptions/invalid-token.exception';
 import { AccountDisabledException } from './exceptions/account-disabled.exception';
+import { AccountBannedException } from './exceptions/account-banned.exception';
 import { GoogleAccountNoPasswordException } from './exceptions/google-account-no-password.exception';
 import { AccountSoftDeletedException } from './exceptions/account-soft-deleted.exception';
 import { SamePasswordException } from './exceptions/same-password.exception';
@@ -469,6 +470,16 @@ describe('AuthService', () => {
       await expect(
         service.googleLogin({ token: 'google-id-token' }),
       ).rejects.toThrow(AccountSoftDeletedException);
+    });
+
+    it('should throw AccountBannedException if user is banned', async () => {
+      mockVerifyIdToken.mockResolvedValue({ getPayload: () => googlePayload });
+      const bannedUser = createMockUser({ isBanned: true });
+      mockUsersService.findByEmail.mockResolvedValue(bannedUser);
+
+      await expect(
+        service.googleLogin({ token: 'google-id-token' }),
+      ).rejects.toThrow(AccountBannedException);
     });
 
     it('should link Google account if user exists with LOCAL provider and no googleId', async () => {

@@ -5,6 +5,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../users/enums/user-role.enum';
 import { TransactionService } from '../../transaction/transaction.service';
 import { WalletService } from '../../wallet/wallet.service';
+import { UsersService } from '../../users/users.service';
 import { TransactionsPage } from '../../transaction/dto/transactions-page.type';
 import { PaginationInput } from '../../common/dto/pagination.input';
 import { TransactionsFilterInput } from '../../transaction/dto/transactions-filter.input';
@@ -16,6 +17,7 @@ export class AdminTransactionsResolver {
   constructor(
     private readonly transactionService: TransactionService,
     private readonly walletService: WalletService,
+    private readonly usersService: UsersService,
   ) {}
 
   @Query(() => TransactionsPage)
@@ -38,6 +40,28 @@ export class AdminTransactionsResolver {
           totalPages: 0,
           hasNextPage: false,
         };
+      }
+    }
+
+    if (effectiveFilter.search && !effectiveFilter.walletId) {
+      const trimmed = effectiveFilter.search.trim();
+      if (trimmed.length > 0) {
+        try {
+          const usersPage = await this.usersService.findAll(
+            { page: 1, limit: 50 },
+            { search: trimmed },
+          );
+          if (usersPage.items.length > 0) {
+            const userIds = usersPage.items.map((u) => u._id.toString());
+            const wallets =
+              await this.walletService.getWalletsByUserIds(userIds);
+            if (wallets.length > 0) {
+              effectiveFilter.walletIds = wallets.map((w) => w._id.toString());
+            }
+          }
+        } catch {
+          // If searching users fails, continue with default search
+        }
       }
     }
 

@@ -6,6 +6,8 @@ export interface IWalletRepository {
 
   findByUserId(userId: string, session?: ClientSession): Promise<Wallet | null>;
 
+  findByUserIds(userIds: string[]): Promise<Wallet[]>;
+
   findById(walletId: string): Promise<Wallet | null>;
 
   findAll(page: number, limit: number): Promise<Wallet[]>;

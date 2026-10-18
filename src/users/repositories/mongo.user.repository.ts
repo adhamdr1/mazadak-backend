@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { ClientSession, Model } from 'mongoose';
+import { ClientSession, Model, Types } from 'mongoose';
 import {
   IUserRepository,
   CreateUserData,
@@ -113,7 +113,7 @@ export class MongoUserRepository implements IUserRepository {
     };
 
     if (filter?.search) {
-      query.$text = { $search: filter.search };
+      this.applySearchFilter(query, filter.search);
     }
 
     if (typeof filter?.isBanned === 'boolean') {
@@ -165,7 +165,7 @@ export class MongoUserRepository implements IUserRepository {
     };
 
     if (filter?.search) {
-      query.$text = { $search: filter.search };
+      this.applySearchFilter(query, filter.search);
     }
 
     if (typeof filter?.isBanned === 'boolean') {
@@ -177,6 +177,53 @@ export class MongoUserRepository implements IUserRepository {
     }
 
     return await this.userModel.countDocuments(query).exec();
+  }
+
+  private applySearchFilter(
+    query: Record<string, unknown>,
+    search?: string,
+  ): void {
+    if (!search) return;
+    const trimmed = search.trim();
+    if (!trimmed) return;
+
+    const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const searchRegex = new RegExp(escaped, 'i');
+
+    const orConditions: Array<Record<string, unknown>> = [
+      { firstName: { $regex: searchRegex } },
+      { lastName: { $regex: searchRegex } },
+      { email: { $regex: searchRegex } },
+      { phoneNumber: { $regex: searchRegex } },
+    ];
+
+    if (Types.ObjectId.isValid(trimmed)) {
+      orConditions.push({ _id: new Types.ObjectId(trimmed) });
+    }
+
+    const parts = trimmed.split(/\s+/).filter(Boolean);
+    if (parts.length > 1) {
+      const firstEscaped = parts[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const restEscaped = parts
+        .slice(1)
+        .join(' ')
+        .replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+      orConditions.push({
+        $and: [
+          { firstName: { $regex: new RegExp(firstEscaped, 'i') } },
+          { lastName: { $regex: new RegExp(restEscaped, 'i') } },
+        ],
+      });
+      orConditions.push({
+        $and: [
+          { firstName: { $regex: new RegExp(restEscaped, 'i') } },
+          { lastName: { $regex: new RegExp(firstEscaped, 'i') } },
+        ],
+      });
+    }
+
+    query.$or = orConditions;
   }
 
   async softDelete(id: string, session?: ClientSession): Promise<void> {

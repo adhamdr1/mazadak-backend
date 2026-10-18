@@ -791,6 +791,7 @@ enum SortOrder {
 input TransactionsFilterInput {
   search: String
   walletId: String
+  walletIds: [String!]
   userId: String
   type: TransactionType
   status: TransactionStatus
@@ -864,6 +865,8 @@ enum BidsSortField {
 }
 
 input EscrowFilterInput {
+  search: String
+  excludeDisputed: Boolean
   status: EscrowStatus
   userId: String
   buyerId: String
@@ -872,6 +875,7 @@ input EscrowFilterInput {
 }
 
 input DisputeFilterInput {
+  search: String
   status: DisputeStatus
   userId: String
   openedById: String

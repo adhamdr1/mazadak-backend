@@ -120,12 +120,47 @@ export class MongoTransactionRepository implements ITransactionRepository {
       if (Types.ObjectId.isValid(filter.walletId)) {
         query['walletId'] = new Types.ObjectId(filter.walletId);
       }
+    } else if (
+      filter.walletIds &&
+      filter.walletIds.length > 0 &&
+      !baseFilter['walletId'] &&
+      !filter.search
+    ) {
+      const validIds = filter.walletIds
+        .filter((id) => Types.ObjectId.isValid(id))
+        .map((id) => new Types.ObjectId(id));
+      if (validIds.length > 0) {
+        query['walletId'] = { $in: validIds };
+      }
     }
+
     if (filter.search) {
       const trimmed = filter.search.trim();
       if (trimmed.length > 0) {
         const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        query['referenceId'] = { $regex: escaped, $options: 'i' };
+        const regex = { $regex: escaped, $options: 'i' };
+
+        const searchConditions: Array<Record<string, unknown>> = [
+          { referenceId: regex },
+          { gatewayPaymentIntentId: regex },
+          { gatewayTransactionId: regex },
+        ];
+
+        if (
+          !baseFilter['walletId'] &&
+          !filter.walletId &&
+          filter.walletIds &&
+          filter.walletIds.length > 0
+        ) {
+          const validIds = filter.walletIds
+            .filter((id) => Types.ObjectId.isValid(id))
+            .map((id) => new Types.ObjectId(id));
+          if (validIds.length > 0) {
+            searchConditions.push({ walletId: { $in: validIds } });
+          }
+        }
+
+        query['$or'] = searchConditions;
       }
     }
 

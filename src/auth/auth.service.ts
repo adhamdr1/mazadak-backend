@@ -226,6 +226,9 @@ export class AuthService {
     if (user.deletedAt) {
       throw new AccountSoftDeletedException();
     }
+    if (user.isBanned) {
+      throw new AccountBannedException();
+    }
     // 4. Link account if needed
     if (!user.googleId && user.authProvider === AuthProvider.LOCAL) {
       user = await this.usersService.linkGoogleAccount(

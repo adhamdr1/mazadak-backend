@@ -24,6 +24,11 @@ export class TransactionsFilterInput {
   @IsString()
   walletId?: string;
 
+  @Field(() => [String], { nullable: true })
+  @IsOptional()
+  @IsString({ each: true })
+  walletIds?: string[];
+
   @Field({ nullable: true })
   @IsOptional()
   @IsString()

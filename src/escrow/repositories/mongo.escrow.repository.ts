@@ -7,6 +7,7 @@ import {
   UpdateEscrowExtraData,
 } from '../interfaces';
 import { Escrow, EscrowDocument } from '../entities';
+import { User, UserDocument } from '../../users/entities/user.entity';
 import { EscrowStatus } from '../enums';
 import { EscrowFilterInput } from '../dto';
 import Decimal from 'decimal.js';
@@ -16,6 +17,8 @@ export class MongoEscrowRepository implements IEscrowRepository {
   constructor(
     @InjectModel(Escrow.name)
     private readonly escrowModel: Model<EscrowDocument>,
+    @InjectModel(User.name)
+    private readonly userModel: Model<UserDocument>,
   ) {}
 
   async startSession(): Promise<ClientSession> {
@@ -101,6 +104,8 @@ export class MongoEscrowRepository implements IEscrowRepository {
 
     if (filter?.status) {
       query.status = filter.status;
+    } else if (filter?.excludeDisputed) {
+      query.status = { $ne: EscrowStatus.DISPUTED };
     }
 
     if (filter?.auctionId) {
@@ -118,6 +123,10 @@ export class MongoEscrowRepository implements IEscrowRepository {
     if (filter?.userId) {
       const userObjectId = new Types.ObjectId(filter.userId);
       query.$or = [{ buyerId: userObjectId }, { sellerId: userObjectId }];
+    }
+
+    if (filter?.search) {
+      await this.applySearchFilter(query, filter.search, session);
     }
 
     const safePage = page > 0 ? page : 1;
@@ -139,6 +148,117 @@ export class MongoEscrowRepository implements IEscrowRepository {
     ]);
 
     return { items, total };
+  }
+
+  private async applySearchFilter(
+    query: Record<string, unknown>,
+    search: string,
+    session?: ClientSession,
+  ): Promise<void> {
+    const trimmed = search.trim();
+    if (!trimmed) return;
+
+    const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const searchRegex = new RegExp(escaped, 'i');
+
+    const searchOrConditions: Array<Record<string, unknown>> = [
+      { releaseReason: { $regex: searchRegex } },
+    ];
+
+    // Check if the search term is a hex string (support short IDs like #BC674A or full MongoIds)
+    const cleanHex = trimmed.replace(/^#/, '');
+    const isHex = /^[0-9a-fA-F]+$/.test(cleanHex);
+
+    if (isHex) {
+      if (cleanHex.length === 24) {
+        const exactObjectId = new Types.ObjectId(cleanHex);
+        searchOrConditions.push(
+          { _id: exactObjectId },
+          { auctionId: exactObjectId },
+          { buyerId: exactObjectId },
+          { sellerId: exactObjectId },
+          { disputeId: exactObjectId },
+        );
+      } else if (cleanHex.length >= 3) {
+        searchOrConditions.push(
+          {
+            $expr: {
+              $regexMatch: {
+                input: { $toString: '$_id' },
+                regex: cleanHex,
+                options: 'i',
+              },
+            },
+          },
+          {
+            $expr: {
+              $regexMatch: {
+                input: { $toString: '$auctionId' },
+                regex: cleanHex,
+                options: 'i',
+              },
+            },
+          },
+        );
+      }
+    }
+
+    // Match users by name (first/last/composite), email, and phone
+    const userOrConditions: Array<Record<string, unknown>> = [
+      { firstName: { $regex: searchRegex } },
+      { lastName: { $regex: searchRegex } },
+      { email: { $regex: searchRegex } },
+      { phoneNumber: { $regex: searchRegex } },
+    ];
+
+    const parts = trimmed.split(/\s+/).filter(Boolean);
+    if (parts.length > 1) {
+      const firstEscaped = parts[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const restEscaped = parts
+        .slice(1)
+        .join(' ')
+        .replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+      userOrConditions.push({
+        $and: [
+          { firstName: { $regex: new RegExp(firstEscaped, 'i') } },
+          { lastName: { $regex: new RegExp(restEscaped, 'i') } },
+        ],
+      });
+      userOrConditions.push({
+        $and: [
+          { firstName: { $regex: new RegExp(restEscaped, 'i') } },
+          { lastName: { $regex: new RegExp(firstEscaped, 'i') } },
+        ],
+      });
+    }
+
+    const matchedUsers = await this.userModel
+      .find({
+        deletedAt: null,
+        $or: userOrConditions,
+      })
+      .select('_id')
+      .limit(50)
+      .session(session || null)
+      .lean()
+      .exec();
+
+    if (matchedUsers.length > 0) {
+      const matchedUserIds = matchedUsers.map((u) => u._id);
+      searchOrConditions.push(
+        { buyerId: { $in: matchedUserIds } },
+        { sellerId: { $in: matchedUserIds } },
+      );
+    }
+
+    // Safely merge with existing $or (such as filter.userId) without overwriting
+    if (query.$or) {
+      query.$and = [{ $or: query.$or }, { $or: searchOrConditions }];
+      delete query.$or;
+    } else {
+      query.$or = searchOrConditions;
+    }
   }
 
   async sumHeldEscrows(): Promise<number> {

@@ -111,3 +111,7 @@ UserSchema.index({ firstName: 'text', lastName: 'text', email: 'text' });
 
 // ESR Compound index for admin filtering and sorted listing
 UserSchema.index({ role: 1, isBanned: 1, isEmailVerified: 1, createdAt: -1 });
+
+// Indexes for fast name search and sorting
+UserSchema.index({ firstName: 1 });
+UserSchema.index({ lastName: 1 });

@@ -92,5 +92,7 @@ export class Escrow {
 export const EscrowSchema = SchemaFactory.createForClass(Escrow);
 
 EscrowSchema.index({ status: 1, inspectionPeriodEndsAt: 1 });
+EscrowSchema.index({ status: 1, createdAt: -1 });
+EscrowSchema.index({ createdAt: -1 });
 EscrowSchema.index({ buyerId: 1, status: 1 });
 EscrowSchema.index({ sellerId: 1, status: 1 });

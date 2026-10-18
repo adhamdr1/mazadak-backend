@@ -1,9 +1,21 @@
 import { InputType, Field } from '@nestjs/graphql';
-import { IsEnum, IsMongoId, IsOptional } from 'class-validator';
+import {
+  IsEnum,
+  IsMongoId,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 import { DisputeStatus } from '../enums/dispute-status.enum';
 
 @InputType()
 export class DisputeFilterInput {
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+
   @Field(() => DisputeStatus, { nullable: true })
   @IsOptional()
   @IsEnum(DisputeStatus)

@@ -1,9 +1,27 @@
 import { InputType, Field } from '@nestjs/graphql';
-import { IsEnum, IsMongoId, IsOptional } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsMongoId,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 import { EscrowStatus } from '../enums/escrow-status.enum';
 
 @InputType()
 export class EscrowFilterInput {
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+
+  @Field(() => Boolean, { nullable: true })
+  @IsOptional()
+  @IsBoolean()
+  excludeDisputed?: boolean;
+
   @Field(() => EscrowStatus, { nullable: true })
   @IsOptional()
   @IsEnum(EscrowStatus)
