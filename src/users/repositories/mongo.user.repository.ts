@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { ClientSession, Model } from 'mongoose';
+import { ClientSession, Model, Types } from 'mongoose';
 import {
   IUserRepository,
   CreateUserData,
@@ -113,7 +113,30 @@ export class MongoUserRepository implements IUserRepository {
     };
 
     if (filter?.search) {
-      query.$text = { $search: filter.search };
+      this.applySearchFilter(query, filter.search);
+    }
+
+    if (typeof filter?.isBanned === 'boolean') {
+      query.isBanned = filter.isBanned;
+    }
+
+    if (filter?.role) {
+      query.role = filter.role;
+    }
+
+    if (typeof filter?.isEmailVerified === 'boolean') {
+      query.isEmailVerified = filter.isEmailVerified;
+    }
+
+    if (filter?.startDate || filter?.endDate) {
+      const createdAtQuery: Record<string, Date> = {};
+      if (filter.startDate) createdAtQuery['$gte'] = filter.startDate;
+      if (filter.endDate) {
+        const end = new Date(filter.endDate);
+        end.setHours(23, 59, 59, 999);
+        createdAtQuery['$lte'] = end;
+      }
+      query['createdAt'] = createdAtQuery;
     }
 
     const sortParams: Record<string, 1 | -1> = {};
@@ -149,14 +172,80 @@ export class MongoUserRepository implements IUserRepository {
   async countAll(filter?: UsersFilter): Promise<number> {
     const query: Record<string, unknown> = {
       deletedAt: null,
-      role: { $ne: UserRole.ADMIN },
+      role: filter?.role ? filter.role : { $ne: UserRole.ADMIN },
     };
 
     if (filter?.search) {
-      query.$text = { $search: filter.search };
+      this.applySearchFilter(query, filter.search);
+    }
+
+    if (typeof filter?.isBanned === 'boolean') {
+      query.isBanned = filter.isBanned;
+    }
+
+    if (typeof filter?.isEmailVerified === 'boolean') {
+      query.isEmailVerified = filter.isEmailVerified;
+    }
+
+    if (filter?.startDate || filter?.endDate) {
+      const createdAtQuery: Record<string, Date> = {};
+      if (filter.startDate) createdAtQuery['$gte'] = filter.startDate;
+      if (filter.endDate) {
+        const end = new Date(filter.endDate);
+        end.setHours(23, 59, 59, 999);
+        createdAtQuery['$lte'] = end;
+      }
+      query['createdAt'] = createdAtQuery;
     }
 
     return await this.userModel.countDocuments(query).exec();
+  }
+
+  private applySearchFilter(
+    query: Record<string, unknown>,
+    search?: string,
+  ): void {
+    if (!search) return;
+    const trimmed = search.trim();
+    if (!trimmed) return;
+
+    const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const searchRegex = new RegExp(escaped, 'i');
+
+    const orConditions: Array<Record<string, unknown>> = [
+      { firstName: { $regex: searchRegex } },
+      { lastName: { $regex: searchRegex } },
+      { email: { $regex: searchRegex } },
+      { phoneNumber: { $regex: searchRegex } },
+    ];
+
+    if (Types.ObjectId.isValid(trimmed)) {
+      orConditions.push({ _id: new Types.ObjectId(trimmed) });
+    }
+
+    const parts = trimmed.split(/\s+/).filter(Boolean);
+    if (parts.length > 1) {
+      const firstEscaped = parts[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const restEscaped = parts
+        .slice(1)
+        .join(' ')
+        .replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+      orConditions.push({
+        $and: [
+          { firstName: { $regex: new RegExp(firstEscaped, 'i') } },
+          { lastName: { $regex: new RegExp(restEscaped, 'i') } },
+        ],
+      });
+      orConditions.push({
+        $and: [
+          { firstName: { $regex: new RegExp(restEscaped, 'i') } },
+          { lastName: { $regex: new RegExp(firstEscaped, 'i') } },
+        ],
+      });
+    }
+
+    query.$or = orConditions;
   }
 
   async softDelete(id: string, session?: ClientSession): Promise<void> {

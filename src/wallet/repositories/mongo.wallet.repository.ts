@@ -27,6 +27,16 @@ export class MongoWalletRepository implements IWalletRepository {
       .exec();
   }
 
+  async findByUserIds(userIds: string[]): Promise<Wallet[]> {
+    const validObjectIds = userIds
+      .filter((id) => Types.ObjectId.isValid(id))
+      .map((id) => new Types.ObjectId(id));
+    if (validObjectIds.length === 0) return [];
+    return await this.walletModel
+      .find({ userId: { $in: validObjectIds } })
+      .exec();
+  }
+
   async findById(walletId: string): Promise<Wallet | null> {
     return await this.walletModel.findById(new Types.ObjectId(walletId)).exec();
   }

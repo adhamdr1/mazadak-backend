@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { BadRequestException } from '@nestjs/common';
 import { AuctionsService } from './auctions.service';
 import { UploadService } from '../upload/upload.service';
 import { Types } from 'mongoose';
@@ -362,6 +363,12 @@ describe('AuctionsService', () => {
       await expect(
         service.adminCancelAuction(auctionId, 'Violates TOS'),
       ).rejects.toThrow(AuctionInvalidStateException);
+    });
+
+    it('should throw BadRequestException if reason is shorter than 10 characters', async () => {
+      await expect(
+        service.adminCancelAuction(auctionId, 'Too short'),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 

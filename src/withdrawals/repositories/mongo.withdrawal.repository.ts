@@ -47,13 +47,42 @@ export class MongoWithdrawalRepository implements IWithdrawalRepository {
       query.payoutMethod = filter.payoutMethod;
     }
 
+    if (filter?.userId && !baseQuery.userId) {
+      if (Types.ObjectId.isValid(filter.userId)) {
+        query.userId = new Types.ObjectId(filter.userId);
+      }
+    }
+
+    if (filter?.search) {
+      const trimmedSearch = filter.search.trim();
+      if (trimmedSearch.length > 0) {
+        const escaped = trimmedSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(escaped, 'i');
+        const orConditions: Array<Record<string, unknown>> = [
+          { 'payoutDetails.accountHolderName': regex },
+          { 'payoutDetails.phoneNumber': regex },
+          { 'payoutDetails.iban': regex },
+          { 'payoutDetails.accountNumber': regex },
+          { 'payoutDetails.walletNumber': regex },
+          { 'payoutDetails.ipaAddress': regex },
+          { adminReference: regex },
+        ];
+        if (Types.ObjectId.isValid(trimmedSearch)) {
+          orConditions.push({ _id: new Types.ObjectId(trimmedSearch) });
+        }
+        query.$or = orConditions;
+      }
+    }
+
     if (filter?.startDate || filter?.endDate) {
       const createdAtQuery: Record<string, Date> = {};
       if (filter.startDate) {
         createdAtQuery.$gte = filter.startDate;
       }
       if (filter.endDate) {
-        createdAtQuery.$lte = filter.endDate;
+        const end = new Date(filter.endDate);
+        end.setHours(23, 59, 59, 999);
+        createdAtQuery.$lte = end;
       }
       query.createdAt = createdAtQuery;
     }

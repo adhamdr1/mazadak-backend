@@ -85,3 +85,4 @@ DisputeSchema.index({ auctionId: 1, status: 1 });
 DisputeSchema.index({ openedById: 1, status: 1 });
 DisputeSchema.index({ againstUserId: 1, status: 1 });
 DisputeSchema.index({ status: 1, createdAt: -1 });
+DisputeSchema.index({ createdAt: -1 });

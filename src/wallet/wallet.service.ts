@@ -128,6 +128,10 @@ export class WalletService {
     return await this.getWalletOrThrow(userId);
   }
 
+  async getWalletsByUserIds(userIds: string[]): Promise<Wallet[]> {
+    return await this.walletRepository.findByUserIds(userIds);
+  }
+
   async sumAllBalances(): Promise<number> {
     return this.walletRepository.sumAllBalances();
   }

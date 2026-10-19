@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Escrow, EscrowSchema, Dispute, DisputeSchema } from './entities';
+import { User, UserSchema } from '../users/entities/user.entity';
 import {
   EscrowService,
   DisputesService,
@@ -18,6 +19,7 @@ import { OutboxModule } from '../infrastructure/outbox/outbox.module';
     MongooseModule.forFeature([
       { name: Escrow.name, schema: EscrowSchema },
       { name: Dispute.name, schema: DisputeSchema },
+      { name: User.name, schema: UserSchema },
     ]),
     WalletModule,
     OutboxModule,

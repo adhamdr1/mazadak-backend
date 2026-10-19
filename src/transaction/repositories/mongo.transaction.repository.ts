@@ -116,14 +116,62 @@ export class MongoTransactionRepository implements ITransactionRepository {
 
     if (filter.type) query['type'] = filter.type;
     if (filter.status) query['status'] = filter.status;
+    if (filter.walletId && !baseFilter['walletId']) {
+      if (Types.ObjectId.isValid(filter.walletId)) {
+        query['walletId'] = new Types.ObjectId(filter.walletId);
+      }
+    } else if (
+      filter.walletIds &&
+      filter.walletIds.length > 0 &&
+      !baseFilter['walletId'] &&
+      !filter.search
+    ) {
+      const validIds = filter.walletIds
+        .filter((id) => Types.ObjectId.isValid(id))
+        .map((id) => new Types.ObjectId(id));
+      if (validIds.length > 0) {
+        query['walletId'] = { $in: validIds };
+      }
+    }
+
     if (filter.search) {
-      query['referenceId'] = { $regex: filter.search, $options: 'i' };
+      const trimmed = filter.search.trim();
+      if (trimmed.length > 0) {
+        const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = { $regex: escaped, $options: 'i' };
+
+        const searchConditions: Array<Record<string, unknown>> = [
+          { referenceId: regex },
+          { gatewayPaymentIntentId: regex },
+          { gatewayTransactionId: regex },
+        ];
+
+        if (
+          !baseFilter['walletId'] &&
+          !filter.walletId &&
+          filter.walletIds &&
+          filter.walletIds.length > 0
+        ) {
+          const validIds = filter.walletIds
+            .filter((id) => Types.ObjectId.isValid(id))
+            .map((id) => new Types.ObjectId(id));
+          if (validIds.length > 0) {
+            searchConditions.push({ walletId: { $in: validIds } });
+          }
+        }
+
+        query['$or'] = searchConditions;
+      }
     }
 
     if (filter.startDate || filter.endDate) {
       const createdAtQuery: Record<string, Date> = {};
       if (filter.startDate) createdAtQuery['$gte'] = filter.startDate;
-      if (filter.endDate) createdAtQuery['$lte'] = filter.endDate;
+      if (filter.endDate) {
+        const end = new Date(filter.endDate);
+        end.setHours(23, 59, 59, 999);
+        createdAtQuery['$lte'] = end;
+      }
       query['createdAt'] = createdAtQuery;
     }
 

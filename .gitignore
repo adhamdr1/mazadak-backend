@@ -62,4 +62,8 @@ token.txt
 reset-db.ts
 
 # Load testing generated reports
-load-tests/reports/*.html
+load-tests/reports/*.html
+
+# Artifacts
+artifacts/
+

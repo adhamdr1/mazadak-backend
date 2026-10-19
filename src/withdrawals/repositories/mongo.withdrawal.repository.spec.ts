@@ -157,6 +157,29 @@ describe('MongoWithdrawalRepository', () => {
         hasNextPage: false,
       });
     });
+
+    it('should filter by userId and search in findAll', async () => {
+      const targetUserId = new Types.ObjectId().toString();
+      const mockItems = [{ _id: '1' }];
+      mockExec.mockResolvedValueOnce(mockItems).mockResolvedValueOnce(1);
+
+      const result = await repository.findAll(
+        { page: 1, limit: 10 },
+        { userId: targetUserId, search: '01012345678' },
+      );
+
+      expect(result).toEqual({
+        items: mockItems,
+        total: 1,
+        totalPages: 1,
+        hasNextPage: false,
+      });
+      expect(mockWithdrawalModel.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: new Types.ObjectId(targetUserId),
+        }),
+      );
+    });
   });
 
   describe('transitionStatus', () => {

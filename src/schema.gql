@@ -765,6 +765,11 @@ input PaginationInput {
 input UsersFilterInput {
   search: String
   sort: UsersSortInput
+  isBanned: Boolean
+  role: UserRole
+  isEmailVerified: Boolean
+  startDate: DateTime
+  endDate: DateTime
 }
 
 input UsersSortInput {
@@ -787,6 +792,9 @@ enum SortOrder {
 
 input TransactionsFilterInput {
   search: String
+  walletId: String
+  walletIds: [String!]
+  userId: String
   type: TransactionType
   status: TransactionStatus
   startDate: DateTime
@@ -826,6 +834,8 @@ input AuctionsFilterInput {
   status: AuctionStatus
   search: String
   sort: AuctionsSortInput
+  startDate: DateTime
+  endDate: DateTime
 }
 
 input AuctionsSortInput {
@@ -859,22 +869,31 @@ enum BidsSortField {
 }
 
 input EscrowFilterInput {
+  search: String
+  excludeDisputed: Boolean
   status: EscrowStatus
   userId: String
   buyerId: String
   sellerId: String
   auctionId: String
+  startDate: DateTime
+  endDate: DateTime
 }
 
 input DisputeFilterInput {
+  search: String
   status: DisputeStatus
   userId: String
   openedById: String
   againstUserId: String
   auctionId: String
+  startDate: DateTime
+  endDate: DateTime
 }
 
 input WithdrawalsFilterInput {
+  search: String
+  userId: String
   status: WithdrawalStatus
   payoutMethod: PayoutMethod
   sortOrder: SortOrder = DESC
@@ -1153,7 +1172,7 @@ type Subscription {
   auctionStatusChanged(auctionId: ID): AuctionStatusChangedPayload!
   bidAdded(auctionId: ID!): BidAddedPayload!
   escrowStatusChanged(escrowId: ID!): EscrowStatusChangedPayload!
-  disputeStatusChanged(disputeId: ID!): DisputeStatusChangedPayload!
+  disputeStatusChanged(disputeId: ID): DisputeStatusChangedPayload!
   adminWithdrawalFeed: WithdrawalRequest!
   myWithdrawalUpdated: WithdrawalRequest!
   messageSent(auctionId: ID!): ChatMessage!

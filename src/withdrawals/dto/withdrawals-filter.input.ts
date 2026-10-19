@@ -1,5 +1,5 @@
 import { InputType, Field } from '@nestjs/graphql';
-import { IsEnum, IsOptional, IsDate } from 'class-validator';
+import { IsEnum, IsOptional, IsDate, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 import { WithdrawalStatus } from '../enums/withdrawal-status.enum';
 import { PayoutMethod } from '../enums/payout-method.enum';
@@ -7,6 +7,16 @@ import { SortOrder } from '../../common/enums/sort-order.enum';
 
 @InputType()
 export class WithdrawalsFilterInput {
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsString()
+  userId?: string;
+
   @Field(() => WithdrawalStatus, { nullable: true })
   @IsOptional()
   @IsEnum(WithdrawalStatus)

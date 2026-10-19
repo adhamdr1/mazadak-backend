@@ -1,4 +1,9 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  Logger,
+  BadRequestException,
+} from '@nestjs/common';
 import { Types } from 'mongoose';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';
@@ -400,6 +405,10 @@ export class AuctionsService {
     auctionId: string,
     reason: string,
   ): Promise<boolean> {
+    if (!reason || reason.trim().length < 10) {
+      throw new BadRequestException('REASON_TOO_SHORT');
+    }
+
     const auction = await this.getAuctionOrThrow(auctionId);
 
     if (

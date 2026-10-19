@@ -19,6 +19,21 @@ export class TransactionsFilterInput {
   @IsString()
   search?: string;
 
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsString()
+  walletId?: string;
+
+  @Field(() => [String], { nullable: true })
+  @IsOptional()
+  @IsString({ each: true })
+  walletIds?: string[];
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsString()
+  userId?: string;
+
   @Field(() => TransactionType, { nullable: true })
   @IsOptional()
   @IsEnum(TransactionType)

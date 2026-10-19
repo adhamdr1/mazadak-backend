@@ -5,11 +5,13 @@ import {
   IsString,
   MaxLength,
   ValidateNested,
+  IsDate,
 } from 'class-validator';
 import { AuctionCategory } from '../enums/auction-category.enum';
 import { AuctionStatus } from '../enums/auction-status.enum';
 import { AuctionsSortInput } from './auctions-sort.input';
 import { Type } from 'class-transformer';
+import { IsAfter } from '../../common/decorators/is-after.decorator';
 
 @InputType()
 export class AuctionsFilterInput {
@@ -34,4 +36,17 @@ export class AuctionsFilterInput {
   @ValidateNested()
   @Type(() => AuctionsSortInput)
   sort?: AuctionsSortInput;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsDate()
+  @Type(() => Date)
+  startDate?: Date;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsDate()
+  @Type(() => Date)
+  @IsAfter('startDate')
+  endDate?: Date;
 }

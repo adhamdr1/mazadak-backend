@@ -1,6 +1,7 @@
 import { ClientSession } from 'mongoose';
 import { User } from '../entities/user.entity';
 import { AuthProvider } from '../enums/auth-provider.enum';
+import { UserRole } from '../enums/user-role.enum';
 
 export interface UsersSort {
   field: string;
@@ -10,6 +11,11 @@ export interface UsersSort {
 export interface UsersFilter {
   search?: string;
   sort?: UsersSort;
+  isBanned?: boolean;
+  role?: UserRole;
+  isEmailVerified?: boolean;
+  startDate?: Date;
+  endDate?: Date;
 }
 
 export interface CreateUserData {
