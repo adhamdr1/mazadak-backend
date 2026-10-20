@@ -38,6 +38,7 @@ import { ChatModule } from './chat/chat.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { EscrowModule } from './escrow/escrow.module';
 import { WithdrawalsModule } from './withdrawals/withdrawals.module';
+import { AppController } from './app.controller';
 
 @Module({
   imports: [
@@ -89,7 +90,9 @@ import { WithdrawalsModule } from './withdrawals/withdrawals.module';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        uri: configService.get<string>('MONGO_URI'),
+        uri:
+          configService.get<string>('MONGO_URI') ||
+          configService.get<string>('MONGODB_URI'),
       }),
     }),
 
@@ -193,6 +196,7 @@ import { WithdrawalsModule } from './withdrawals/withdrawals.module';
     EscrowModule,
     WithdrawalsModule,
   ],
+  controllers: [AppController],
   providers: [
     // Global Authentication Guards
     { provide: APP_GUARD, useClass: JwtAuthGuard },

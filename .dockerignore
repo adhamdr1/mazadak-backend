@@ -1,0 +1,15 @@
+node_modules
+dist
+logs
+coverage
+.git
+.agents
+artifacts
+load-tests
+ui-test
+.env
+.env.*
+*.log
+README.md
+docs
+token.txt
