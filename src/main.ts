@@ -95,8 +95,11 @@ async function bootstrap() {
   app.useGlobalFilters(new SentryExceptionFilter(httpAdapter));
 
   const configService = app.get(ConfigService);
-  const port = configService.get<number>('PORT') || 3000;
-  await app.listen(port);
+  const port = Number(
+    process.env.PORT || configService.get<number>('PORT') || 3000,
+  );
+  const host = process.env.IP || '0.0.0.0';
+  await app.listen(port, host);
 }
 
 bootstrap().catch((err) => {

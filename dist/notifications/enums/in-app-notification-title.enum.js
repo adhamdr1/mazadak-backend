@@ -1,0 +1,31 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.InAppNotificationTitles = void 0;
+var InAppNotificationTitles;
+(function (InAppNotificationTitles) {
+    InAppNotificationTitles["AUCTION_LIVE"] = "Your auction is now LIVE! \uD83D\uDE80";
+    InAppNotificationTitles["AUCTION_CANCELLED"] = "Auction Cancelled \u274C";
+    InAppNotificationTitles["AUCTION_CANCELLED_BY_ADMIN"] = "Auction Cancelled by Admin \u274C";
+    InAppNotificationTitles["AUCTION_WON"] = "Congratulations! You won! \uD83C\uDF89";
+    InAppNotificationTitles["AUCTION_ENDED_SELLER"] = "Your auction has ended \uD83C\uDFC1";
+    InAppNotificationTitles["NEW_BID"] = "New bid placed! \uD83D\uDCC8";
+    InAppNotificationTitles["OUTBID"] = "You have been outbid! \u26A0\uFE0F";
+    InAppNotificationTitles["WELCOME"] = "Welcome to Mazadak! \uD83C\uDF1F";
+    InAppNotificationTitles["DEPOSIT_SUCCESSFUL"] = "Deposit Successful \uD83D\uDCB0";
+    InAppNotificationTitles["WITHDRAWAL_COMPLETED"] = "Withdrawal Completed \uD83D\uDCB8";
+    InAppNotificationTitles["WITHDRAWAL_REQUESTED"] = "Withdrawal Request Received \uD83D\uDCE8";
+    InAppNotificationTitles["WITHDRAWAL_REJECTED"] = "Withdrawal Request Rejected \u274C";
+    InAppNotificationTitles["WELCOME_BACK"] = "Welcome Back to Mazadak! \uD83C\uDF1F";
+    InAppNotificationTitles["NEW_CHAT_MESSAGE"] = "New Chat Message";
+    InAppNotificationTitles["REVIEW_RECEIVED"] = "New Review Received! \u2B50";
+    InAppNotificationTitles["REVIEW_REPLIED"] = "New Reply to Your Review \uD83D\uDCAC";
+    InAppNotificationTitles["AUTO_BID_PLACED"] = "Auto-bid placed! \uD83E\uDD16";
+    InAppNotificationTitles["AUTO_BID_EXHAUSTED"] = "Auto-bid limit reached! \u26A0\uFE0F";
+    InAppNotificationTitles["ESCROW_CREATED"] = "Payment in Escrow \uD83D\uDD12";
+    InAppNotificationTitles["ESCROW_RELEASED"] = "Payment Released \uD83D\uDCB0";
+    InAppNotificationTitles["ESCROW_REFUNDED"] = "Payment Refunded \uD83D\uDCB8";
+    InAppNotificationTitles["DISPUTE_OPENED"] = "Dispute Opened \u26A0\uFE0F";
+    InAppNotificationTitles["DISPUTE_RESOLVED"] = "Dispute Resolved \u2696\uFE0F";
+    InAppNotificationTitles["DISPUTE_CANCELLED"] = "Dispute Cancelled \u2139\uFE0F";
+})(InAppNotificationTitles || (exports.InAppNotificationTitles = InAppNotificationTitles = {}));
+//# sourceMappingURL=in-app-notification-title.enum.js.map

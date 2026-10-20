@@ -1,0 +1,1 @@
+{"version":3,"file":"auto-bid-duplicate-max.exception.js","sourceRoot":"","sources":["../../../src/bids/exceptions/auto-bid-duplicate-max.exception.ts"],"names":[],"mappings":";;;AAAA,2CAAqD;AAErD,MAAa,4BAA6B,SAAQ,4BAAmB;IACnE,YAAY,kBAA2B;QACrC,KAAK,CACH,kBAAkB;YAChB,CAAC,CAAC,6GAA6G,kBAAkB,IAAI;YACrI,CAAC,CAAC,6GAA6G,CAClH,CAAC;IACJ,CAAC;CACF;AARD,oEAQC"}

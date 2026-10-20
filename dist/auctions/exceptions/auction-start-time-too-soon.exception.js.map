@@ -1,0 +1,1 @@
+{"version":3,"file":"auction-start-time-too-soon.exception.js","sourceRoot":"","sources":["../../../src/auctions/exceptions/auction-start-time-too-soon.exception.ts"],"names":[],"mappings":";;;AAAA,2CAAqD;AAErD,MAAa,gCAAiC,SAAQ,4BAAmB;IACvE;QACE,KAAK,CAAC,6BAA6B,CAAC,CAAC;IACvC,CAAC;CACF;AAJD,4EAIC"}

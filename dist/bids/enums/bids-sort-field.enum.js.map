@@ -1,0 +1,1 @@
+{"version":3,"file":"bids-sort-field.enum.js","sourceRoot":"","sources":["../../../src/bids/enums/bids-sort-field.enum.ts"],"names":[],"mappings":";;;AAAA,6CAAmD;AAEnD,IAAY,aAGX;AAHD,WAAY,aAAa;IACvB,yCAAwB,CAAA;IACxB,kCAAiB,CAAA;AACnB,CAAC,EAHW,aAAa,6BAAb,aAAa,QAGxB;AAED,IAAA,0BAAgB,EAAC,aAAa,EAAE;IAC9B,IAAI,EAAE,eAAe;IACrB,WAAW,EAAE,oCAAoC;CAClD,CAAC,CAAC"}

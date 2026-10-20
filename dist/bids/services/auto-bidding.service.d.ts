@@ -1,0 +1,32 @@
+import { ClientSession } from 'mongoose';
+import Redis from 'ioredis';
+import { SetAutoBidInput } from '../dto/set-auto-bid.input';
+import { CancelAutoBidInput } from '../dto/cancel-auto-bid.input';
+import { AutoBid } from '../entities/auto-bid.entity';
+import { AutoBidStatus } from '../enums/auto-bid-status.enum';
+import type { IAutoBidRepository } from '../interfaces/auto-bid-repository.interface';
+import type { IBidRepository } from '../interfaces/bid-repository.interface';
+import type { IAuctionRepository } from '../../auctions/interfaces/auction-repository.interface';
+import { WalletService } from '../../wallet/wallet.service';
+import { RealtimeService } from '../../infrastructure/pubsub/realtime.service';
+import { RedisService } from '../../infrastructure/redis/redis.service';
+import { OutboxService } from '../../infrastructure/outbox/outbox.service';
+import { ProxyBiddingEngineService } from './proxy-bidding-engine.service';
+import { AutoBidsPage } from '../dto/auto-bids-page.type';
+export declare class AutoBiddingService {
+    private readonly autoBidRepository;
+    private readonly bidRepository;
+    private readonly auctionRepository;
+    private readonly proxyEngine;
+    private readonly walletService;
+    private readonly realtimeService;
+    private readonly redisService;
+    private readonly outboxService;
+    private readonly redis;
+    private readonly logger;
+    constructor(autoBidRepository: IAutoBidRepository, bidRepository: IBidRepository, auctionRepository: IAuctionRepository, proxyEngine: ProxyBiddingEngineService, walletService: WalletService, realtimeService: RealtimeService, redisService: RedisService, outboxService: OutboxService, redis: Redis);
+    setAutoBid(userId: string, input: SetAutoBidInput): Promise<AutoBid>;
+    cancelAutoBid(userId: string, input: CancelAutoBidInput): Promise<boolean>;
+    getMyAutoBid(userId: string, auctionId: string, session?: ClientSession): Promise<AutoBid | null>;
+    getUserAutoBids(userId: string, page?: number, limit?: number, status?: AutoBidStatus): Promise<AutoBidsPage>;
+}

@@ -1,0 +1,1 @@
+{"version":3,"file":"insufficient-funds.exception.js","sourceRoot":"","sources":["../../../src/wallet/exceptions/insufficient-funds.exception.ts"],"names":[],"mappings":";;;AAAA,2CAAqD;AAErD,MAAa,0BAA2B,SAAQ,4BAAmB;IACjE;QACE,KAAK,CAAC,oBAAoB,CAAC,CAAC;IAC9B,CAAC;CACF;AAJD,gEAIC"}

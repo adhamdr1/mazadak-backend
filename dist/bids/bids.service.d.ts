@@ -1,0 +1,35 @@
+import Redis from 'ioredis';
+import { PlaceBidInput } from './dto/place-bid.input';
+import { BidsFilterInput } from './dto/bids-filter.input';
+import { BidsPage } from './dto/bids-page.type';
+import { PaginationInput } from '../common/dto/pagination.input';
+import { Bid } from './entities/bid.entity';
+import type { IBidRepository } from './interfaces/bid-repository.interface';
+import type { IAutoBidRepository } from './interfaces/auto-bid-repository.interface';
+import type { IAuctionRepository } from '../auctions/interfaces/auction-repository.interface';
+import { WalletService } from '../wallet/wallet.service';
+import { RealtimeService } from '../infrastructure/pubsub/realtime.service';
+import { RedisService } from '../infrastructure/redis/redis.service';
+import { OutboxService } from '../infrastructure/outbox/outbox.service';
+import { ProxyBiddingEngineService } from './services/proxy-bidding-engine.service';
+import { EscrowService } from '../escrow/services';
+export declare const BID_ADDED = "BID_ADDED";
+export declare class BidsService {
+    private readonly bidRepository;
+    private readonly autoBidRepository;
+    private readonly auctionRepository;
+    private readonly proxyEngine;
+    private readonly walletService;
+    private readonly escrowService;
+    private readonly realtimeService;
+    private readonly redisService;
+    private readonly outboxService;
+    private readonly redis;
+    private readonly logger;
+    constructor(bidRepository: IBidRepository, autoBidRepository: IAutoBidRepository, auctionRepository: IAuctionRepository, proxyEngine: ProxyBiddingEngineService, walletService: WalletService, escrowService: EscrowService, realtimeService: RealtimeService, redisService: RedisService, outboxService: OutboxService, redis: Redis);
+    placeBid(userId: string, input: PlaceBidInput): Promise<Bid>;
+    finalizeEndedAuctions(): Promise<void>;
+    adminGetAllBids(input: PaginationInput, filter: BidsFilterInput): Promise<BidsPage>;
+    getAuctionBids(auctionId: string, input: PaginationInput, filter: BidsFilterInput): Promise<BidsPage>;
+    getMyBids(userId: string, input: PaginationInput, filter: BidsFilterInput): Promise<BidsPage>;
+}

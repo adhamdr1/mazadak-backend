@@ -1,0 +1,38 @@
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.GetWalletBalanceHandler = void 0;
+const cqrs_1 = require("@nestjs/cqrs");
+const get_wallet_balance_query_1 = require("../get-wallet-balance.query");
+const common_1 = require("@nestjs/common");
+let GetWalletBalanceHandler = class GetWalletBalanceHandler {
+    walletRepository;
+    constructor(walletRepository) {
+        this.walletRepository = walletRepository;
+    }
+    async execute(query) {
+        const wallet = await this.walletRepository.findByUserId(query.userId, query.session);
+        return {
+            balance: wallet ? wallet.balance.toString() : '0.00',
+            heldBalance: wallet ? wallet.heldBalance.toString() : '0.00',
+        };
+    }
+};
+exports.GetWalletBalanceHandler = GetWalletBalanceHandler;
+exports.GetWalletBalanceHandler = GetWalletBalanceHandler = __decorate([
+    (0, cqrs_1.QueryHandler)(get_wallet_balance_query_1.GetWalletBalanceQuery),
+    __param(0, (0, common_1.Inject)('IWalletRepository')),
+    __metadata("design:paramtypes", [Object])
+], GetWalletBalanceHandler);
+//# sourceMappingURL=get-wallet-balance.handler.js.map

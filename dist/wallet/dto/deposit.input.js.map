@@ -1,0 +1,1 @@
+{"version":3,"file":"deposit.input.js","sourceRoot":"","sources":["../../../src/wallet/dto/deposit.input.ts"],"names":[],"mappings":";;;;;;;;;;;;AAAA,6CAA0D;AAC1D,qDAA6C;AAGtC,IAAM,YAAY,GAAlB,MAAM,YAAY;IAGvB,MAAM,CAAU;CACjB,CAAA;AAJY,oCAAY;AAGvB;IAFC,IAAA,eAAK,EAAC,GAAG,EAAE,CAAC,eAAK,CAAC;IAClB,IAAA,4BAAU,GAAE;;4CACG;uBAHL,YAAY;IADxB,IAAA,mBAAS,GAAE;GACC,YAAY,CAIxB"}

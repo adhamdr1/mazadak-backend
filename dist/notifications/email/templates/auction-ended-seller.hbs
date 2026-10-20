@@ -1,0 +1,52 @@
+<html lang='en'>
+  <head>
+    <meta charset='utf-8' />
+    <title>Your Auction Has Ended</title>
+  </head>
+  <body
+    style='font-family: Arial, sans-serif; padding: 20px; color: #333; line-height: 1.6;'
+  >
+    <div
+      style='max-width: 600px; margin: 0 auto; text-align: center; border: 1px solid #eee; padding: 30px; border-radius: 8px;'
+    >
+      <h2 style='color: #28a745;'>Auction Completed 🏁</h2>
+      <p>Hello <strong>{{name}}</strong>,</p>
+      <p>Your auction <strong>{{auctionTitle}}</strong> has officially ended.</p>
+
+      <div
+        style='background-color: #f8f9fa; padding: 20px; border-radius: 6px; margin: 25px 0; text-align: left;'
+      >
+        <p style='margin: 5px 0;'><strong>Auction:</strong> {{auctionTitle}}</p>
+        {{#if hasWinner}}
+          <p style='margin: 5px 0;'><strong>Winner:</strong> {{winnerName}}</p>
+          <p style='margin: 5px 0;'><strong>Final Winning Price:</strong> ${{finalPrice}}</p>
+          <p style='margin: 5px 0; color: #28a745;'><strong>Status:</strong> Sold (Funds Deposited to Wallet)</p>
+          {{#if transactionId}}
+            <p style='margin: 5px 0;'><strong>Deposit Transaction ID:</strong> {{transactionId}}</p>
+          {{/if}}
+        {{else}}
+          <p style='margin: 5px 0; color: #dc3545;'><strong>Status:</strong> Ended without bids</p>
+        {{/if}}
+      </div>
+
+      <a
+        href='{{auctionLink}}'
+        style='display: inline-block; padding: 12px 24px; background-color: #6c757d; color: #ffffff; text-decoration: none; border-radius: 6px; margin: 15px 0; font-weight: bold;'
+      >
+        View Auction Details
+      </a>
+
+      {{#if transactionLink}}
+        <br />
+        <a
+          href='{{transactionLink}}'
+          style='display: inline-block; padding: 10px 20px; background-color: #007bff; color: #ffffff; text-decoration: none; border-radius: 6px; margin-top: 10px; font-weight: normal;'
+        >
+          View Deposit Transaction
+        </a>
+      {{/if}}
+
+      <p style='font-size: 12px; color: #888; margin-top: 30px;'>Thank you for using Mazadak!</p>
+    </div>
+  </body>
+</html>

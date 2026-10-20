@@ -1,0 +1,1 @@
+{"version":3,"file":"get-user-rating-stats.query.js","sourceRoot":"","sources":["../../../src/reviews/queries/get-user-rating-stats.query.ts"],"names":[],"mappings":";;;AAAA,uCAAqC;AAGrC,MAAa,uBAAwB,SAAQ,YAAsB;IAC5C;IAArB,YAAqB,MAAc;QACjC,KAAK,EAAE,CAAC;QADW,WAAM,GAAN,MAAM,CAAQ;IAEnC,CAAC;CACF;AAJD,0DAIC"}

@@ -1,0 +1,48 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.EmailSubjects = exports.EmailTemplates = void 0;
+var EmailTemplates;
+(function (EmailTemplates) {
+    EmailTemplates["CONFIRM_EMAIL"] = "confirm-email";
+    EmailTemplates["RESET_PASSWORD"] = "reset-password";
+    EmailTemplates["WELCOME"] = "welcome";
+    EmailTemplates["PASSWORD_CHANGED"] = "password-changed";
+    EmailTemplates["OUTBID"] = "outbid";
+    EmailTemplates["AUCTION_WON"] = "auction-won";
+    EmailTemplates["AUCTION_STARTED_SELLER"] = "auction-started-seller";
+    EmailTemplates["AUCTION_ENDED_SELLER"] = "auction-ended-seller";
+    EmailTemplates["DEPOSIT_SUCCESSFUL"] = "deposit-successful";
+    EmailTemplates["WITHDRAWAL_REQUESTED"] = "withdrawal-requested";
+    EmailTemplates["WITHDRAWAL_COMPLETED"] = "withdrawal-completed";
+    EmailTemplates["WITHDRAWAL_REJECTED"] = "withdrawal-rejected";
+    EmailTemplates["AUCTION_CANCELLED_BY_ADMIN"] = "auction-cancelled-by-admin";
+    EmailTemplates["AUCTION_CANCELLED"] = "auction-cancelled";
+    EmailTemplates["ACCOUNT_REACTIVATION"] = "account-reactivation";
+    EmailTemplates["ACCOUNT_ACTIVATED"] = "account-activated";
+    EmailTemplates["AUTO_BID_EXHAUSTED"] = "auto-bid-exhausted";
+    EmailTemplates["DISPUTE_OPENED"] = "dispute-opened";
+    EmailTemplates["DISPUTE_RESOLVED"] = "dispute-resolved";
+})(EmailTemplates || (exports.EmailTemplates = EmailTemplates = {}));
+var EmailSubjects;
+(function (EmailSubjects) {
+    EmailSubjects["CONFIRM_EMAIL"] = "Welcome to Mazadak - Please confirm your email";
+    EmailSubjects["RESET_PASSWORD"] = "Reset your Mazadak password";
+    EmailSubjects["WELCOME"] = "Welcome to Mazadak - Account Verified";
+    EmailSubjects["PASSWORD_CHANGED"] = "Security Alert - Your Mazadak password was changed";
+    EmailSubjects["OUTBID"] = "You have been outbid on Mazadak!";
+    EmailSubjects["AUCTION_WON"] = "Congratulations! You won the auction on Mazadak!";
+    EmailSubjects["AUCTION_STARTED_SELLER"] = "Your auction is now LIVE on Mazadak!";
+    EmailSubjects["AUCTION_ENDED_SELLER"] = "Your auction has ended on Mazadak";
+    EmailSubjects["DEPOSIT_SUCCESSFUL"] = "Wallet Deposit Successful - Mazadak";
+    EmailSubjects["WITHDRAWAL_REQUESTED"] = "Withdrawal Request Received - Mazadak";
+    EmailSubjects["WITHDRAWAL_COMPLETED"] = "Wallet Withdrawal Completed - Mazadak";
+    EmailSubjects["WITHDRAWAL_REJECTED"] = "Withdrawal Request Update - Mazadak";
+    EmailSubjects["AUCTION_CANCELLED_BY_ADMIN"] = "Notice: Your auction has been cancelled by an Admin";
+    EmailSubjects["AUCTION_CANCELLED"] = "Your auction has been cancelled on Mazadak";
+    EmailSubjects["ACCOUNT_REACTIVATION"] = "Reactivate your Mazadak account";
+    EmailSubjects["ACCOUNT_ACTIVATED"] = "Welcome back! Your Mazadak account is reactivated";
+    EmailSubjects["AUTO_BID_EXHAUSTED"] = "Auto-Bid Limit Reached - Action Required | Mazadak";
+    EmailSubjects["DISPUTE_OPENED"] = "Urgent Notice: A Dispute Has Been Opened on Mazadak";
+    EmailSubjects["DISPUTE_RESOLVED"] = "Official Resolution Notice: Mazadak Dispute Decided";
+})(EmailSubjects || (exports.EmailSubjects = EmailSubjects = {}));
+//# sourceMappingURL=notification.enum.js.map

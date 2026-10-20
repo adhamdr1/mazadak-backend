@@ -1,5 +1,5 @@
 # compiled output
-/dist
+# /dist (tracked for low-RAM server deployments)
 /node_modules
 /build
 

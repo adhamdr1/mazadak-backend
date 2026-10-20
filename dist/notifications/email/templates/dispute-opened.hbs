@@ -1,0 +1,41 @@
+<html lang='en'>
+  <head>
+    <meta charset='utf-8' />
+    <title>Dispute Opened on Mazadak</title>
+  </head>
+  <body
+    style='font-family: Arial, sans-serif; padding: 20px; color: #333; line-height: 1.6;'
+  >
+    <div
+      style='max-width: 600px; margin: 0 auto; text-align: center; border: 1px solid #eee; padding: 30px; border-radius: 8px;'
+    >
+      <h2 style='color: #e0a800;'>Dispute Opened ⚠️</h2>
+      <p>Hello <strong>{{name}}</strong>,</p>
+      <p>A dispute has been formally opened regarding an auction transaction
+        involving your account.</p>
+
+      <div
+        style='background-color: #f8f9fa; padding: 20px; border-radius: 6px; margin: 25px 0; text-align: left;'
+      >
+        <p style='margin: 5px 0;'><strong>Dispute ID:</strong> {{disputeId}}</p>
+        <p style='margin: 5px 0;'><strong>Reason for Dispute:</strong>
+          {{reason}}</p>
+        <p style='margin: 5px 0; color: #6c757d;'><strong>Status:</strong>
+          Under Review by Admin Support</p>
+        <p style='margin: 5px 0; font-size: 13px; color: #555;'>The escrow funds
+          are currently frozen pending review of evidence from both parties.</p>
+      </div>
+
+      <a
+        href='{{disputeLink}}'
+        style='display: inline-block; padding: 12px 24px; background-color: #007bff; color: #ffffff; text-decoration: none; border-radius: 6px; margin: 15px 0; font-weight: bold;'
+      >
+        View Dispute Details & Evidence
+      </a>
+
+      <p style='font-size: 12px; color: #888; margin-top: 30px;'>Please provide
+        any relevant evidence or documentation directly through the platform.</p>
+      <p style='font-size: 12px; color: #888;'>Thank you for using Mazadak!</p>
+    </div>
+  </body>
+</html>

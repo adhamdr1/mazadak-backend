@@ -1,0 +1,17 @@
+export declare const PUB_SUB_EVENTS: {
+    AUCTION_CREATED: string;
+    BID_ADDED: string;
+    NOTIFICATION_ADDED: string;
+    NOTIFICATION_READ_STATUS_UPDATED: string;
+    AUCTION_STATUS_CHANGED: string;
+    MESSAGE_SENT: string;
+    MESSAGE_UPDATED: string;
+    CHAT_READ_STATUS_UPDATED: string;
+    WALLET_UPDATED: string;
+    WITHDRAWAL_REQUESTED: string;
+    WITHDRAWAL_STATUS_CHANGED: string;
+    ESCROW_STATUS_CHANGED: string;
+    DISPUTE_STATUS_CHANGED: string;
+    CHAT_ROOM_UPDATED: string;
+    REVIEW_ADDED_TO_USER: string;
+};

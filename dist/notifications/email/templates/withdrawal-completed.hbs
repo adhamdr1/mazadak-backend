@@ -1,0 +1,52 @@
+<html lang='en'>
+  <head>
+    <meta charset='utf-8' />
+    <title>Withdrawal Completed</title>
+  </head>
+  <body
+    style='font-family: Arial, sans-serif; padding: 20px; color: #333; line-height: 1.6;'
+  >
+    <div
+      style='max-width: 600px; margin: 0 auto; text-align: center; border: 1px solid #eee; padding: 30px; border-radius: 8px;'
+    >
+      <h2 style='color: #28a745;'>Withdrawal Completed 💸</h2>
+      <p>Hello <strong>{{name}}</strong>,</p>
+      <p>Your withdrawal from your Mazadak wallet has been processed and transferred successfully.</p>
+
+      <div
+        style='background-color: #f8f9fa; padding: 20px; border-radius: 6px; margin: 25px 0; text-align: left;'
+      >
+        <p style='margin: 5px 0;'><strong>Transferred Amount:</strong> {{#if netAmount}}{{netAmount}}{{else}}{{amount}}{{/if}} EGP</p>
+        {{#if payoutMethod}}
+          <p style='margin: 5px 0;'><strong>Payout Method:</strong> {{payoutMethod}}</p>
+        {{/if}}
+        {{#if adminReference}}
+          <p style='margin: 5px 0;'><strong>Reference Number:</strong> {{adminReference}}</p>
+        {{/if}}
+        <p style='margin: 5px 0;'><strong>Status:</strong> Completed</p>
+      </div>
+
+      {{#if receiptUrl}}
+        <a
+          href='{{receiptUrl}}'
+          target='_blank'
+          rel='noopener noreferrer'
+          style='display: inline-block; padding: 12px 24px; background-color: #28a745; color: #ffffff; text-decoration: none; border-radius: 6px; margin: 15px 5px; font-weight: bold;'
+        >
+          View Bank Receipt 📄
+        </a>
+      {{/if}}
+
+      {{#if transactionLink}}
+        <a
+          href='{{transactionLink}}'
+          style='display: inline-block; padding: 12px 24px; background-color: #17a2b8; color: #ffffff; text-decoration: none; border-radius: 6px; margin: 15px 5px; font-weight: bold;'
+        >
+          View Transaction Details
+        </a>
+      {{/if}}
+
+      <p style='font-size: 12px; color: #888; margin-top: 30px;'>If you did not receive the funds in your designated account within 24 hours, please contact our support team.</p>
+    </div>
+  </body>
+</html>

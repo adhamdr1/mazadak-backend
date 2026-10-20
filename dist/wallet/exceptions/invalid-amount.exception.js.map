@@ -1,0 +1,1 @@
+{"version":3,"file":"invalid-amount.exception.js","sourceRoot":"","sources":["../../../src/wallet/exceptions/invalid-amount.exception.ts"],"names":[],"mappings":";;;AAAA,2CAAqD;AAErD,MAAa,sBAAuB,SAAQ,4BAAmB;IAC7D;QACE,KAAK,CAAC,gBAAgB,CAAC,CAAC;IAC1B,CAAC;CACF;AAJD,wDAIC"}

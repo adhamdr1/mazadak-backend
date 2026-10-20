@@ -1,0 +1,72 @@
+import { Types, ClientSession } from 'mongoose';
+import { Auction } from '../entities/auction.entity';
+import { AuctionStatus } from '../enums/auction-status.enum';
+import { AuctionCategory } from '../enums/auction-category.enum';
+export interface AuctionsSort {
+    field: string;
+    order: 'ASC' | 'DESC';
+}
+export interface AuctionsFilter {
+    category?: AuctionCategory;
+    status?: AuctionStatus;
+    search?: string;
+    sort?: AuctionsSort;
+    startDate?: Date;
+    endDate?: Date;
+}
+export interface CreateAuctionData {
+    sellerId: Types.ObjectId;
+    title: string;
+    description: string;
+    category: AuctionCategory;
+    startingPrice: number;
+    minimumBidIncrement: number;
+    images: string[];
+    startTime: Date;
+    endTime: Date;
+}
+export interface UpdateAuctionData {
+    title?: string;
+    description?: string;
+    category?: AuctionCategory;
+    images?: string[];
+    startTime?: Date;
+    endTime?: Date;
+}
+export interface IAuctionRepository {
+    startSession(): Promise<ClientSession>;
+    create(data: CreateAuctionData): Promise<Auction>;
+    findById(id: string, session?: ClientSession): Promise<Auction | null>;
+    findAll(page: number, limit: number, filter: AuctionsFilter, excludeStatuses?: AuctionStatus[]): Promise<{
+        items: Auction[];
+        total: number;
+    }>;
+    findBySellerId(sellerId: string, page: number, limit: number, filter: AuctionsFilter): Promise<{
+        items: Auction[];
+        total: number;
+    }>;
+    findByWinnerId(winnerId: string, page: number, limit: number, filter: AuctionsFilter): Promise<{
+        items: Auction[];
+        total: number;
+    }>;
+    update(id: string, data: UpdateAuctionData): Promise<Auction | null>;
+    updateStatus(id: string, status: AuctionStatus, session?: ClientSession, adminActionReason?: string): Promise<void>;
+    updateManyStatus(ids: Types.ObjectId[], status: AuctionStatus): Promise<void>;
+    findPendingToActivate(): Promise<Auction[]>;
+    findActiveToEnd(): Promise<Auction[]>;
+    updateCurrentPrice(id: string, price: number, session?: ClientSession): Promise<void>;
+    findEndedWithoutWinner(): Promise<Auction[]>;
+    findActiveOrPendingBySellerId(sellerId: string, session?: ClientSession): Promise<Auction[]>;
+    finalizeAuction(id: string, winnerId?: string, session?: ClientSession): Promise<void>;
+    findWinningBidByAuctionId(auctionId: string, session?: ClientSession): Promise<{
+        bidderId: string;
+        amount: number;
+    } | null>;
+    count(filter: AuctionsFilter, excludeStatuses?: AuctionStatus[]): Promise<number>;
+    countUserAuctions(sellerId: string): Promise<{
+        active: number;
+        completed: number;
+    }>;
+    findEndedParticipantAuctionIds(userId: string): Promise<Types.ObjectId[]>;
+    findByIds(ids: Types.ObjectId[]): Promise<Auction[]>;
+}

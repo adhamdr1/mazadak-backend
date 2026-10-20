@@ -1,0 +1,26 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.IDEMPOTENCY_TTL_S = exports.IDEMPOTENCY_KEY_PREFIX = exports.AUCTION_RETRY_ROUTING_KEY = exports.AUCTION_RETRY_QUEUE_5S = exports.AUCTION_QUEUE = exports.NOTIFICATIONS_RETRY_ROUTING_KEY = exports.NOTIFICATIONS_RETRY_QUEUE_2M = exports.NOTIFICATIONS_RETRY_QUEUE_30S = exports.NOTIFICATIONS_RETRY_QUEUE_5S = exports.WEBHOOK_RETRY_QUEUE_2M = exports.WEBHOOK_RETRY_QUEUE_30S = exports.WEBHOOK_RETRY_QUEUE_5S = exports.AUTH_RETRY_QUEUE_5S = exports.WALLET_RETRY_QUEUE_5S = exports.X_RETRY_COUNT = exports.WALLET_QUEUE = exports.AUTH_QUEUE = exports.PAYMENTS_WEBHOOK_QUEUE = exports.DEAD_LETTER_QUEUE = exports.NOTIFICATIONS_QUEUE = exports.MAZADAK_EXCHANGE = exports.RABBITMQ_CLIENT = void 0;
+exports.RABBITMQ_CLIENT = 'RABBITMQ_CLIENT';
+exports.MAZADAK_EXCHANGE = 'mazadak.events';
+exports.NOTIFICATIONS_QUEUE = 'notifications.queue';
+exports.DEAD_LETTER_QUEUE = 'dead.letter.queue';
+exports.PAYMENTS_WEBHOOK_QUEUE = 'payments.webhook.queue';
+exports.AUTH_QUEUE = 'auth.queue';
+exports.WALLET_QUEUE = 'wallet.queue';
+exports.X_RETRY_COUNT = 'x-retry-count';
+exports.WALLET_RETRY_QUEUE_5S = 'wallet.queue.retry.5s';
+exports.AUTH_RETRY_QUEUE_5S = 'auth.queue.retry.5s';
+exports.WEBHOOK_RETRY_QUEUE_5S = 'webhook.queue.retry.5s';
+exports.WEBHOOK_RETRY_QUEUE_30S = 'webhook.queue.retry.30s';
+exports.WEBHOOK_RETRY_QUEUE_2M = 'webhook.queue.retry.2m';
+exports.NOTIFICATIONS_RETRY_QUEUE_5S = 'notifications.queue.retry.5s';
+exports.NOTIFICATIONS_RETRY_QUEUE_30S = 'notifications.queue.retry.30s';
+exports.NOTIFICATIONS_RETRY_QUEUE_2M = 'notifications.queue.retry.2m';
+exports.NOTIFICATIONS_RETRY_ROUTING_KEY = 'notification.retry.direct';
+exports.AUCTION_QUEUE = 'auction.queue';
+exports.AUCTION_RETRY_QUEUE_5S = 'auction.queue.retry.5s';
+exports.AUCTION_RETRY_ROUTING_KEY = 'auction.retry.direct';
+exports.IDEMPOTENCY_KEY_PREFIX = 'rabbit:msg:';
+exports.IDEMPOTENCY_TTL_S = 86400;
+//# sourceMappingURL=rabbitmq.constants.js.map
